@@ -6,6 +6,31 @@
 	],
 	"settings": {
 		"rust-analyzer.checkOnSave.allTargets": false,
-		"rust-analyzer.cargo.target": "riscv64gc-unknown-none-elf"
+		"rust-analyzer.cargo.target": "riscv64gc-unknown-none-elf",
+		"makefile.extensionOutputFolder": "./.vscode",
+		"cSpell.words": [
+			"ASID",
+			"dealloc",
+			"ebreak",
+			"ebss",
+			"ecall",
+			"ekernel",
+			"GETCHAR",
+			"kzios",
+			"mtvec",
+			"PUTCHAR",
+			"riscv",
+			"sbss",
+			"Scause",
+			"sepc",
+			"SFENCE",
+			"skernel",
+			"sstatus",
+			"STIE",
+			"stimer",
+			"stval",
+			"stvec",
+			"syscall"
+		]
 	}
 }

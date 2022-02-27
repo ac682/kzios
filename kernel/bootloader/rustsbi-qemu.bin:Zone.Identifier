@@ -1,0 +1,4 @@
+[ZoneTransfer]
+ZoneId=3
+ReferrerUrl=https://github.com/rustsbi/rustsbi-qemu/releases/tag/v0.1.0
+HostUrl=https://objects.githubusercontent.com/github-production-release-asset-2e65be/370114851/24e90021-7c69-4181-86af-b1c6bec90f8a?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAIWNJYAX4CSVEH53A%2F20220223%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20220223T032703Z&X-Amz-Expires=300&X-Amz-Signature=b30fdc587a3a0ae8a863584db93db24885427fb926b2232ef5177fd9dbdd672f&X-Amz-SignedHeaders=host&actor_id=8285337&key_id=0&repo_id=370114851&response-content-disposition=attachment%3B%20filename%3Drustsbi-qemu-debug.zip&response-content-type=application%2Foctet-stream

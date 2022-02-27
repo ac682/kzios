@@ -1,4 +1,4 @@
-.DEFAULT_GOAL := Run
+.DEFAULT_GOAL := run
 
 KERNEL_NAME = kzios-kernel
 
@@ -9,14 +9,19 @@ KERNEL_ELF := target/$(TARGET)/$(MODE)/$(KERNEL_NAME)
 KERNEL_BIN := $(KERNEL_ELF).bin
 SDCARD := ./sdcard.img
 
-# Running
-
-CORES ?= 1
-
 # Board
 BOARD ?= qemu
 SBI ?= rustsbi
 BOOTLOADER = ./bootloader/$(SBI)-$(BOARD).bin
+
+# QEMU
+QEMU_MEMORY ?= 32
+QEMU_CORES ?= 1
+
+# K210
+K210_BOOTLOADER_SIZE = 131072
+K210_SERIALPORT	= /dev/ttyUSB1
+K210_BURNER	= kflash
 
 # KERNEL ENTRY
 ifeq ($(BOARD), qemu)
@@ -26,21 +31,29 @@ else ifeq ($(BOARD), k210)
 endif
 
 # Binutils
-OBJDUMP := llvm-objdump --arch-name=riscv64
-OBJCOPY := llvm-objcopy --binary-architecture=riscv64
+OBJDUMP := rust-objdump --arch-name=riscv64
+OBJCOPY := rust-objcopy --binary-architecture=riscv64
 
 build:
+	@cp src/linker-$(BOARD).ld src/linker.ld
 	@cargo build --release
 	@$(OBJCOPY) --strip-all $(KERNEL_ELF) -O binary $(KERNEL_BIN)
-
+	@rm src/linker.ld
 run: build
+ifeq ($(BOARD),qemu)
 	@qemu-system-riscv64 \
     	-machine virt \
-    	-smp cores=${CORES} \
-    	-m 32 \
+    	-smp cores=$(QEMU_CORES) \
+    	-m $(QEMU_MEMORY) \
     	-nographic \
     	-bios $(BOOTLOADER) \
     	-drive id=sdcard0,if=none,format=raw,file=./sdcard.img \
     	-device sdhci-pci \
     	-device sd-card,drive=sdcard0 \
-    	-device loader,file=$(KERNEL_ELF).bin,addr=${KERNEL_ENTRY_PA}
+    	-device loader,file=$(KERNEL_ELF).bin,addr=$(KERNEL_ENTRY_PA)
+else
+	@cp $(BOOTLOADER) $(BOOTLOADER)-k210.bin
+	@dd if=$(KERNEL_BIN) of=$(BOOTLOADER)-k210.bin bs=$(K210_BOOTLOADER_SIZE) seek=1
+	@$(K210_BURNER) -p $(K210_SERIALPORT) -B goE -b 1500000 $(BOOTLOADER)-k210.bin
+	@python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct $(K210_SERIALPORT) 115200
+endif
