@@ -1,13 +1,14 @@
-use core::{ops::{Add, AddAssign, SubAssign}, slice::from_raw_parts_mut};
+use core::{
+    ops::{Add, AddAssign, SubAssign},
+    slice::from_raw_parts_mut,
+};
 
 use crate::config::{PAGE_SIZE, PAGE_SIZE_BITS};
-
-
 
 /// 39 bits(u64)
 /// 38-30   29-21   20-12   11-0
 /// VPN2(9) VPN1(9) VPN0(9) Offset(12)
-struct VirtualAddress(u64);
+pub struct VirtualAddress(u64);
 
 impl VirtualAddress {
     pub fn page_number(&self) -> (u16, u16, u16) {
@@ -26,21 +27,23 @@ impl VirtualAddress {
 /// 56 bits(u64)
 /// 55-30       29-21   20-12   11-0
 /// PPN2(26)    PPN1(9) PPN0(9) Offset(12)
-pub struct PhysicalAddress(usize);
+pub struct PhysicalAddress(u64);
 
-impl PhysicalAddress{
-    pub fn get_mut<T>(&self) -> &'static mut T{
-        unsafe {
-            (self.0 as *mut T).as_mut().unwrap()
-        }
+impl PhysicalAddress {
+    pub fn get_mut<T>(&self) -> &'static mut T {
+        unsafe { (self.0 as *mut T).as_mut().unwrap() }
+    }
+
+    pub fn get_mut_offset<T>(&self, offset: u64) -> &'static mut T {
+        unsafe { ((self.0 + offset) as *mut T).as_mut().unwrap() }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct PhysicalPageNumber(usize);
+pub struct PhysicalPageNumber(u64);
 
-impl PhysicalPageNumber{
-    pub fn from_address(v: usize) -> Self{
+impl PhysicalPageNumber {
+    pub fn from_address(v: u64) -> Self {
         PhysicalAddress::from(v).into()
     }
 
@@ -48,7 +51,7 @@ impl PhysicalPageNumber{
         unsafe { from_raw_parts_mut(PhysicalAddress::from(*self).0 as *mut u8, PAGE_SIZE) }
     }
 
-    pub fn get_mut<T>(&self) -> &'static mut T{
+    pub fn get_mut<T>(&self) -> &'static mut T {
         let address: PhysicalAddress = (*self).into();
         address.get_mut()
     }
@@ -60,53 +63,52 @@ impl From<PhysicalAddress> for PhysicalPageNumber {
     }
 }
 
-
-impl From<PhysicalPageNumber> for PhysicalAddress{
+impl From<PhysicalPageNumber> for PhysicalAddress {
     fn from(v: PhysicalPageNumber) -> Self {
         Self(v.0 << PAGE_SIZE_BITS)
     }
 }
 
-impl From<usize> for PhysicalAddress {
-    fn from(v: usize) -> Self {
+impl From<u64> for PhysicalAddress {
+    fn from(v: u64) -> Self {
         PhysicalAddress(v)
     }
 }
 
-impl From<PhysicalAddress> for usize {
+impl From<PhysicalAddress> for u64 {
     fn from(v: PhysicalAddress) -> Self {
         v.0
     }
 }
 
-impl From<PhysicalPageNumber> for usize{
+impl From<PhysicalPageNumber> for u64 {
     fn from(v: PhysicalPageNumber) -> Self {
         v.0
     }
 }
 
-impl From<usize> for PhysicalPageNumber{
-    fn from(v: usize) -> Self{
+impl From<u64> for PhysicalPageNumber {
+    fn from(v: u64) -> Self {
         PhysicalPageNumber(v)
     }
 }
 
-impl Add<usize> for PhysicalPageNumber{
+impl Add<u64> for PhysicalPageNumber {
     type Output = PhysicalPageNumber;
 
-    fn add(self, rhs: usize) -> Self::Output {
+    fn add(self, rhs: u64) -> Self::Output {
         PhysicalPageNumber(self.0 + rhs)
     }
 }
 
-impl AddAssign<usize> for PhysicalPageNumber{
-    fn add_assign(&mut self, rhs: usize) {
+impl AddAssign<u64> for PhysicalPageNumber {
+    fn add_assign(&mut self, rhs: u64) {
         self.0 = self.0 + rhs
     }
 }
 
-impl SubAssign<usize> for PhysicalPageNumber{
-    fn sub_assign(&mut self, rhs: usize) {
+impl SubAssign<u64> for PhysicalPageNumber {
+    fn sub_assign(&mut self, rhs: u64) {
         self.0 = self.0 - rhs
     }
 }

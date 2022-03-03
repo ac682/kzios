@@ -1,7 +1,14 @@
-use alloc::vec::Vec;
-use alloc::vec;
+use core::mem::size_of;
 
-use super::{address::PhysicalPageNumber, frame_allocator::{FrameTracker, frame_alloc}};
+use alloc::vec;
+use alloc::vec::Vec;
+
+use crate::config::PAGE_SIZE;
+
+use super::{
+    address::{PhysicalAddress, PhysicalPageNumber, VirtualAddress},
+    frame_allocator::{frame_alloc, FrameTracker},
+};
 
 /// 64 bits(u64)
 /// 64-54           53-28       27-19   18-10   9-8 7 6 5 4 3 2 1 0
@@ -34,17 +41,53 @@ impl PageTableEntry {
 
 pub struct PageTable {
     //entries: [PageTableEntry; PAGE_SIZE  as usize / size_of::<PageTableEntry>()], // 一个页表占用 4kb， 用来存放512个页表项（由于4k对齐，其本身可以被放进一个页内
+    level: u8, // 当前表的级数
     location: PhysicalPageNumber,
-    tracked_frames: Vec<FrameTracker>
+    tracked_frames: Vec<FrameTracker>,
 }
 
 impl PageTable {
-    pub fn new() -> Self {
+    pub fn new(level: u8) -> Self {
         // 在帧空间初始化一个页表
         let frame = frame_alloc().expect("frame used up");
-        Self{
+        Self {
+            level: level,
             location: frame.page_number,
             tracked_frames: vec![frame], // 自己会占用一个帧
+        }
+    }
+
+    pub fn map(&self, va: VirtualAddress, pa: PhysicalAddress, size: usize) {
+        //
+    }
+
+    pub fn lookup(&self, va: VirtualAddress) -> &mut PageTableEntry {
+        let vpn = va.page_number();
+        let index = match self.level {
+            2 => vpn.2,
+            1 => vpn.1,
+            _ => vpn.0,
+        };
+        PhysicalAddress::from(self.location)
+            .get_mut_offset::<PageTableEntry>((index as usize * size_of::<PageTableEntry>()) as u64)
+    }
+}
+
+impl From<PageTableEntry> for PageTable{
+    fn from(v: PageTableEntry) -> Self {
+        //check if valid
+        if v.is_leaf(){
+            //None
+            panic!("its a leaf");
+        }
+        todo!()
+    }
+}
+
+impl Drop for PageTable{
+    fn drop(&mut self){
+        for i in &self.tracked_frames{
+            drop(i);
         }
     }
 }

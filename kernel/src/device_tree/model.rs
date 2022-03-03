@@ -1,10 +1,7 @@
-
 pub struct DeviceTree {}
 
-impl DeviceTree
-{
-    pub fn new() -> Self
-    {
+impl DeviceTree {
+    pub fn new() -> Self {
         todo!()
     }
 }

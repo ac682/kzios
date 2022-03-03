@@ -25,18 +25,15 @@ fn sbi_call(which: usize, arg0: usize, arg1: usize, arg2: usize) -> usize {
     ret
 }
 
-pub fn set_timer(time: usize)
-{
-    sbi_call(SBI_SET_TIMER, time, 0 ,0);
+pub fn set_timer(time: usize) {
+    sbi_call(SBI_SET_TIMER, time, 0, 0);
 }
 
-pub fn console_putchar(char: usize)
-{
+pub fn console_putchar(char: usize) {
     sbi_call(SBI_CONSOLE_PUTCHAR, char, 0, 0);
 }
 
-pub fn shutdown() -> !
-{
+pub fn shutdown() -> ! {
     sbi_call(SBI_SHUTDOWN, 0, 0, 0);
     panic!("SHUTDOWN operation should have done");
 }

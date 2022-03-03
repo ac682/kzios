@@ -27,8 +27,8 @@ impl FrameAllocator for StackAllocator {
             fn ekernel();
         }
         Self {
-            current: PhysicalPageNumber::from_address(ekernel as usize),
-            end: PhysicalPageNumber::from_address(MEMORY_END),
+            current: PhysicalPageNumber::from_address(ekernel as u64),
+            end: PhysicalPageNumber::from_address(MEMORY_END as u64),
             recycled: Vec::new(),
         }
     }
@@ -48,7 +48,7 @@ impl FrameAllocator for StackAllocator {
     }
 
     fn dealloc(&mut self, ppn: PhysicalPageNumber) {
-        let num: usize = ppn.into();
+        let num: u64 = ppn.into();
         if ppn >= self.current || self.recycled.iter().find(|&v| *v == ppn).is_some() {
             panic!("Frame ppn={:#x?} has not been allocated!", num)
         } else if ppn + 1 == self.current {
@@ -86,8 +86,8 @@ pub fn print_frame_use() {
 
     let allocator = FRAME_ALLOCATOR.exclusive_access();
 
-    let start = (ekernel as usize) >> PAGE_SIZE_BITS;
-    let end: usize = allocator.current.into();
+    let start = (ekernel as u64) >> PAGE_SIZE_BITS;
+    let end: u64 = allocator.current.into();
     let mut current = start;
 
     for frame_number in start..end {

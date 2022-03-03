@@ -5,24 +5,27 @@
 
 extern crate alloc;
 
-use core::arch::{global_asm, asm};
+use core::arch::{asm, global_asm};
 use sbi::shutdown;
 
 #[macro_use]
 mod console;
-mod lang_items;
-mod sbi;
-mod mm;
-mod sync;
 mod config;
 mod device_tree;
+mod lang_items;
+mod mm;
+mod sbi;
+mod sync;
 
 global_asm!(include_str!("entry.asm"));
 
 #[no_mangle]
 fn entry(hart_id: usize, device_tree_addr: usize) -> ! {
     clear_bss();
-    println!("hart_id: {}, device_tree_addr: {:#x}", &hart_id, device_tree_addr);
+    println!(
+        "hart_id: {}, device_tree_addr: {:#x}",
+        &hart_id, device_tree_addr
+    );
     // memory not initialized, device tree available
     device_tree::init(device_tree_addr);
     mm::init();
