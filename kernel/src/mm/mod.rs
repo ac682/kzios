@@ -1,8 +1,9 @@
 use alloc::vec::Vec;
 
 use crate::config::MEMORY_END;
+use crate::mm::paged::address::PhysicalPageNumber;
 use crate::mm::paged::frame_allocator::{
-    frame_alloc, frame_dealloc, print_frame_use, FrameTracker,
+    frame_alloc, frame_dealloc, print_frame_use
 };
 
 mod heap_allocator;
@@ -10,6 +11,7 @@ mod paged;
 
 pub fn init() {
     heap_allocator::init_heap();
+    paged::init();
 
     //test();
 }
@@ -30,14 +32,14 @@ pub fn test() {
     };
     println!("kernel starts at {:#x}, takes {:#x} bytes, \nuser space starts at {:#x}, {:#x} bytes available", map.kernel.0, map.kernel.1, map.user.0, map.user.1);
 
-    let mut frames = Vec::<FrameTracker>::new();
+    let mut frames = Vec::<PhysicalPageNumber>::new();
     for i in 0..256 {
         frames.push(frame_alloc().unwrap());
     }
     for i in (0..256).rev() {
         if i % 7 == 0 {
             let frame = frames.remove(i);
-            drop(frame)
+            frame_dealloc(frame)
         }
     }
     print_frame_use();

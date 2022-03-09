@@ -15,10 +15,12 @@
 			"ecall",
 			"ekernel",
 			"GETCHAR",
+			"GIGA",
 			"kzios",
 			"mtvec",
 			"PUTCHAR",
 			"riscv",
+			"satp",
 			"sbss",
 			"Scause",
 			"sepc",
@@ -30,6 +32,28 @@
 			"stval",
 			"stvec",
 			"syscall"
+		]
+	},
+	"launch": {
+		"version": "0.2.0",
+		"configurations": [
+			{
+				"name": "kernel-debug",
+				"type": "cppdbg",
+				"request": "launch",
+				"miDebuggerServerAddress": "127.0.0.1:1234",
+				"program": "make",
+				"args": ["run", "BOARD=qemu", "QEMU_DEBUG=gdb"],
+				"stopAtEntry": false,
+				"cwd": "${workspace}",
+				"environment": [],
+				"externalConsole": false,
+				"logging": {
+					"engineLogging": false
+				},
+				"MIMode": "gdb",
+				"miDebuggerPath": "riscv64-gdb",
+			}
 		]
 	}
 }

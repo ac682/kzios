@@ -67,11 +67,11 @@ lazy_static! {
         unsafe { SafeCell::new(FrameAllocatorImpl::new()) };
 }
 
-pub fn frame_alloc() -> Option<FrameTracker> {
-    FRAME_ALLOCATOR
-        .exclusive_access()
-        .alloc()
-        .map(|page_number| FrameTracker::new(page_number))
+pub fn frame_alloc() -> Option<PhysicalPageNumber> {
+    FRAME_ALLOCATOR.exclusive_access().alloc().map(|mut f| {
+        f.clear_frame();
+        f
+    })
 }
 
 pub fn frame_dealloc(ppn: PhysicalPageNumber) {
@@ -112,26 +112,4 @@ pub fn print_frame_use() {
         );
     }
     println!("========= USE END ========");
-}
-
-pub struct FrameTracker {
-    pub page_number: PhysicalPageNumber,
-}
-
-impl FrameTracker {
-    pub fn new(ppn: PhysicalPageNumber) -> Self {
-        let v = Self { page_number: ppn };
-        // 初始化ppn所在帧字节全部为0
-        let bytes = v.page_number.get_frame();
-        for byte in bytes {
-            *byte = 0;
-        }
-        v
-    }
-}
-
-impl Drop for FrameTracker {
-    fn drop(&mut self) {
-        frame_dealloc(self.page_number);
-    }
 }

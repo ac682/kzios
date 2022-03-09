@@ -8,10 +8,11 @@ use crate::config::{PAGE_SIZE, PAGE_SIZE_BITS};
 /// 39 bits(u64)
 /// 38-30   29-21   20-12   11-0
 /// VPN2(9) VPN1(9) VPN0(9) Offset(12)
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct VirtualAddress(u64);
 
 impl VirtualAddress {
-    pub fn page_number(&self) -> (u16, u16, u16) {
+    pub fn get_page_number(&self) -> (u16, u16, u16) {
         return (
             ((self.0 >> 12) & 0x1ff) as u16,
             ((self.0 >> 21) & 0x1ff) as u16,
@@ -19,17 +20,31 @@ impl VirtualAddress {
         );
     }
 
-    pub fn offset(&self) -> u16 {
+    pub fn get_offset(&self) -> u16 {
         return (self.0 & 0xfff) as u16;
+    }
+}
+
+impl From<VirtualAddress> for u64{
+    fn from(v: VirtualAddress) -> Self {
+        v.0
+    }
+}
+
+impl From<u64> for VirtualAddress{
+    fn from(v: u64) -> Self{
+        Self(v)
     }
 }
 
 /// 56 bits(u64)
 /// 55-30       29-21   20-12   11-0
 /// PPN2(26)    PPN1(9) PPN0(9) Offset(12)
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct PhysicalAddress(u64);
 
 impl PhysicalAddress {
+
     pub fn get_mut<T>(&self) -> &'static mut T {
         unsafe { (self.0 as *mut T).as_mut().unwrap() }
     }
@@ -54,6 +69,13 @@ impl PhysicalPageNumber {
     pub fn get_mut<T>(&self) -> &'static mut T {
         let address: PhysicalAddress = (*self).into();
         address.get_mut()
+    }
+
+    pub fn clear_frame(&mut self){
+        let bytes = self.get_frame();
+        for byte in bytes {
+            *byte = 0;
+        }
     }
 }
 
