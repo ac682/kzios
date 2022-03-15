@@ -25,14 +25,14 @@ impl VirtualAddress {
     }
 }
 
-impl From<VirtualAddress> for u64{
+impl From<VirtualAddress> for u64 {
     fn from(v: VirtualAddress) -> Self {
         v.0
     }
 }
 
-impl From<u64> for VirtualAddress{
-    fn from(v: u64) -> Self{
+impl From<u64> for VirtualAddress {
+    fn from(v: u64) -> Self {
         Self(v)
     }
 }
@@ -44,7 +44,6 @@ impl From<u64> for VirtualAddress{
 pub struct PhysicalAddress(u64);
 
 impl PhysicalAddress {
-
     pub fn get_mut<T>(&self) -> &'static mut T {
         unsafe { (self.0 as *mut T).as_mut().unwrap() }
     }
@@ -71,7 +70,7 @@ impl PhysicalPageNumber {
         address.get_mut()
     }
 
-    pub fn clear_frame(&mut self){
+    pub fn clear_frame(&mut self) {
         let bytes = self.get_frame();
         for byte in bytes {
             *byte = 0;

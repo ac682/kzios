@@ -2,6 +2,8 @@ use core::arch::asm;
 
 use riscv::register::satp::{self, Mode};
 
+use crate::sbi;
+
 use self::{
     address::{PhysicalAddress, VirtualAddress},
     frame_allocator::frame_alloc,
@@ -29,10 +31,6 @@ pub fn init() {
     // 开启 satp
     unsafe {
         satp::set(Mode::Sv39, 0, u64::from(frame) as usize);
+        asm!("sfence.vma");
     }
-    test();
-}
-
-fn test(){
-    println!("SATP On!");
 }

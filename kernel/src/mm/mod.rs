@@ -2,9 +2,7 @@ use alloc::vec::Vec;
 
 use crate::config::MEMORY_END;
 use crate::mm::paged::address::PhysicalPageNumber;
-use crate::mm::paged::frame_allocator::{
-    frame_alloc, frame_dealloc, print_frame_use
-};
+use crate::mm::paged::frame_allocator::{frame_alloc, frame_dealloc, print_frame_use};
 
 mod heap_allocator;
 mod paged;

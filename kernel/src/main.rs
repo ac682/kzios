@@ -16,6 +16,7 @@ mod lang_items;
 mod mm;
 mod sbi;
 mod sync;
+mod trap;
 
 global_asm!(include_str!("entry.asm"));
 
@@ -29,6 +30,8 @@ fn entry(hart_id: usize, device_tree_addr: usize) -> ! {
     // memory not initialized, device tree available
     device_tree::init(device_tree_addr);
     mm::init();
+    trap::init();
+    unsafe { asm!("ebreak") }
     println!("\x1b[31m[kzios]\x1b[0m");
     shutdown();
 }
