@@ -17,15 +17,19 @@ extern "C" {
 
 #[repr(C)]
 pub struct TrapFrame {
-    x: [u64; 32],
-    fx: [f64; 32],
+    x: [usize; 32],
+    fx: [usize; 32],
+    satp: usize,
+    //stack: *mut u8,
 }
 
 impl TrapFrame {
     pub fn new() -> Self {
         Self {
-            x: [0u64; 32],
-            fx: [0.0f64; 32],
+            x: [0; 32],
+            fx: [0; 32],
+            satp: 0,
+            //stack: 0
         }
     }
 }
