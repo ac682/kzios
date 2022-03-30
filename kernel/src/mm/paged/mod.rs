@@ -7,12 +7,12 @@ use crate::sbi;
 use self::{
     address::{PhysicalAddress, VirtualAddress},
     frame_allocator::frame_alloc,
-    page_table::{map, PageTable},
+    table::{map, PageTable},
 };
 
 pub mod address;
 pub mod frame_allocator;
-mod page_table;
+pub mod table;
 
 pub fn init() {
     let frame = frame_alloc().unwrap();

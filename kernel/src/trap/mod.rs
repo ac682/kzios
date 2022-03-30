@@ -20,7 +20,6 @@ pub struct TrapFrame {
     x: [usize; 32],
     fx: [usize; 32],
     satp: usize,
-    //stack: *mut u8,
 }
 
 impl TrapFrame {
@@ -29,7 +28,6 @@ impl TrapFrame {
             x: [0; 32],
             fx: [0; 32],
             satp: 0,
-            //stack: 0
         }
     }
 }

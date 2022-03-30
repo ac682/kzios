@@ -1,3 +1,4 @@
+.option norvc
 .altmacro
 .set NUM_REGS, 32  # Number of registers per context
 .set REG_SIZE, 8   # Register size (in bytes), for I, D(F), all 64 bits
@@ -40,8 +41,8 @@ trap_vector:
 			.set	i,i+1
 	.endr
  
-	// 此处应该切换运行时态的 sp，sstatus，satp(页表)，但由于目前还没有用户态，陷入来自于内核态，就直接进吧
- 
+	# 此处应该切换运行时态的 sp，sstatus，satp(页表)，但由于目前还没有用户态，陷入来自于内核态，就直接进吧
+	
 	# 进入 rust 环境
 	call	handle_trap
 

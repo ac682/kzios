@@ -8,6 +8,8 @@ extern crate alloc;
 use core::arch::{asm, global_asm};
 use sbi::shutdown;
 
+use crate::config::PAGE_SIZE;
+
 #[macro_use]
 mod console;
 mod config;
@@ -17,7 +19,8 @@ mod mm;
 mod sbi;
 mod sync;
 mod trap;
-//mod batch;
+mod batch;
+mod process;
 
 global_asm!(include_str!("entry.asm"));
 global_asm!(include_str!("link_app.S"));

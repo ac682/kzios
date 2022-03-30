@@ -15,7 +15,7 @@ SBI ?= rustsbi
 BOOTLOADER = ./bootloader/$(SBI)-$(BOARD).bin
 
 # QEMU
-QEMU_MEMORY ?= 32
+QEMU_MEMORY ?= 512
 QEMU_CORES ?= 1
 QEMU_DEBUG ?= gdb
 
