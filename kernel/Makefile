@@ -53,8 +53,8 @@ ifeq ($(BOARD),qemu)
     	-device sd-card,drive=sdcard0 \
     	-device loader,file=$(KERNEL_ELF).bin,addr=$(KERNEL_ENTRY_PA)
 else
-	@cp $(BOOTLOADER) $(BOOTLOADER)-k210.bin
-	@dd if=$(KERNEL_BIN) of=$(BOOTLOADER)-k210.bin bs=$(K210_BOOTLOADER_SIZE) seek=1
-	@$(K210_BURNER) -p $(K210_SERIALPORT) -B goE -b 1500000 $(BOOTLOADER)-k210.bin
+	@cp $(BOOTLOADER) $(BOOTLOADER)-merged.bin
+	@dd if=$(KERNEL_BIN) of=$(BOOTLOADER)-merged.bin bs=$(K210_BOOTLOADER_SIZE) seek=1
+	@$(K210_BURNER) -p $(K210_SERIALPORT) -B goE -b 1500000 $(BOOTLOADER)-merged.bin
 	@python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct $(K210_SERIALPORT) 115200
 endif
