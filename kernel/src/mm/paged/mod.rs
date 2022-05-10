@@ -2,8 +2,6 @@ use core::arch::asm;
 
 use riscv::register::satp::{self, Mode};
 
-use crate::sbi;
-
 use self::{
     address::{PhysicalAddress, VirtualAddress},
     frame_allocator::frame_alloc,

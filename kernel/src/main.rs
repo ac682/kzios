@@ -35,8 +35,9 @@ fn entry(hart_id: usize, device_tree_addr: usize) -> ! {
     // memory not initialized, device tree available
     device_tree::init(device_tree_addr);
     mm::init();
-    //trap::init();
+    trap::init();
     //batch::init();
+    unsafe { asm!("ebreak");}
     println!("\x1b[31m[kzios]\x1b[0m");
     shutdown();
 }

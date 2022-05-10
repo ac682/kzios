@@ -20,7 +20,6 @@
 .global trap_vector
 
 trap_vector:
-	
 	# 保存寄存器
 	csrrw	t6,sscratch,t6 # 交换 t6 和 sscartch， t6 指向陷入帧
 	.set	i,0
@@ -42,6 +41,9 @@ trap_vector:
 	.endr
  
 	# 此处应该切换运行时态的 sp，sstatus，satp(页表)，但由于目前还没有用户态，陷入来自于内核态，就直接进吧
+	# sp 还是得设置的
+	#la t6, ekernel
+	#mv sp, t6
 	
 	# 进入 rust 环境
 	call	handle_trap

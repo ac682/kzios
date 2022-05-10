@@ -34,7 +34,8 @@
 			"stval",
 			"stvec",
 			"syscall"
-		]
+		],
+		"makefile.extensionOutputFolder": "./.vscode"
 	},
 	"launch": {
 		"version": "0.2.0",

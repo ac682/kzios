@@ -16,7 +16,7 @@ struct Process{
     stack_pointer: *mut u8,
     programmer_counter: usize,
     pid: usize,
-    root: PageTable,
+    page_table: PageTable,
     state: ProcessState
 }
 

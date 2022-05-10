@@ -46,6 +46,8 @@ ifeq ($(BOARD),qemu)
     	-machine virt \
     	-smp cores=$(QEMU_CORES) \
     	-m $(QEMU_MEMORY) \
+		-S \
+		-s \
     	-nographic \
     	-bios $(BOOTLOADER) \
     	-drive id=sdcard0,if=none,format=raw,file=./sdcard.img \

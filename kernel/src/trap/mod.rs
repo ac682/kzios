@@ -1,4 +1,4 @@
-use core::arch::global_asm;
+use core::{arch::global_asm, panic};
 
 use alloc::boxed::Box;
 use riscv::register::{
@@ -34,6 +34,8 @@ impl TrapFrame {
 
 pub fn init() {
     // sscratch 指向 TrapFrame 所在地址，用以储存寄存器
+    let frame = TrapFrame::new();
+    sscratch::write(&frame as *const TrapFrame as usize);
     unsafe {
         stvec::write(trap_vector as usize, TrapMode::Direct);
     }
@@ -44,7 +46,7 @@ pub fn init() {
 extern "C" fn handle_trap() {
     let cause = scause::read();
     match cause.cause() {
-        Trap::Interrupt(Interrupt::SupervisorTimer) => println!("TIMER!"),
+        Trap::Interrupt(Interrupt::SupervisorTimer) => println!("TIMER TICK!"),
         Trap::Exception(Exception::Breakpoint) => {
             //TODO: 这一步应该在 asm 里完成
             println!("BREAKPOINT!");
