@@ -35,6 +35,9 @@ endif
 OBJDUMP := rust-objdump --arch-name=riscv64
 OBJCOPY := rust-objcopy --binary-architecture=riscv64
 
+clean:
+	@cargo clean
+
 build:
 	@cp src/linker-$(BOARD).ld src/linker.ld
 	@cargo build --release
@@ -46,8 +49,6 @@ ifeq ($(BOARD),qemu)
     	-machine virt \
     	-smp cores=$(QEMU_CORES) \
     	-m $(QEMU_MEMORY) \
-		-S \
-		-s \
     	-nographic \
     	-bios $(BOOTLOADER) \
     	-drive id=sdcard0,if=none,format=raw,file=./sdcard.img \
@@ -60,3 +61,9 @@ else
 	@$(K210_BURNER) -p $(K210_SERIALPORT) -B goE -b 1500000 $(BOOTLOADER)-merged.bin
 	@python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct $(K210_SERIALPORT) 115200
 endif
+
+debug: build
+	@tmux new-session -d \
+		"qemu-system-riscv64 -machine virt -nographic -bios $(BOOTLOADER) -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) -s -S" && \
+		tmux split-window -h "riscv64-elf-gdb -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'" && \
+		tmux -2 attach-session -d

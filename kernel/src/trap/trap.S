@@ -39,14 +39,10 @@ trap_vector:
 			save_fp	%i,t5
 			.set	i,i+1
 	.endr
- 
-	# 此处应该切换运行时态的 sp，sstatus，satp(页表)，但由于目前还没有用户态，陷入来自于内核态，就直接进吧
-	# sp 还是得设置的
-	#la t6, ekernel
-	#mv sp, t6
 	
+	add a0, sp, zero
 	# 进入 rust 环境
-	call	handle_trap
+	jal ra, handle_trap
 
 	# 恢复寄存器
 	csrr	t6,sscratch
@@ -61,5 +57,7 @@ trap_vector:
 			load_gp	%i
 			.set	i,i+1
 	.endr
-	#TODO: 可以根据 scause 中的第一位判断是异常还是中断，可以在这里 mepc 后移动
-	sret # 跳到 mepc， 如果是异常， rust 中应该把 mepc 往后移
+
+	addi sp, sp, 16*4
+	#TODO: 可以根据 scause 中的第一位判断是异常还是中断，可以在这里 sepc 后移动
+	sret # 跳到 sepc， 如果是异常， rust 中应该把 sepc 往后移
