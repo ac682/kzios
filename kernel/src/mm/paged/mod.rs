@@ -1,6 +1,4 @@
-use core::arch::asm;
-
-use riscv::register::satp::{self, Mode};
+use riscv::{register::satp::{self, Mode}, asm::sfence_vma_all};
 
 use self::{
     address::{PhysicalAddress, VirtualAddress},
@@ -32,6 +30,8 @@ pub fn init() {
     // 开启 satp
     unsafe {
         satp::set(Mode::Sv39, 0, u64::from(frame) as usize);
-        asm!("sfence.vma");
+        sfence_vma_all();
     }
+
+    println!("kernel root page table location at {:#x}", u64::from(frame));
 }

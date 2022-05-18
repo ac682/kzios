@@ -4,9 +4,9 @@ use alloc::boxed::Box;
 use riscv::register::{
     mtvec::TrapMode,
     scause::{self, Exception, Interrupt, Trap},
-    sscratch,
+    sepc, sscratch,
     sstatus::{self, Sstatus},
-    stvec, mepc,
+    stvec,
 };
 
 global_asm!(include_str!("trap.S"));
@@ -41,19 +41,19 @@ pub fn init() {
     }
 }
 
-// trap_vector 在处理完之后会跳转到这
+// trap_vector 跳转到这
 #[no_mangle]
 extern "C" fn handle_trap() {
     let cause = scause::read();
+    if cause.is_exception() {
+        let mut sepc = sepc::read();
+        sepc += 8;
+        sepc::write(sepc);
+    }
     match cause.cause() {
         Trap::Interrupt(Interrupt::SupervisorTimer) => println!("TIMER TICK!"),
-        Trap::Exception(Exception::Breakpoint) => {
-            //TODO: 这一步应该在 asm 里完成
-            println!("BREAKPOINT!");
-            let mut mepc = mepc::read();
-            mepc += 4;
-            mepc::write(mepc);
-        }
-        _ => panic!("TRAP!"),
+        Trap::Exception(Exception::Breakpoint) => println!("BREAKPOINT!"),
+        Trap::Exception(Exception::LoadPageFault) => panic!("LOAD PAGE FAULT"),
+        _ => panic!("UNKNOWN TRAP!"),
     };
 }

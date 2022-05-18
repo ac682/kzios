@@ -8,8 +8,6 @@ extern crate alloc;
 use core::arch::{asm, global_asm};
 use sbi::shutdown;
 
-use crate::config::PAGE_SIZE;
-
 #[macro_use]
 mod console;
 mod config;

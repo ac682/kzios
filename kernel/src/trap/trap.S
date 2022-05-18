@@ -34,23 +34,23 @@ trap_vector:
 
 	csrw	sscratch,t5 # sscratch 恢复
 
-	.set	i,0
-	.rept	NUM_REGS
-			save_fp	%i,t5
-			.set	i,i+1
-	.endr
+	# .set	i,0
+	# .rept	NUM_REGS
+	# 		save_fp	%i,t5
+	# 		.set	i,i+1
+	# .endr
 	
-	add a0, sp, zero
 	# 进入 rust 环境
-	jal ra, handle_trap
+	call handle_trap
 
 	# 恢复寄存器
 	csrr	t6,sscratch
-	.set	i,0
-	.rept	NUM_REGS
-			load_fp	%i
-			.set	i,i+1
-	.endr
+	
+	# .set	i,0
+	# .rept	NUM_REGS
+	# 		load_fp	%i
+	# 		.set	i,i+1
+	# .endr
 
 	.set	i,0
 	.rept	NUM_REGS
@@ -58,6 +58,5 @@ trap_vector:
 			.set	i,i+1
 	.endr
 
-	addi sp, sp, 16*4
 	#TODO: 可以根据 scause 中的第一位判断是异常还是中断，可以在这里 sepc 后移动
 	sret # 跳到 sepc， 如果是异常， rust 中应该把 sepc 往后移
