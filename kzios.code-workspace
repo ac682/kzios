@@ -33,7 +33,8 @@
 			"stimer",
 			"stval",
 			"stvec",
-			"syscall"
+			"syscall",
+			"uart"
 		],
 		"makefile.extensionOutputFolder": "./.vscode"
 	},
