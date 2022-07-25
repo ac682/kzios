@@ -1,7 +1,7 @@
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
 
-STACK_SIZE = 0x100000;
+STACK_SIZE = 0x200000;
 
 MEMORY
 {
@@ -10,7 +10,9 @@ MEMORY
 
 SECTIONS
 {
-    _kernel_start = .;
+    PROVIDE(_memory_start = ORIGIN(ram));
+    
+    PROVIDE(_kernel_start = .);
 
     .text : {
         *(.text.init)
@@ -30,17 +32,19 @@ SECTIONS
     
     . = ALIGN(4K);
     .bss (NOLOAD) : {
-        _bss_start = .;
+        PROVIDE(_bss_start = .);
         *(.bss)
-        _bss_end = .;
+        PROVIDE(_bss_end = .);
     } > ram
 
     . = ALIGN(4K);
     .stack (NOLOAD) : {
-        _stack_start = .;
+        PROVIDE(_stack_start = .);
         . = . + STACK_SIZE;
-        _stack_end = .;
+        PROVIDE(_stack_end = .);
     }
 
-    _kernel_end = .;
+    PROVIDE(_kernel_end = .);
+
+    PROVIDE(_memory_end = ORIGIN(ram) + LENGTH(ram));
 }

@@ -1,30 +1,44 @@
-use core::{arch::asm, panic::PanicInfo};
+use core::{
+    arch::asm,
+    fmt::{Arguments, Result, Write},
+    panic::PanicInfo,
+};
+
+use crate::primitive::{qemu::UART, uart::Uart};
+
+struct StdOut;
+
+impl Write for StdOut {
+    fn write_str(&mut self, s: &str) -> Result {
+        for char in s.chars() {
+            UART.write(char as u8);
+        }
+        Ok(())
+    }
+}
+
+pub fn print(args: Arguments) {
+    StdOut.write_fmt(args).unwrap();
+}
 
 #[macro_export]
 macro_rules! print {
-    ($($args:tt)+) => {{}};
+    ($fmt: literal $(, $($arg: tt)+)?) => {
+        $crate::lang_items::print(format_args!($fmt $(, $($arg)+)?))
+    }
 }
+
 #[macro_export]
-macro_rules! println
-{
-	() => ({
-		print!("\r\n")
-	});
-	($fmt:expr) => ({
-		print!(concat!($fmt, "\r\n"))
-	});
-	($fmt:expr, $($args:tt)+) => ({
-		print!(concat!($fmt, "\r\n"), $($args)+)
-	});
+macro_rules! println {
+    ($fmt: literal $(, $($arg: tt)+)?) => {
+        $crate::lang_items::print(format_args!(concat!($fmt, "\n") $(, $($arg)+)?))
+    }
 }
 
 #[no_mangle]
 extern "C" fn abort() -> ! {
     loop {
         unsafe {
-            // The asm! syntax has changed in Rust.
-            // For the old, you can use llvm_asm!, but the
-            // new syntax kicks ass--when we actually get to use it.
             asm!("wfi");
         }
     }
@@ -33,13 +47,13 @@ extern "C" fn abort() -> ! {
 #[no_mangle]
 extern "C" fn eh_personality() {}
 #[panic_handler]
-fn panic(info: &core::panic::PanicInfo) -> ! {
+fn panic(info: &PanicInfo) -> ! {
     print!("Aborting: ");
-    if let Some(p) = info.location() {
+    if let Some(location) = info.location() {
         println!(
             "line {}, file {}: {}",
-            p.line(),
-            p.file(),
+            location.line(),
+            location.file(),
             info.message().unwrap()
         );
     } else {

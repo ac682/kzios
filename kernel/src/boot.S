@@ -12,6 +12,8 @@ _init:
 	addi	a0, a0, 8
 	bltu	a0, a1, 1b
 2:
+    li		t0, (0b11 << 11) | (1 << 7) | (1 << 3)
+    csrw	mstatus, t0
     la      t1, main
     csrw    mepc, t1
     mret
