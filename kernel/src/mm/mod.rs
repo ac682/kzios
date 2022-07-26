@@ -1,1 +1,2 @@
-pub mod heap_allocator;
+pub mod heaped;
+pub mod paged;
