@@ -1,5 +1,5 @@
 pub mod heap_allocator;
 
-pub fn init(){
+pub fn init() {
     heap_allocator::init();
 }

@@ -8,7 +8,6 @@ lazy_static! {
     pub static ref UART: Arc<NS16550a> = Arc::new(NS16550a::new());
 }
 
-pub fn init()
-{
+pub fn init() {
     UART.init();
 }

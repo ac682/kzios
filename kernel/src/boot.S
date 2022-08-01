@@ -1,7 +1,7 @@
     .section .text.init
-    .global _init
+    .global _start
 
-_init:
+_start:
     csrw    satp, zero
     la      sp, _stack_end
     la 		a0, _bss_start

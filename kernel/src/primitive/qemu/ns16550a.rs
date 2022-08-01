@@ -23,8 +23,7 @@ impl NS16550a {
 
 impl Uart for NS16550a {
     fn write(&self, char: u8) {
-        unsafe
-        {
+        unsafe {
             let handler = self.base_address as *mut u8;
             handler.add(0).write_volatile(char);
         }

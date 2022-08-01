@@ -2,9 +2,10 @@ use core::usize;
 
 use spin::{self, Mutex};
 
-use alloc::{vec::Vec, sync::Arc};
+use alloc::{sync::Arc, vec::Vec};
 
-extern "C" {
+
+extern "C"{
     fn _kernel_end();
     fn _memory_end();
 }
@@ -12,13 +13,16 @@ extern "C" {
 type FrameAllocatorImpl = StackFrameAllocator;
 
 lazy_static! {
-    pub static ref FRAME_ALLOCATOR: Mutex<FrameAllocatorImpl> = Mutex::new(FrameAllocatorImpl::new());
+    pub static ref FRAME_ALLOCATOR: Mutex<FrameAllocatorImpl> =
+        Mutex::new(FrameAllocatorImpl::new());
 }
 
 pub fn init() {
     let start = _kernel_end as usize;
     let end = _memory_end as usize;
-    FRAME_ALLOCATOR.lock().init((start - 1 + 4096) / 4096, end / 4096);
+    FRAME_ALLOCATOR
+        .lock()
+        .init((start - 1 + 4096) / 4096, end / 4096);
 }
 
 pub trait FrameAllocator {

@@ -1,17 +1,41 @@
+pub mod address;
 pub mod frame_allocator;
+pub mod manager;
+pub mod page_table;
 
-use crate::{mm::paged::frame_allocator::FRAME_ALLOCATOR, println};
+use spin::Mutex;
 
-use self::frame_allocator::FrameAllocator;
+use crate::mm::paged::{frame_allocator::FRAME_ALLOCATOR, manager::MemoryUnit};
 
-pub fn alloc() -> Option<usize>{
+use self::{frame_allocator::FrameAllocator, page_table::PageTable};
+
+extern "C" {
+    fn _kernel_start();
+    fn _kernel_end();
+}
+
+lazy_static! {
+    pub static ref KERNEL_SPACE: Mutex<MemoryUnit> = Mutex::new(MemoryUnit::new());
+}
+
+pub fn alloc() -> Option<usize> {
     FRAME_ALLOCATOR.lock().alloc()
 }
 
-pub fn free(ppn: usize){
+pub fn free(ppn: usize) {
     FRAME_ALLOCATOR.lock().free(ppn)
 }
 
-pub fn init(){
+pub fn init() {
     frame_allocator::init();
+    let mut space = KERNEL_SPACE.lock();
+    space.init(PageTable::new(2, alloc().unwrap()));
+    space.map(0x1_0000, 0x1_0000, 1, 0b1111);
+    space.map(
+        _kernel_start as usize,
+        _kernel_start as usize,
+        (_kernel_end as usize - _kernel_start as usize) >> 12,
+        0b1111,
+    );
+    space.activate();
 }

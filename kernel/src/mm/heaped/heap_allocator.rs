@@ -13,6 +13,8 @@ pub fn handle_alloc_error(layout: core::alloc::Layout) -> ! {
 
 pub fn init() {
     unsafe {
-        HEAP_ALLOCATOR.lock().init(HEAP_SPACE.as_ptr() as usize, HEAP_SIZE);
+        HEAP_ALLOCATOR
+            .lock()
+            .init(HEAP_SPACE.as_ptr() as usize, HEAP_SIZE);
     }
 }

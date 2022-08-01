@@ -12,7 +12,7 @@ SECTIONS
 {
     PROVIDE(_memory_start = ORIGIN(ram));
     
-    PROVIDE(_kernel_start = .);
+    PROVIDE(_kernel_start = ORIGIN(ram));
 
     .text : {
         *(.text.init)

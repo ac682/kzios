@@ -11,20 +11,28 @@ extern crate lazy_static;
 
 extern crate alloc;
 
-use core::arch::global_asm;
+use core::{arch::global_asm, panic};
+use core::borrow::Borrow;
 
-use mm::heaped;
+use mm::{
+    heaped,
+    paged::{self, alloc, page_table::PageTable},
+};
 use primitive::qemu;
+use spin::Mutex;
 
-use crate::mm::paged;
+use crate::mm::paged::KERNEL_SPACE;
+
+extern "C"{
+    fn _kernel_end();
+}
 
 global_asm!(include_str!("boot.S"));
 
 #[no_mangle]
 extern "C" fn main() -> ! {
     // kernel init
-    heaped::init();
-    paged::init();
+    mm::init();
     // device init
     qemu::init();
     // hello world
