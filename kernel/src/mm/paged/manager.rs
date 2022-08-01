@@ -38,6 +38,7 @@ impl MemoryUnit {
         }
     }
 
+    #[deprecated]
     pub fn print_page_table(&self) {
         if let Some(table2) = &self.root {
             for vpn2 in 0..512 {

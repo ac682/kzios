@@ -51,9 +51,9 @@ fn panic(info: &PanicInfo) -> ! {
     print!("Aborting: ");
     if let Some(location) = info.location() {
         println!(
-            "line {}, file {}: {}",
-            location.line(),
+            "file {}, {}: {}",
             location.file(),
+            location.line(),
             info.message().unwrap()
         );
     } else {
