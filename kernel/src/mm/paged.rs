@@ -1,11 +1,12 @@
 pub mod address;
 pub mod frame_allocator;
-pub mod manager;
+pub mod unit;
 pub mod page_table;
 
 use spin::Mutex;
 
-use crate::mm::paged::{frame_allocator::FRAME_ALLOCATOR, manager::MemoryUnit};
+use crate::mm::paged::{frame_allocator::FRAME_ALLOCATOR, unit::MemoryUnit};
+use crate::paged::page_table::PageTableEntryFlags;
 
 use self::{frame_allocator::FrameAllocator, page_table::PageTable};
 
@@ -30,12 +31,12 @@ pub fn init() {
     frame_allocator::init();
     let mut space = KERNEL_SPACE.lock();
     space.init(PageTable::new(2, alloc().unwrap()));
-    space.map(0x1_0000, 0x1_0000, 1, 0b1111);
+    space.map(0x1_0000, 0x1_0000, 1, PageTableEntryFlags::Readable | PageTableEntryFlags::Writeable | PageTableEntryFlags::Valid);
     space.map(
         _kernel_start as usize,
         _kernel_start as usize,
         (_kernel_end as usize - _kernel_start as usize) >> 12,
-        0b1111,
+        PageTableEntryFlags::Executable | PageTableEntryFlags::Readable | PageTableEntryFlags::Writeable | PageTableEntryFlags::Valid,
     );
     space.activate();
 }

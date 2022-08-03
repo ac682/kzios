@@ -1,4 +1,6 @@
+use flagset::FlagSet;
 use riscv::{asm::sfence_vma_all, register::satp};
+use crate::paged::page_table::PageTableEntryFlags;
 
 use crate::println;
 
@@ -17,14 +19,28 @@ impl MemoryUnit {
         self.root = Some(root)
     }
 
-    pub fn map(&self, ppn: usize, vpn: usize, count: usize, flags: usize) {
+    pub fn map(&self, ppn: usize, vpn: usize, count: usize, flags: impl Into<FlagSet<PageTableEntryFlags>>) {
+        let f = flags.into();
         let cnt = match count {
             0 => 1,
             _ => count,
         };
         if let Some(table) = &self.root {
             for i in 0..cnt {
-                table.map(ppn + i, vpn + i, flags).expect("PANIC!");
+                table.map(ppn + i, vpn + i, f).expect("PANIC!");
+            }
+        }
+    }
+
+    pub fn fill(&self, ppn_factory: impl Fn() -> usize, vpn: usize, count: usize, flags: impl Into<FlagSet<PageTableEntryFlags>>) {
+        let f = flags.into();
+        let cnt = match count {
+            0 => 1,
+            _ => count,
+        };
+        if let Some(table) = &self.root {
+            for i in 0..cnt {
+                table.map(ppn_factory(), vpn + i, f).expect("PANIC!");
             }
         }
     }

@@ -11,12 +11,15 @@ use riscv::register::{mepc, mscratch, mtvec};
 
 extern "C" {
     fn _m_trap_vector();
+
+    fn _trap_stack_end();
 }
 
-static mut KERNEL_TRAP: TrapFrame = TrapFrame::new();
+static mut KERNEL_TRAP: TrapFrame = TrapFrame::zero();
 
 pub fn init() {
     unsafe {
+        KERNEL_TRAP.trap_stack = _trap_stack_end as *mut u8;
         mscratch::write(&KERNEL_TRAP as *const TrapFrame as usize);
         mtvec::write(_m_trap_vector as usize, TrapMode::Direct);
     }
@@ -32,15 +35,14 @@ pub fn handle_machine_trap(
     frame: &mut TrapFrame,
 ) {
     if cause.is_exception() {
-        let mut mepc = mepc::read();
-        mepc += 8;
-        mepc::write(mepc);
+        mepc::write(epc + 8);
     }
 
     match cause.cause() {
         Trap::Exception(Exception::Breakpoint) => println!("break"),
         Trap::Exception(Exception::LoadPageFault) => println!("page fault"),
-
+        Trap::Exception(Exception::UserEnvCall) => println!("user ecall"),
+        Trap::Exception(Exception::SupervisorEnvCall) => println!("supervisor ecall"),
         _ => println!("unknown"),
     }
 }
@@ -55,7 +57,7 @@ pub struct TrapFrame {
 }
 
 impl TrapFrame {
-    pub const fn new() -> Self {
+    pub const fn zero() -> Self {
         Self {
             x: [0; 32],
             f: [0; 32],

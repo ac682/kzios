@@ -1,3 +1,4 @@
+use flagset::{flags, FlagSet};
 use crate::paged::address::{PhysicalAddress, VirtualAddress};
 use crate::primitive::mmio::mmio_read;
 use crate::{alloc, println};
@@ -20,7 +21,7 @@ impl PageTable {
         PageTableEntry::new(PhysicalAddress::from(address))
     }
 
-    pub fn map(&self, ppn: usize, vpn: usize, flags: usize) -> Result<(), ()> {
+    pub fn map(&self, ppn: usize, vpn: usize, flags: impl Into<FlagSet<PageTableEntryFlags>>) -> Result<(), ()> {
         if self.level != 0 {
             let index = (vpn >> (9 * self.level)) & 0x1ff;
             let entry = self.entry(index);
@@ -53,6 +54,21 @@ impl PageTable {
     }
 }
 
+flags! {
+    pub enum PageTableEntryFlags: usize{
+        Valid = 0b1,
+        Readable = 0b10,
+        Writeable = 0b100,
+        Executable = 0b1000,
+        User = 0b10000,
+        Global = 0b100000,
+        Accessed = 0b1000000,
+        Dirty = 0b10000000,
+
+        UserReadWrite = (PageTableEntryFlags::User | PageTableEntryFlags::Readable | PageTableEntryFlags::Writeable | PageTableEntryFlags::Valid).bits(),
+    }
+}
+
 pub struct PageTableEntry {
     address: usize,
 }
@@ -79,10 +95,10 @@ impl PageTableEntry {
         }
     }
 
-    pub fn set(&self, ppn: usize, rsw: usize, flags: usize) {
+    pub fn set(&self, ppn: usize, rsw: usize, flags: impl Into<FlagSet<PageTableEntryFlags>>) {
         unsafe {
             let reg = self.address as *mut usize;
-            reg.write_volatile((ppn << 10) | (rsw << 8) | flags);
+            reg.write_volatile((ppn << 10) | (rsw << 8) | flags.into().bits());
         }
     }
 
@@ -108,7 +124,7 @@ impl PageTableEntry {
     }
 
     pub fn set_as_page_table(&self, ppn: usize, level: usize) -> PageTable {
-        self.set(ppn, 0, 0b0001);
+        self.set(ppn, 0, PageTableEntryFlags::Valid);
         self.as_page_table(level)
     }
 }

@@ -8,6 +8,8 @@ mod lang_items;
 mod mm;
 mod primitive;
 mod trap;
+mod process;
+mod syscall;
 
 #[macro_use]
 extern crate lazy_static;

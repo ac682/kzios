@@ -1,7 +1,8 @@
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
 
-STACK_SIZE = 0x200000;
+STACK_SIZE = 0xC0000;
+TRAP_STACK_SIZE = 0x40000;
 
 MEMORY
 {
@@ -42,6 +43,13 @@ SECTIONS
         PROVIDE(_stack_start = .);
         . = . + STACK_SIZE;
         PROVIDE(_stack_end = .);
+    }
+
+    . = ALIGN(4k);
+    .trap_stack (NOLOAD) : {
+        PROVIDE(_trap_stack_start = .);
+        . = . + TRAP_STACK_SIZE;
+        PROVIDE(_trap_stack_end = .);
     }
 
     PROVIDE(_kernel_end = .);
