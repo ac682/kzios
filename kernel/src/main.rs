@@ -2,6 +2,7 @@
 #![no_main]
 #![feature(panic_info_message, alloc_error_handler)]
 #![feature(pin_macro)]
+#![allow(unused)]
 
 mod lang_items;
 mod mm;

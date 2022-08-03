@@ -23,7 +23,7 @@ pub fn init() {
 }
 
 #[no_mangle]
-pub extern "C" fn handle_machine_trap(
+pub fn handle_machine_trap(
     epc: usize,
     tval: usize,
     cause: Mcause,
