@@ -101,7 +101,7 @@ _switch_to_user:
     li		t0, 1 << 7 | 1 << 5 # MPP: 0, MPIE: 1, UPIE: 1
     csrw	mstatus, t0
     csrw    mscratch, a0
-    csrw    sepc, a1
+    csrw    mepc, a1
     la      t1, _m_trap_vector
     csrw    mtvec, t1
 
@@ -113,4 +113,4 @@ _switch_to_user:
     .endr
 
     sfence.vma
-    sret
+    mret
