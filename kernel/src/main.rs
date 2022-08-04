@@ -28,12 +28,13 @@ use primitive::qemu;
 use spin::Mutex;
 
 use crate::mm::paged::KERNEL_SPACE;
+use crate::process::Process;
 
 extern "C" {
     fn _kernel_end();
 }
 
-global_asm!(include_str!("boot.S"));
+global_asm!(include_str!("assembly.asm"));
 
 #[no_mangle]
 extern "C" fn main() -> ! {
@@ -44,5 +45,17 @@ extern "C" fn main() -> ! {
     qemu::init();
     // hello world
     println!("Hello, World!");
+    let process = Process::new_fn(init0);
+    process.activate();
     loop {}
+}
+
+
+fn init0() {
+    loop {}
+    //syscall(0,0,0);
+}
+
+fn syscall(id: usize, arg0: usize, arg1: usize) {
+    unsafe { asm!("ecall") };
 }

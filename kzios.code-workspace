@@ -10,6 +10,7 @@
 		"cSpell.words": [
 			"ASID",
 			"dealloc",
+			"Deque",
 			"ebreak",
 			"ebss",
 			"ecall",
@@ -17,8 +18,11 @@
 			"GETCHAR",
 			"GIGA",
 			"kzios",
+			"Mcause",
 			"mepc",
 			"mmio",
+			"mscratch",
+			"Mstatus",
 			"mtvec",
 			"PUTCHAR",
 			"riscv",
@@ -35,6 +39,7 @@
 			"stval",
 			"stvec",
 			"syscall",
+			"tval",
 			"uart"
 		],
 		"makefile.extensionOutputFolder": "./.vscode"

@@ -2,7 +2,7 @@ TARGET := riscv64gc-unknown-none-elf
 KERNEL_ELF := target/$(TARGET)/release/kzios-kernel
 KERNEL_BIN := target/$(TARGET)/release/kzios-kernel.bin
 
-all: run
+all: build
 	@echo DONE!
 
 

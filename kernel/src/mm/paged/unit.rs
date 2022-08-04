@@ -45,12 +45,21 @@ impl MemoryUnit {
         }
     }
 
+    #[deprecated]
     pub fn activate(&self) {
         unsafe {
             if let Some(table) = &self.root {
                 satp::set(satp::Mode::Sv39, 0, table.page_number());
                 sfence_vma_all();
             }
+        }
+    }
+
+    pub fn satp(&self) -> usize{
+        if let Some(table) = &self.root{
+            (8 << 60) | table.page_number()
+        }else{
+            0
         }
     }
 

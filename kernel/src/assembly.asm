@@ -16,6 +16,25 @@
 	fld	f\i, ((NUM_REGS+(\i))*REG_SIZE)(\basereg)
 .endm
 
+.section .text.init
+.global _start
+_start:
+    csrw    satp, zero
+    la      sp, _stack_end
+    la 		a0, _bss_start
+	la		a1, _bss_end
+	bgeu	a0, a1, 2f
+1:
+	sd		zero, (a0)
+	addi	a0, a0, 8
+	bltu	a0, a1, 1b
+2:
+    li		t0, (0b11 << 11) | (1 << 7) | (1 << 3)
+    csrw	mstatus, t0
+    la      t1, main
+    csrw    mepc, t1
+    mret
+
 .section .text
 .global _m_trap_vector
 _m_trap_vector:
@@ -46,7 +65,10 @@ _m_trap_vector:
     csrr	a3, mhartid
     csrr	a4, mstatus
     mv		a5, t5
-    ld		sp, 520(a5)
+    ld      t5, 520(a5)
+    mv		sp, t5 # set sp
+    ld      t5, 512(a5)
+    csrw    satp, t5
     call    handle_machine_trap
 
     # 恢复寄存器
@@ -60,9 +82,35 @@ _m_trap_vector:
 
     .set	i,0
     .rept	NUM_REGS
-            load_gp	%i
-            .set	i,i+1
+        load_gp	%i
+        .set	i,i+1
     .endr
 
     #TODO: 可以根据 mcause 中的第一位判断是异常还是中断，可以在这里 mepc 后移动
     mret # 跳到 mepc， 如果是异常， rust 中应该把 mepc 往后移
+
+.section .text
+.global _switch_to_user
+_switch_to_user:
+    # a0 - Frame address
+    # a1 - Program counter
+    ld      t5, 520(a0)
+    mv		sp, t5 # set sp
+    ld      t5, 512(a0)
+    csrw    satp, t5
+    li		t0, 1 << 7 | 1 << 5 # MPP: 0, MPIE: 1, UPIE: 1
+    csrw	mstatus, t0
+    csrw    mscratch, a0
+    csrw    sepc, a1
+    la      t1, _m_trap_vector
+    csrw    mtvec, t1
+
+    mv	t6, a0 # restore the registers
+    .set    i,1
+    .rept	31
+        load_gp %i,t6
+        .set	i,i+1
+    .endr
+
+    sfence.vma
+    sret
