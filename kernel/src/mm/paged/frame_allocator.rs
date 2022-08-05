@@ -3,11 +3,7 @@ use core::usize;
 use spin::{self, Mutex};
 
 use alloc::{sync::Arc, vec::Vec};
-
-extern "C" {
-    fn _kernel_end();
-    fn _memory_end();
-}
+use crate::external::{_kernel_end, _memory_end};
 
 type FrameAllocatorImpl = StackFrameAllocator;
 

@@ -7,9 +7,11 @@
 mod lang_items;
 mod mm;
 mod primitive;
-mod trap;
 mod process;
 mod syscall;
+mod trap;
+mod pmp;
+mod external;
 
 #[macro_use]
 extern crate lazy_static;
@@ -27,18 +29,14 @@ use mm::{
 use primitive::qemu;
 use spin::Mutex;
 
-use crate::mm::paged::KERNEL_SPACE;
 use crate::process::Process;
-
-extern "C" {
-    fn _kernel_end();
-}
 
 global_asm!(include_str!("assembly.asm"));
 
 #[no_mangle]
 extern "C" fn main() -> ! {
     // kernel init
+    pmp::init();
     mm::init();
     trap::init();
     // device init
@@ -50,10 +48,9 @@ extern "C" fn main() -> ! {
     loop {}
 }
 
-
+#[no_mangle]
 fn init0() {
-    loop {}
-    //syscall(0,0,0);
+    syscall(0,0,0);
 }
 
 fn syscall(id: usize, arg0: usize, arg1: usize) {

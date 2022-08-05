@@ -1,6 +1,6 @@
+use crate::paged::page_table::PageTableEntryFlags;
 use flagset::FlagSet;
 use riscv::{asm::sfence_vma_all, register::satp};
-use crate::paged::page_table::PageTableEntryFlags;
 
 use crate::println;
 
@@ -19,7 +19,13 @@ impl MemoryUnit {
         self.root = Some(root)
     }
 
-    pub fn map(&self, ppn: usize, vpn: usize, count: usize, flags: impl Into<FlagSet<PageTableEntryFlags>>) {
+    pub fn map(
+        &self,
+        ppn: usize,
+        vpn: usize,
+        count: usize,
+        flags: impl Into<FlagSet<PageTableEntryFlags>>,
+    ) {
         let f = flags.into();
         let cnt = match count {
             0 => 1,
@@ -32,7 +38,13 @@ impl MemoryUnit {
         }
     }
 
-    pub fn fill(&self, ppn_factory: impl Fn() -> usize, vpn: usize, count: usize, flags: impl Into<FlagSet<PageTableEntryFlags>>) {
+    pub fn fill(
+        &self,
+        ppn_factory: impl Fn() -> usize,
+        vpn: usize,
+        count: usize,
+        flags: impl Into<FlagSet<PageTableEntryFlags>>,
+    ) {
         let f = flags.into();
         let cnt = match count {
             0 => 1,
@@ -55,16 +67,17 @@ impl MemoryUnit {
         }
     }
 
-    pub fn satp(&self) -> usize{
-        if let Some(table) = &self.root{
+    pub fn satp(&self) -> usize {
+        if let Some(table) = &self.root {
             (8 << 60) | table.page_number()
-        }else{
+        } else {
             0
         }
     }
 
     #[deprecated]
     pub fn print_page_table(&self) {
+        println!("VPN => PPN");
         if let Some(table2) = &self.root {
             for vpn2 in 0..512 {
                 let pte2 = table2.entry(vpn2);

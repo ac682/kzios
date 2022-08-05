@@ -1,7 +1,7 @@
+use crate::process::{Process, ProcessState};
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use spin::Mutex;
-use crate::process::{Process, ProcessState};
 
 static mut PROCESS_LIST: Mutex<Option<VecDeque<Process>>> = Mutex::new(None);
 
@@ -10,8 +10,8 @@ pub fn schedule() {
     unsafe {
         if let Some(mut list) = PROCESS_LIST.lock().take() {
             list.rotate_left(1);
-            if let Some(mut process) = list.front(){
-                match process.state{
+            if let Some(mut process) = list.front() {
+                match process.state {
                     ProcessState::Idle => todo!(),
                     ProcessState::Dead => todo!(),
                     ProcessState::Sleeping => {

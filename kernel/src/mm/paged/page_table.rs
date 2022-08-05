@@ -1,7 +1,7 @@
-use flagset::{flags, FlagSet};
 use crate::paged::address::{PhysicalAddress, VirtualAddress};
 use crate::primitive::mmio::mmio_read;
 use crate::{alloc, println};
+use flagset::{flags, FlagSet};
 
 pub struct PageTable {
     page_number: usize,
@@ -21,7 +21,12 @@ impl PageTable {
         PageTableEntry::new(PhysicalAddress::from(address))
     }
 
-    pub fn map(&self, ppn: usize, vpn: usize, flags: impl Into<FlagSet<PageTableEntryFlags>>) -> Result<(), ()> {
+    pub fn map(
+        &self,
+        ppn: usize,
+        vpn: usize,
+        flags: impl Into<FlagSet<PageTableEntryFlags>>,
+    ) -> Result<(), ()> {
         if self.level != 0 {
             let index = (vpn >> (9 * self.level)) & 0x1ff;
             let entry = self.entry(index);
