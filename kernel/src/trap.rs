@@ -5,9 +5,11 @@ use riscv::register::mcause::{Exception, Interrupt, Mcause, Trap};
 use riscv::register::mstatus::Mstatus;
 
 use crate::println;
-use crate::process::manager::schedule;
+use crate::process::manager::{schedule_next_process};
 use riscv::register::mtvec::TrapMode;
 use riscv::register::{mcause, mepc, mscratch, mtvec};
+use crate::syscall::forward;
+use crate::timer::set_next_timer;
 
 extern "C" {
     fn _m_trap_vector();
@@ -25,33 +27,45 @@ pub fn init() {
 }
 
 #[no_mangle]
-pub fn handle_machine_trap() {
+pub fn handle_machine_trap(frame: *mut TrapFrame) -> usize {
     let cause = mcause::read();
     match cause.cause() {
         Trap::Exception(Exception::InstructionFault) => println!("inst access fault"),
         Trap::Exception(Exception::Breakpoint) => println!("break"),
         Trap::Exception(Exception::InstructionPageFault) => println!("inst page fault"),
         Trap::Exception(Exception::LoadPageFault) => println!("page fault"),
-        Trap::Exception(Exception::UserEnvCall) => println!("user ecall"),
+        Trap::Exception(Exception::UserEnvCall) => {
+            unsafe {
+                let frame = *frame;
+                let id = frame.x[17];
+                let arg0 = frame.x[10];
+                let arg1 = frame.x[11];
+                let arg2 = frame.x[12];
+                let arg3 = frame.x[13];
+                forward(id, arg0, arg1, arg2, arg3);
+            }
+        }
         Trap::Exception(Exception::SupervisorEnvCall) => println!("supervisor ecall"),
         Trap::Exception(Exception::MachineEnvCall) => println!("machine ecall"),
-        Trap::Interrupt(Interrupt::MachineTimer) => schedule(),
+        Trap::Interrupt(Interrupt::MachineTimer) => {
+            set_next_timer();
+            schedule_next_process();
+        }
         _ => println!("unknown"),
     }
-
-    // TODO: this should be done in asm
     let epc = mepc::read();
-    if cause.is_exception() {
-        mepc::write(epc + 8);
-    }
+    epc + if cause.is_exception() { 8 } else { 0 }
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct TrapFrame {
-    pub x: [usize; 32], // 0-255
-    pub f: [usize; 32], // 256 - 511
-    pub satp: usize,    // 512-519
+    // 0-255
+    pub x: [usize; 32],
+    // 256 - 511
+    pub f: [usize; 32],
+    // 512-519
+    pub satp: usize,
 }
 
 impl TrapFrame {
@@ -59,7 +73,7 @@ impl TrapFrame {
         Self {
             x: [0; 32],
             f: [0; 32],
-            satp: 0
+            satp: 0,
         }
     }
 }

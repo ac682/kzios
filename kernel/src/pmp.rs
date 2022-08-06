@@ -11,11 +11,8 @@ pub fn init() {
         // 外设
         pmpcfg0::set_pmp(1, Range::TOR, Permission::RW, false);
         pmpaddr1::write(_memory_start as usize >> 2);
-        // 内核
+        // RAM
         pmpcfg0::set_pmp(2, Range::TOR, Permission::RWX, false);
-        pmpaddr2::write(_kernel_end as usize >> 2);
-        // 用户空间
-        pmpcfg0::set_pmp(3, Range::TOR, Permission::RWX, false);
-        pmpaddr3::write(_memory_end as usize >> 2);
+        pmpaddr2::write(_memory_end as usize >> 2);
     }
 }

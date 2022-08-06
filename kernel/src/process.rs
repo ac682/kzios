@@ -5,16 +5,14 @@ use crate::paged::unit::MemoryUnit;
 use crate::trap::TrapFrame;
 use crate::{alloc, PageTable, println};
 use core::arch::global_asm;
+use core::fmt::{Debug, Formatter};
 use core::ptr::null_mut;
 
 const PROCESS_ENTRY_ADDRESS: usize = 0x5000_0000;
 const PROCESS_STACK_ADDRESS: usize = 0x9000_0000;
-const PROCESS_STACK_PAGES: usize = 0x1; // 4k
+const PROCESS_STACK_PAGES: usize = 0x1;
+// 4k
 static mut NEXT_PID: u16 = 0;
-
-extern "C" {
-    fn _switch_to_user(frame_address: usize, pc: usize);
-}
 
 pub enum ProcessState {
     Running,
@@ -89,14 +87,6 @@ impl Process {
             PageTableEntryFlags::UserReadWrite,
         );
         process.memory.print_page_table();
-        // map the frame context
-        //process.memory.map(&process.trap as *const TrapFrame as usize >> 12, &process.trap as *const TrapFrame as usize >> 12, 1, PageTableEntryFlags::Readable | PageTableEntryFlags::Writeable);
         process
-    }
-
-    pub fn activate(&self) {
-        unsafe {
-            _switch_to_user(&self.trap as *const TrapFrame as usize, self.pc);
-        }
     }
 }

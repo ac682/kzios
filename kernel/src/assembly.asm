@@ -57,12 +57,10 @@ _m_trap_vector:
     # 		save_fp	%i,t5
     # 		.set	i,i+1
     # .endr
-
+    csrr	a0, mscratch
     # 进入 rust 环境
     # 栈!
-    la      t6, _trap_stack_end
-    mv      sp, t6
-
+    la      sp, _trap_stack_end
     call    handle_machine_trap
 
     # 恢复寄存器
@@ -90,7 +88,7 @@ _switch_to_user:
     # a1 - Program counter
     ld      t5, 512(a0)
     csrw    satp, t5
-    li		t0, 1 << 7 | 1 << 5 # MPP: 0, MPIE: 1, UPIE: 1
+    li		t0, 1 << 7 | 1 << 6 | 1 << 5 | 1 << 4 # MPP: 0, MPIE: 1, HPIE:1, SPIE: 1, UPIE: 1
     csrw	mstatus, t0
     csrw    mscratch, a0
     csrw    mepc, a1
