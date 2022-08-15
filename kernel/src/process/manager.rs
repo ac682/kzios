@@ -1,8 +1,10 @@
-use crate::process::{Process, ProcessState};
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
+
 use spin::Mutex;
+
 use crate::println;
+use crate::process::{Process, ProcessState};
 use crate::trap::TrapFrame;
 
 extern "C" {
@@ -39,7 +41,7 @@ pub fn schedule_next_process() {
     unsafe {
         match schedule() {
             (0, 0) => todo!("no process can be done"),
-            (pointer, pc) => _switch_to_user(pointer, pc)
+            (trap_pointer, pc) => _switch_to_user(trap_pointer, pc)
         }
     }
 }

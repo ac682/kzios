@@ -1,8 +1,8 @@
+use alloc::{sync::Arc, vec::Vec};
 use core::usize;
 
 use spin::{self, Mutex};
 
-use alloc::{sync::Arc, vec::Vec};
 use crate::external::{_kernel_end, _memory_end};
 
 type FrameAllocatorImpl = StackFrameAllocator;

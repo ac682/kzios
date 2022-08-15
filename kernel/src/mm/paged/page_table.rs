@@ -1,7 +1,10 @@
+use core::ops::BitOr;
+
+use flagset::{flags, FlagSet};
+
+use crate::{alloc, println};
 use crate::paged::address::{PhysicalAddress, VirtualAddress};
 use crate::primitive::mmio::mmio_read;
-use crate::{alloc, println};
-use flagset::{flags, FlagSet};
 
 pub struct PageTable {
     page_number: usize,
@@ -57,6 +60,54 @@ impl PageTable {
     pub fn level(&self) -> usize {
         self.level
     }
+
+    pub fn fork(&self) -> Option<PageTable> {
+        if let Some(root_page_number) = alloc()
+        {
+            let res = PageTable::new(2, root_page_number);
+            self.enumerate(|pte, vpn| {
+                res.map(pte.physical_page_number(), vpn, pte.flags());
+            });
+            Some(res)
+        } else {
+            None
+        }
+    }
+
+    pub fn enumerate(&self, func: impl Fn(&PageTableEntry, usize)) {
+        let table2 = self;
+        for vpn2 in 0..512 {
+            let pte2 = table2.entry(vpn2);
+            if pte2.is_valid() {
+                if pte2.is_leaf() {
+                    // G page
+                    todo!("invalid page table at {:#x}#{}", table2.page_number(), vpn2);
+                } else {
+                    let table1 = pte2.as_page_table(1);
+                    for vpn1 in 0..512 {
+                        let pte1 = table1.entry(vpn1);
+                        if pte1.is_valid() {
+                            if pte1.is_leaf() {
+                                todo!(
+                                    "invalid page table at {:#x}#{}",
+                                    table2.page_number(),
+                                    vpn1
+                                );
+                            } else {
+                                let table0 = pte1.as_page_table(0);
+                                for vpn0 in 0..512 {
+                                    let pte0 = table0.entry(vpn0);
+                                    if pte0.is_valid() && pte0.is_leaf() {
+                                        func(&pte0, (vpn2 >> 18) + (vpn1 >> 9) + vpn0);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 flags! {
@@ -65,10 +116,10 @@ flags! {
         Readable = 0b10,
         Writeable = 0b100,
         Executable = 0b1000,
-        User = 0b10000,
-        Global = 0b100000,
-        Accessed = 0b1000000,
-        Dirty = 0b10000000,
+        User = 0b1_0000,
+        Global = 0b10_0000,
+        Accessed = 0b100_0000,
+        Dirty = 0b1000_0000,
 
         UserReadWrite = (PageTableEntryFlags::User | PageTableEntryFlags::Readable | PageTableEntryFlags::Writeable | PageTableEntryFlags::Valid).bits(),
     }
@@ -131,5 +182,9 @@ impl PageTableEntry {
     pub fn set_as_page_table(&self, ppn: usize, level: usize) -> PageTable {
         self.set(ppn, 0, PageTableEntryFlags::Valid);
         self.as_page_table(level)
+    }
+
+    pub fn flags(&self) -> FlagSet<PageTableEntryFlags> {
+        FlagSet::new(self.val() & 0b1111_1111).unwrap()
     }
 }

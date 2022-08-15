@@ -1,7 +1,7 @@
-use crate::paged::page_table::PageTableEntryFlags;
 use flagset::FlagSet;
 use riscv::{asm::sfence_vma_all, register::satp};
 
+use crate::paged::page_table::PageTableEntryFlags;
 use crate::println;
 
 use super::page_table::{PageTable, PageTableEntry};
@@ -53,16 +53,6 @@ impl MemoryUnit {
         if let Some(table) = &self.root {
             for i in 0..cnt {
                 table.map(ppn_factory(), vpn + i, f).expect("PANIC!");
-            }
-        }
-    }
-
-    #[deprecated]
-    pub fn activate(&self) {
-        unsafe {
-            if let Some(table) = &self.root {
-                satp::set(satp::Mode::Sv39, 0, table.page_number());
-                sfence_vma_all();
             }
         }
     }

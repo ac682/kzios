@@ -4,6 +4,28 @@
 #![feature(pin_macro)]
 #![allow(unused)]
 
+extern crate alloc;
+#[macro_use]
+extern crate lazy_static;
+
+use core::{arch::global_asm, panic};
+use core::arch::asm;
+use core::borrow::Borrow;
+
+use spin::Mutex;
+
+use mm::{
+    heaped,
+    paged::{self, alloc, page_table::PageTable},
+};
+use primitive::qemu;
+
+use crate::external::{_kernel_end, _kernel_start, _memory_end, _memory_start, _stack_end, _stack_start, _trap_stack_end, _trap_stack_start};
+use crate::lang_items::print;
+use crate::process::manager::add_process;
+use crate::process::Process;
+use crate::timer::set_next_timer;
+
 mod lang_items;
 mod mm;
 mod primitive;
@@ -13,28 +35,6 @@ mod trap;
 mod pmp;
 mod external;
 mod timer;
-
-#[macro_use]
-extern crate lazy_static;
-
-extern crate alloc;
-
-use core::arch::asm;
-use core::borrow::Borrow;
-use core::{arch::global_asm, panic};
-
-use mm::{
-    heaped,
-    paged::{self, alloc, page_table::PageTable},
-};
-use primitive::qemu;
-use spin::Mutex;
-use crate::external::{_kernel_end, _kernel_start, _memory_end, _memory_start, _stack_end, _stack_start, _trap_stack_end, _trap_stack_start};
-use crate::lang_items::print;
-use crate::process::manager::{add_process};
-
-use crate::process::Process;
-use crate::timer::set_next_timer;
 
 global_asm!(include_str!("assembly.asm"));
 
@@ -55,7 +55,7 @@ extern "C" fn main() -> ! {
     add_process(process0);
     add_process(process1);
     set_next_timer();
-    unsafe{
+    unsafe {
         loop {
             asm!("wfi")
         }
@@ -89,9 +89,9 @@ fn init0() {
 }
 
 #[no_mangle]
-fn init1(){
-    loop{
-        syscall(0, '1' as usize, 0,0,0);
+fn init1() {
+    loop {
+        syscall(0, '1' as usize, 0, 0, 0);
     }
 }
 

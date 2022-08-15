@@ -1,13 +1,14 @@
 use alloc::sync::Arc;
 use core::arch::global_asm;
 use core::ptr::null_mut;
+
+use riscv::register::{mcause, mepc, mscratch, mtvec};
 use riscv::register::mcause::{Exception, Interrupt, Mcause, Trap};
 use riscv::register::mstatus::Mstatus;
+use riscv::register::mtvec::TrapMode;
 
 use crate::println;
-use crate::process::manager::{schedule_next_process};
-use riscv::register::mtvec::TrapMode;
-use riscv::register::{mcause, mepc, mscratch, mtvec};
+use crate::process::manager::schedule_next_process;
 use crate::syscall::forward;
 use crate::timer::set_next_timer;
 

@@ -1,12 +1,13 @@
-pub mod manager;
-
-use crate::paged::page_table::PageTableEntryFlags;
-use crate::paged::unit::MemoryUnit;
-use crate::trap::TrapFrame;
-use crate::{alloc, PageTable, println};
 use core::arch::global_asm;
 use core::fmt::{Debug, Formatter};
 use core::ptr::null_mut;
+
+use crate::{alloc, PageTable, println};
+use crate::paged::page_table::PageTableEntryFlags;
+use crate::paged::unit::MemoryUnit;
+use crate::trap::TrapFrame;
+
+pub mod manager;
 
 const PROCESS_ENTRY_ADDRESS: usize = 0x5000_0000;
 const PROCESS_STACK_ADDRESS: usize = 0x9000_0000;
@@ -31,26 +32,9 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn new() -> Self {
-        let mut process = Process {
-            trap: TrapFrame::zero(),
-            stack: null_mut(),
-            pc: PROCESS_ENTRY_ADDRESS,
-            pid: 0,
-            memory: MemoryUnit::new(),
-            state: ProcessState::Idle,
-        };
 
-        unsafe {
-            process.pid = NEXT_PID;
-            NEXT_PID += 1;
-        }
-        // here should set process.x[2] which is sp register to the right address
-        // and map all pages
-        process.memory.init(PageTable::new(2, alloc().unwrap()));
-        // set satp
-        todo!();
-        process
+    pub fn new(&self) -> Process{
+        todo!()
     }
 
     pub fn new_fn(func: fn()) -> Self {
@@ -71,7 +55,7 @@ impl Process {
         process.stack = PROCESS_STACK_ADDRESS as *mut u8;
         process.trap.satp = process.memory.satp();
         process.trap.x[2] = PROCESS_STACK_ADDRESS + PROCESS_STACK_PAGES * 4096;
-
+        // map essential regions
         // map the func memory (assuming 4kb)
         process.memory.map(
             func as usize >> 12,

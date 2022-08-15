@@ -16,6 +16,7 @@ pub fn set_next_timer() {
         // the next interrupt to fire one second from now.
         // This is much too slow for normal operations, but it gives us
         // a visual of what's happening behind the scenes.
-        mtimecmp.write_volatile(mtime.read_volatile() + 10_000_000);
+        // 10ms
+        mtimecmp.write_volatile(mtime.read_volatile() + 20_000_0);
     }
 }

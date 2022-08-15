@@ -1,34 +1,28 @@
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
 
-STACK_SIZE = 0xC0000;
-TRAP_STACK_SIZE = 0x40000;
-
-MEMORY
-{
-    ram (rwx) : ORIGIN = 0x80000000, LENGTH = 8M
-}
+INCLUDE kernel/platforms/qemu/memory.x
 
 SECTIONS
 {
-    PROVIDE(_memory_start = ORIGIN(ram));
+    PROVIDE(_memory_start = ORIGIN(RAM));
     
-    PROVIDE(_kernel_start = ORIGIN(ram));
+    PROVIDE(_kernel_start = ORIGIN(RAM));
 
     .text : {
         *(.text.init)
         *(.text .text.*)
-    } > ram
+    } > REGION_TEXT
 
     . = ALIGN(4K);
     .rodata : {
         *(.rodata)
-    } > ram
+    } > REGION_RODATA
 
     . = ALIGN(4K);
     .data : {
         *(.data)
-    } > ram
+    } > REGION_DATA
 
     
     . = ALIGN(4K);
@@ -36,23 +30,23 @@ SECTIONS
         PROVIDE(_bss_start = .);
         *(.bss)
         PROVIDE(_bss_end = .);
-    } > ram
+    } > REGION_BSS
 
     . = ALIGN(4K);
     .stack (NOLOAD) : {
         PROVIDE(_stack_start = .);
         . = . + STACK_SIZE;
         PROVIDE(_stack_end = .);
-    }
+    } > REGION_STACK
 
     . = ALIGN(4k);
     .trap_stack (NOLOAD) : {
         PROVIDE(_trap_stack_start = .);
         . = . + TRAP_STACK_SIZE;
         PROVIDE(_trap_stack_end = .);
-    }
+    } > REGION_TRAP_STACK
 
     PROVIDE(_kernel_end = .);
 
-    PROVIDE(_memory_end = ORIGIN(ram) + LENGTH(ram));
+    PROVIDE(_memory_end = ORIGIN(RAM) + LENGTH(RAM));
 }
