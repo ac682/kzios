@@ -1,5 +1,6 @@
 [package]
-name = "init0"
+name = "kzios-init0"
+authors = ["Chien Zhang, zqy0224@live.com"]
 version = "0.1.0"
 edition = "2021"
 

@@ -11,7 +11,11 @@ extern crate lazy_static;
 use core::{arch::global_asm, panic};
 use core::arch::asm;
 use core::borrow::Borrow;
+use core::slice::from_raw_parts;
 
+use fdt_rs::base::*;
+use fdt_rs::common::item::UnwrappableDevTreeItem;
+use fdt_rs::prelude::*;
 use spin::Mutex;
 
 use mm::{
@@ -35,31 +39,68 @@ mod trap;
 mod pmp;
 mod external;
 mod timer;
+mod vfs;
 
 global_asm!(include_str!("assembly.asm"));
+
+#[repr(align(4))]
+struct _Wrapper<T>(T);
+
+pub const FDT: &[u8] = &_Wrapper(*include_bytes!("../platforms/qemu/device.dtb")).0;
 
 #[no_mangle]
 extern "C" fn main() -> ! {
     // kernel init
-    pmp::init();
+    //pmp::init();
     mm::init();
     trap::init();
     timer::init();
-    // device init
+    vfs::init();
+    // device init, this should be moved to init0 process
     qemu::init();
     // hello world
     println!("Hello, World!");
+    //0x1d000, 0x2000
+    // unsafe{
+    //     let pointer = 0x87000000 as *const u8;
+    //     let data = from_raw_parts(pointer,0x2000 );
+    //     let dt = DevTree::new(data).unwrap();
+    //     println!("{:?}",dt);
+    // }
+    let devtree = unsafe {
+
+        // Get the actual size of the device tree after reading its header.
+        let size = DevTree::read_totalsize(FDT).unwrap();
+        let buf = &FDT[..size];
+
+        // Create the device tree handle
+        DevTree::new(buf).unwrap()
+    };
+    let mut node_iter = devtree.compatible_nodes("sifive,test1");
+    while let Some(node) = node_iter.next().unwrap() {
+        println!("{}", node.name().unwrap());
+    }
     print_sections();
-    let process0 = Process::new_fn(init0);
-    let process1 = Process::new_fn(init1);
-    add_process(process0);
-    add_process(process1);
-    set_next_timer();
+    // 进程有问题, 在切换时没有保存上一个进程的pc到结构体里
+    // let process0 = Process::new_fn(init0);
+    // add_process(process0);
+    // set_next_timer();
     unsafe {
         loop {
             asm!("wfi")
         }
     }
+}
+
+#[no_mangle]
+fn init0() {
+    syscall(0, '0' as usize, 0, 0, 0);
+    loop {}
+}
+
+fn syscall(id: usize, arg0: usize, arg1: usize, arg2: usize, arg3: usize) {
+    let mut ret = 0usize;
+    unsafe { asm!("ecall", inlateout("x10") arg0 => ret, in("x11") arg1, in("x12") arg2, in("x13") arg3, in("x17") id) };
 }
 
 fn print_sections() {
@@ -81,21 +122,8 @@ fn print_sections() {
     println!("}}");
 }
 
-#[no_mangle]
-fn init0() {
-    loop {
-        syscall(0, '0' as usize, 0, 0, 0);
-    }
-}
-
-#[no_mangle]
-fn init1() {
-    loop {
-        syscall(0, '1' as usize, 0, 0, 0);
-    }
-}
-
-fn syscall(id: usize, arg0: usize, arg1: usize, arg2: usize, arg3: usize) {
-    let mut ret = 0usize;
-    unsafe { asm!("ecall", inlateout("x10") arg0 => ret, in("x11") arg1, in("x12") arg2, in("x13") arg3, in("x17") id) };
+fn add_devices() {
+    // uart
+    // spi
+    // gpio
 }

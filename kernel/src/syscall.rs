@@ -8,13 +8,13 @@ pub fn forward(id: usize, arg0: usize, arg1: usize, arg2: usize, arg3: usize) {
     };
 }
 
-// 0
+// 0x0
 fn put_char(char: usize)
 {
     UART.write(char as u8);
 }
 
-// 1
+// 0x1
 fn get_char() -> Option<usize>{
     if let Some(char) = UART.read(){
         Some(char as usize)
@@ -23,33 +23,48 @@ fn get_char() -> Option<usize>{
     }
 }
 
-// 10
+// 0x10
 fn open(){}
 
-// 11
+// 0x11
 fn read(){}
 
-// 12
+// 0x12
 fn write(){}
 
-// 13
+// 0x13
 fn close(){}
 
-// 14
+// 0x14
 fn delete(){}
 
-// 15
+// 0x15
 fn get_modifier(){}
 
-// 16
+// 0x16
 fn set_modifier(){}
 
-// 20
+// 0x20
 fn fork(){}
 
-// 21
+// 0x21
 fn send_signal(){}
 
-// 22
+// 0x22
 fn exit(){}
+
+// 0x30
+fn set_pin(){}
+
+// 0x31
+fn digital_write(){}
+
+// 0x32
+fn digital_read(){}
+
+// 0x33
+fn analog_write(){}
+
+// 0x33
+fn analog_read(){}
 
