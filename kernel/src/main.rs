@@ -11,11 +11,10 @@ extern crate lazy_static;
 use core::{arch::global_asm, panic};
 use core::arch::asm;
 use core::borrow::Borrow;
-use core::slice::from_raw_parts;
 
-use fdt_rs::base::*;
-use fdt_rs::common::item::UnwrappableDevTreeItem;
-use fdt_rs::prelude::*;
+use dtb_parser::device_tree::DeviceTree;
+use dtb_parser::node::DeviceTreeNode;
+use dtb_parser::prop::{NodeProperty, PropertyValue};
 use spin::Mutex;
 
 use mm::{
@@ -43,10 +42,7 @@ mod vfs;
 
 global_asm!(include_str!("assembly.asm"));
 
-#[repr(align(4))]
-struct _Wrapper<T>(T);
-
-pub const FDT: &[u8] = &_Wrapper(*include_bytes!("../platforms/qemu/device.dtb")).0;
+pub const DTB: &[u8] = include_bytes!("../platforms/qemu/device.dtb");
 
 #[no_mangle]
 extern "C" fn main() -> ! {
@@ -60,26 +56,8 @@ extern "C" fn main() -> ! {
     qemu::init();
     // hello world
     println!("Hello, World!");
-    //0x1d000, 0x2000
-    // unsafe{
-    //     let pointer = 0x87000000 as *const u8;
-    //     let data = from_raw_parts(pointer,0x2000 );
-    //     let dt = DevTree::new(data).unwrap();
-    //     println!("{:?}",dt);
-    // }
-    let devtree = unsafe {
-
-        // Get the actual size of the device tree after reading its header.
-        let size = DevTree::read_totalsize(FDT).unwrap();
-        let buf = &FDT[..size];
-
-        // Create the device tree handle
-        DevTree::new(buf).unwrap()
-    };
-    let mut node_iter = devtree.compatible_nodes("sifive,test1");
-    while let Some(node) = node_iter.next().unwrap() {
-        println!("{}", node.name().unwrap());
-    }
+    let tree = DeviceTree::from_bytes(DTB).unwrap();
+    print_node(tree.root(), 0);
     print_sections();
     // 进程有问题, 在切换时没有保存上一个进程的pc到结构体里
     // let process0 = Process::new_fn(init0);
@@ -89,6 +67,33 @@ extern "C" fn main() -> ! {
         loop {
             asm!("wfi")
         }
+    }
+}
+
+fn print_node(node: &DeviceTreeNode, level: usize) {
+    for _ in 0..level {
+        print!("\t");
+    }
+    println!("{} {{", node.name());
+    for prop in node.props() {
+        print_prop(prop, level + 1);
+    }
+    for child in node.nodes() {
+        print_node(child, level + 1);
+    }
+    for _ in 0..level {
+        print!("\t");
+    }
+    println!("}}");
+}
+
+fn print_prop(prop: &NodeProperty, level: usize) {
+    for _ in 0..level {
+        print!("\t");
+    }
+    match prop.value() {
+        PropertyValue::None => println!("{};", prop.name()),
+        _ => println!("{} = {:?};", prop.name(), prop.value())
     }
 }
 
