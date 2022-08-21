@@ -15,56 +15,56 @@ fn put_char(char: usize)
 }
 
 // 0x1
-fn get_char() -> Option<usize>{
-    if let Some(char) = UART.read(){
+fn get_char() -> Option<usize> {
+    if let Some(char) = UART.read() {
         Some(char as usize)
-    }else{
+    } else {
         None
     }
 }
 
 // 0x10
-fn open(){}
+fn open() {}
 
 // 0x11
-fn read(){}
+fn read() {}
 
 // 0x12
-fn write(){}
+fn write() {}
 
 // 0x13
-fn close(){}
+fn close() {}
 
 // 0x14
-fn delete(){}
+fn delete() {}
 
 // 0x15
-fn get_modifier(){}
+fn get_modifier() {}
 
 // 0x16
-fn set_modifier(){}
+fn set_modifier() {}
 
 // 0x20
-fn fork(){}
+fn fork() {}
 
 // 0x21
-fn send_signal(){}
+fn send_signal() {}
 
 // 0x22
-fn exit(){}
+fn exit() {}
 
 // 0x30
-fn set_pin(){}
+fn set_pin() {}
 
 // 0x31
-fn digital_write(){}
+fn digital_write() {}
 
 // 0x32
-fn digital_read(){}
+fn digital_read() {}
 
 // 0x33
-fn analog_write(){}
+fn analog_write() {}
 
 // 0x33
-fn analog_read(){}
+fn analog_read() {}
 

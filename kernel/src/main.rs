@@ -10,7 +10,6 @@ extern crate lazy_static;
 
 use core::{arch::global_asm, panic};
 use core::arch::asm;
-use core::borrow::Borrow;
 
 use dtb_parser::device_tree::DeviceTree;
 use dtb_parser::node::DeviceTreeNode;
@@ -52,12 +51,12 @@ extern "C" fn main() -> ! {
     trap::init();
     timer::init();
     vfs::init();
-    // device init, this should be moved to init0 process
+    // simple device init from device tree
+    let tree = DeviceTree::from_bytes(DTB).unwrap();
     qemu::init();
     // hello world
     println!("Hello, World!");
-    let tree = DeviceTree::from_bytes(DTB).unwrap();
-    print_node(tree.root(), 0);
+    println!("{}", tree);
     print_sections();
     // 进程有问题, 在切换时没有保存上一个进程的pc到结构体里
     // let process0 = Process::new_fn(init0);
@@ -67,33 +66,6 @@ extern "C" fn main() -> ! {
         loop {
             asm!("wfi")
         }
-    }
-}
-
-fn print_node(node: &DeviceTreeNode, level: usize) {
-    for _ in 0..level {
-        print!("\t");
-    }
-    println!("{} {{", node.name());
-    for prop in node.props() {
-        print_prop(prop, level + 1);
-    }
-    for child in node.nodes() {
-        print_node(child, level + 1);
-    }
-    for _ in 0..level {
-        print!("\t");
-    }
-    println!("}}");
-}
-
-fn print_prop(prop: &NodeProperty, level: usize) {
-    for _ in 0..level {
-        print!("\t");
-    }
-    match prop.value() {
-        PropertyValue::None => println!("{};", prop.name()),
-        _ => println!("{} = {:?};", prop.name(), prop.value())
     }
 }
 

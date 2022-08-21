@@ -1,5 +1,5 @@
 #![no_std]
 
-fn main(){
+fn main() {
     //
 }

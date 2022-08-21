@@ -32,8 +32,7 @@ pub struct Process {
 }
 
 impl Process {
-
-    pub fn new(&self) -> Process{
+    pub fn new(&self) -> Process {
         todo!()
     }
 
