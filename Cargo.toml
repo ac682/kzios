@@ -1,5 +1,6 @@
 [workspace]
 members = [
     "kernel",
-    "init0"
+    "system",
+    #"init0"
 ]

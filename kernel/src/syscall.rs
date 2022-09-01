@@ -1,16 +1,18 @@
 use crate::primitive::uart::Uart;
+use crate::println;
+use crate::process::proc_control::mark_dead;
 use crate::qemu::UART;
 
 pub fn forward(id: usize, arg0: usize, arg1: usize, arg2: usize, arg3: usize) {
     match id {
         0 => put_char(arg0),
+        0x22 => exit(arg0),
         _ => todo!("{} not implemented", id),
     };
 }
 
 // 0x0
-fn put_char(char: usize)
-{
+fn put_char(char: usize) {
     UART.write(char as u8);
 }
 
@@ -51,7 +53,9 @@ fn fork() {}
 fn send_signal() {}
 
 // 0x22
-fn exit() {}
+fn exit(pid: usize) {
+    mark_dead(pid);
+}
 
 // 0x30
 fn set_pin() {}
@@ -67,4 +71,3 @@ fn analog_write() {}
 
 // 0x33
 fn analog_read() {}
-

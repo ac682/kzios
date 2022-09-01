@@ -24,19 +24,20 @@ use primitive::qemu;
 
 use crate::external::{_kernel_end, _kernel_start, _memory_end, _memory_start, _stack_end, _stack_start, _trap_stack_end, _trap_stack_start};
 use crate::lang_items::print;
-use crate::process::manager::add_process;
+use crate::process::proc_control::add_process;
 use crate::process::Process;
 use crate::timer::set_next_timer;
 
+mod driver;
+mod external;
 mod lang_items;
 mod mm;
+mod pmp;
 mod primitive;
 mod process;
 mod syscall;
-mod trap;
-mod pmp;
-mod external;
 mod timer;
+mod trap;
 mod vfs;
 
 global_asm!(include_str!("assembly.asm"));
@@ -46,7 +47,7 @@ pub const DTB: &[u8] = include_bytes!("../platforms/qemu/device.dtb");
 #[no_mangle]
 extern "C" fn main() -> ! {
     // kernel init
-    //pmp::init();
+    pmp::init();
     mm::init();
     trap::init();
     timer::init();
@@ -58,10 +59,13 @@ extern "C" fn main() -> ! {
     println!("Hello, World!");
     println!("{}", tree);
     print_sections();
-    // 进程有问题, 在切换时没有保存上一个进程的pc到结构体里
-    // let process0 = Process::new_fn(init0);
-    // add_process(process0);
-    // set_next_timer();
+    let process0 = Process::new_fn(init0);
+    let process1 = Process::new_fn(init1);
+    let process2 = Process::new_fn(init2);
+    add_process(process0);
+    add_process(process1);
+    add_process(process2);
+    set_next_timer();
     unsafe {
         loop {
             asm!("wfi")
@@ -69,15 +73,33 @@ extern "C" fn main() -> ! {
     }
 }
 
-#[no_mangle]
 fn init0() {
-    syscall(0, '0' as usize, 0, 0, 0);
-    loop {}
+    loop{
+        syscall(0, '0' as usize, 0, 0, 0);
+    }
+}
+
+fn init1(){
+    syscall(0, '1' as usize, 0, 0, 0);
+    syscall(0x22, 0, 0, 0, 0);
+}
+
+fn init2(){
+    syscall(0, '2' as usize, 0, 0, 0);
+    syscall(0, '2' as usize, 0, 0, 0);
+    syscall(0, '2' as usize, 0, 0, 0);
+    syscall(0, '2' as usize, 0, 0, 0);
+    syscall(0, '2' as usize, 0, 0, 0);
+    syscall(0, '2' as usize, 0, 0, 0);
+    syscall(0, '2' as usize, 0, 0, 0);
+    syscall(0x22, 0, 0, 0, 0);
 }
 
 fn syscall(id: usize, arg0: usize, arg1: usize, arg2: usize, arg3: usize) {
     let mut ret = 0usize;
-    unsafe { asm!("ecall", inlateout("x10") arg0 => ret, in("x11") arg1, in("x12") arg2, in("x13") arg3, in("x17") id) };
+    unsafe {
+        asm!("ecall", inlateout("x10") arg0 => ret, in("x11") arg1, in("x12") arg2, in("x13") arg3, in("x17") id)
+    };
 }
 
 fn print_sections() {
@@ -90,12 +112,37 @@ fn print_sections() {
     let kernel_end = _kernel_end as usize;
     let memory_end = _memory_end as usize;
 
-    println!("memory@{:#x}:{:#x}={}K {{", memory_start, memory_end, (memory_end - memory_start) / 1024);
-    println!("  kernel@{:#x}:{:#x}={}K {{", kernel_start, kernel_end, (kernel_end - kernel_start) / 1024);
-    println!("    stack@{:#x}:{:#x}={}K;", stack_start, stack_end, (stack_end - stack_start) / 1024);
-    println!("    trap_stack@{:#x}:{:#x}={}K;", trap_stack_start, trap_stack_end, (trap_stack_end - trap_stack_start) / 1024);
+    println!(
+        "memory@{:#x}:{:#x}={}K {{",
+        memory_start,
+        memory_end,
+        (memory_end - memory_start) / 1024
+    );
+    println!(
+        "  kernel@{:#x}:{:#x}={}K {{",
+        kernel_start,
+        kernel_end,
+        (kernel_end - kernel_start) / 1024
+    );
+    println!(
+        "    stack@{:#x}:{:#x}={}K;",
+        stack_start,
+        stack_end,
+        (stack_end - stack_start) / 1024
+    );
+    println!(
+        "    trap_stack@{:#x}:{:#x}={}K;",
+        trap_stack_start,
+        trap_stack_end,
+        (trap_stack_end - trap_stack_start) / 1024
+    );
     println!("  }}");
-    println!("  user@{:#x}:{:#x}={}K;", kernel_end, memory_end, (memory_end - kernel_end) / 1024);
+    println!(
+        "  user@{:#x}:{:#x}={}K;",
+        kernel_end,
+        memory_end,
+        (memory_end - kernel_end) / 1024
+    );
     println!("}}");
 }
 

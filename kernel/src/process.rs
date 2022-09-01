@@ -2,12 +2,12 @@ use core::arch::global_asm;
 use core::fmt::{Debug, Formatter};
 use core::ptr::null_mut;
 
-use crate::{alloc, PageTable, println};
+use crate::{_kernel_end, _kernel_start, alloc, PageTable, println};
 use crate::paged::page_table::PageTableEntryFlags;
 use crate::paged::unit::MemoryUnit;
 use crate::trap::TrapFrame;
 
-pub mod manager;
+pub mod proc_control;
 
 const PROCESS_ENTRY_ADDRESS: usize = 0x5000_0000;
 const PROCESS_STACK_ADDRESS: usize = 0x9000_0000;
@@ -55,6 +55,8 @@ impl Process {
         process.trap.satp = process.memory.satp();
         process.trap.x[2] = PROCESS_STACK_ADDRESS + PROCESS_STACK_PAGES * 4096;
         // map essential regions
+        // map the kernel
+        //process.memory.map(_kernel_start as usize, _kernel_start as usize, (_kernel_end as usize - _kernel_start as usize) >> 12, PageTableEntryFlags::User | PageTableEntryFlags::Readable | PageTableEntryFlags::Executable);
         // map the func memory (assuming 4kb)
         process.memory.map(
             func as usize >> 12,

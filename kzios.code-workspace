@@ -17,6 +17,7 @@
 			"ekernel",
 			"GETCHAR",
 			"GIGA",
+			"gpio",
 			"kzios",
 			"Mcause",
 			"mepc",

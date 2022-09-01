@@ -43,33 +43,48 @@ _start:
 .section .text
 .global _m_trap_vector
 _m_trap_vector:
-    # 保存寄存器
-    csrrw	t6,mscratch,t6 # 交换 t6 和 mscratch， t6 指向陷入帧, mscratch 是 t6 原内容
+    # 保存通用寄存器
+    csrrw	t6, mscratch, t6 # 交换 t6 和 mscratch， t6 指向陷入帧, mscratch 是 t6 原内容
+
     .set	i,0
     .rept	NUM_REGS-1 # 保存前 31 个寄存器，也就是除了 x31
             save_gp	%i,t6
             .set	i,i+1
     .endr
 
-    mv		t5,t6 # 现在 t5 指向陷入帧
-    csrr	t6,mscratch # 复原 t6
-    save_gp 31,t5 # 保存 t6
-
-    csrw	mscratch,t5 # mscratch 恢复
+    mv		t5, t6 # 现在 t5 指向陷入帧
+    csrr	t6, mscratch # 复原 t6
+    save_gp 31, t5 # 保存 t6
 
     # .set	i,0
     # .rept	NUM_REGS
-    # 		save_fp	%i,t5
-    # 		.set	i,i+1
+    #         save_fp	%i,t5
+    #         .set	i,i+1
     # .endr
-    csrr	a0, mscratch
+
+    # 保存 satp 和 mstatus
+    csrr    t6, satp
+    sd      t6, 512(t5)
+    csrr    t6, mstatus
+    sd      t6, 520(t5)
+
+    csrw	mscratch, t5 # mscratch 恢复
+
     # 进入 rust 环境
-    # 栈!
+    csrr	a0, mscratch
+    csrr    a1, mepc
     la      sp, _trap_stack_end
     call    handle_machine_trap
+    csrw    mepc, a0
 
     # 恢复寄存器
-    csrr	t6,mscratch
+    csrr	t6, mscratch
+
+    # 复原 satp 和 mstatus
+    ld      t5, 512(t6)
+    csrw    satp, t5
+    ld      t5, 520(t6)
+    csrw    mstatus, t5
 
     # .set	i,0
     # .rept	NUM_REGS
@@ -77,35 +92,11 @@ _m_trap_vector:
     # 		.set	i,i+1
     # .endr
 
+    # 复原包括 t6 在内的通用寄存器
     .set	i,0
     .rept	NUM_REGS
         load_gp	%i
         .set	i,i+1
     .endr
-
-    #TODO: 可以根据 mcause 中的第一位判断是异常还是中断，可以在这里 mepc 后移动
-    mret # 跳到 mepc， 如果是异常， rust 中应该把 mepc 往后移
-
-.section .text
-.global _switch_to_user
-_switch_to_user:
-    # a0 - Frame address
-    # a1 - Program counter
-    ld      t5, 512(a0)
-    csrw    satp, t5
-    li		t0, 1 << 7 | 1 << 6 | 1 << 5 | 1 << 4 # MPP: 0, MPIE: 1, HPIE:1, SPIE: 1, UPIE: 1
-    csrw	mstatus, t0
-    csrw    mscratch, a0
-    csrw    mepc, a1
-    la      t1, _m_trap_vector
-    csrw    mtvec, t1
-
-    mv	t6, a0 # restore the registers
-    .set    i,1
-    .rept	31
-        load_gp %i,t6
-        .set	i,i+1
-    .endr
-
     sfence.vma
     mret

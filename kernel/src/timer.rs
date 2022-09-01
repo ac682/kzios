@@ -1,7 +1,7 @@
 use riscv::register::mie;
 
-pub fn init() {
-    unsafe {
+pub fn init(){
+    unsafe{
         mie::set_mtimer();
         mie::set_stimer();
         mie::set_utimer();
@@ -17,6 +17,6 @@ pub fn set_next_timer() {
         // This is much too slow for normal operations, but it gives us
         // a visual of what's happening behind the scenes.
         // 10ms
-        mtimecmp.write_volatile(mtime.read_volatile() + 20_000_0);
+        mtimecmp.write_volatile(mtime.read_volatile() + 10_000_000);
     }
 }

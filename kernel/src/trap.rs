@@ -7,8 +7,8 @@ use riscv::register::mcause::{Exception, Interrupt, Mcause, Trap};
 use riscv::register::mstatus::Mstatus;
 use riscv::register::mtvec::TrapMode;
 
-use crate::println;
-use crate::process::manager::schedule_next_process;
+use crate::{println, timer};
+use crate::process::proc_control::schedule_next_process;
 use crate::syscall::forward;
 use crate::timer::set_next_timer;
 
@@ -28,34 +28,54 @@ pub fn init() {
 }
 
 #[no_mangle]
-pub fn handle_machine_trap(frame: *mut TrapFrame) -> usize {
+pub extern "C" fn handle_machine_trap(frame: *mut TrapFrame, epc: usize) -> usize {
     let cause = mcause::read();
     match cause.cause() {
-        Trap::Exception(Exception::InstructionFault) => println!("inst access fault"),
-        Trap::Exception(Exception::Breakpoint) => println!("break"),
-        Trap::Exception(Exception::InstructionPageFault) => println!("inst page fault"),
-        Trap::Exception(Exception::LoadPageFault) => println!("page fault"),
-        Trap::Exception(Exception::UserEnvCall) => {
-            unsafe {
-                let frame = *frame;
-                let id = frame.x[17];
-                let arg0 = frame.x[10];
-                let arg1 = frame.x[11];
-                let arg2 = frame.x[12];
-                let arg3 = frame.x[13];
-                forward(id, arg0, arg1, arg2, arg3);
-            }
+        Trap::Exception(Exception::InstructionFault) => {
+            println!("inst access fault");
+            epc + 4
         }
-        Trap::Exception(Exception::SupervisorEnvCall) => println!("supervisor ecall"),
-        Trap::Exception(Exception::MachineEnvCall) => println!("machine ecall"),
+        Trap::Exception(Exception::Breakpoint) => {
+            println!("break");
+            epc + 4
+        }
+        Trap::Exception(Exception::InstructionPageFault) => {
+            println!("inst page fault");
+            epc + 4
+        }
+        Trap::Exception(Exception::LoadPageFault) => {
+            println!("page fault");
+            epc + 4
+        }
+        Trap::Exception(Exception::UserEnvCall) => unsafe {
+            let frame = *frame;
+            let id = frame.x[17];
+            let arg0 = frame.x[10];
+            let arg1 = frame.x[11];
+            let arg2 = frame.x[12];
+            let arg3 = frame.x[13];
+            forward(id, arg0, arg1, arg2, arg3);
+            epc + 4
+        },
+        Trap::Exception(Exception::SupervisorEnvCall) => {
+            println!("supervisor ecall");
+            epc + 4
+        }
+        Trap::Exception(Exception::MachineEnvCall) => {
+            println!("machine ecall");
+            epc + 4
+        }
         Trap::Interrupt(Interrupt::MachineTimer) => {
+            println!("tick!");
             set_next_timer();
-            schedule_next_process();
+            let res = schedule_next_process(epc);
+            if res == 0{
+                panic!("the last process wants to quit");
+            }
+            res
         }
-        _ => println!("unknown"),
+        _ => panic!("unknown trap cause"),
     }
-    let epc = mepc::read();
-    epc + if cause.is_exception() { 8 } else { 0 }
 }
 
 #[repr(C)]
@@ -67,6 +87,8 @@ pub struct TrapFrame {
     pub f: [usize; 32],
     // 512-519
     pub satp: usize,
+    // 520-527
+    pub status: usize,
 }
 
 impl TrapFrame {
@@ -75,6 +97,7 @@ impl TrapFrame {
             x: [0; 32],
             f: [0; 32],
             satp: 0,
+            status: 0,
         }
     }
 }

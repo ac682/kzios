@@ -2,9 +2,9 @@ use core::ops::BitOr;
 
 use flagset::{flags, FlagSet};
 
-use crate::{alloc, println};
 use crate::paged::address::{PhysicalAddress, VirtualAddress};
 use crate::primitive::mmio::mmio_read;
+use crate::{alloc, println};
 
 pub struct PageTable {
     page_number: usize,
@@ -62,8 +62,7 @@ impl PageTable {
     }
 
     pub fn fork(&self) -> Option<PageTable> {
-        if let Some(root_page_number) = alloc()
-        {
+        if let Some(root_page_number) = alloc() {
             let res = PageTable::new(2, root_page_number);
             self.enumerate(|pte, vpn| {
                 res.map(pte.physical_page_number(), vpn, pte.flags());
@@ -88,11 +87,7 @@ impl PageTable {
                         let pte1 = table1.entry(vpn1);
                         if pte1.is_valid() {
                             if pte1.is_leaf() {
-                                todo!(
-                                    "invalid page table at {:#x}#{}",
-                                    table2.page_number(),
-                                    vpn1
-                                );
+                                todo!("invalid page table at {:#x}#{}", table2.page_number(), vpn1);
                             } else {
                                 let table0 = pte1.as_page_table(0);
                                 for vpn0 in 0..512 {

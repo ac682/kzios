@@ -7,7 +7,7 @@ pub struct NS16550a {
 impl NS16550a {
     pub fn new() -> Self {
         Self {
-            base_address: 0x1000_0000
+            base_address: 0x1000_0000,
         }
     }
 
