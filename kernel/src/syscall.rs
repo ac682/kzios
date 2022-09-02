@@ -1,12 +1,12 @@
 use crate::primitive::uart::Uart;
 use crate::println;
-use crate::process::proc_control::mark_dead;
+use crate::process::scheduler::exit_process;
 use crate::qemu::UART;
 
 pub fn forward(id: usize, arg0: usize, arg1: usize, arg2: usize, arg3: usize) {
     match id {
         0 => put_char(arg0),
-        0x22 => exit(arg0),
+        0x22 => exit(arg0 as u32),
         _ => todo!("{} not implemented", id),
     };
 }
@@ -53,8 +53,8 @@ fn fork() {}
 fn send_signal() {}
 
 // 0x22
-fn exit(pid: usize) {
-    mark_dead(pid);
+fn exit(code: u32) {
+    exit_process(code);
 }
 
 // 0x30

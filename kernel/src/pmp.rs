@@ -1,9 +1,8 @@
-use riscv::register::scause::{set, Trap};
 use riscv::register::{pmpaddr0, pmpaddr1, pmpaddr2, pmpaddr3, pmpcfg0};
 use riscv::register::{Permission, Pmp, Pmpcsr, Range};
-use crate::{_kernel_end, _memory_end, _memory_start};
+use riscv::register::scause::{set, Trap};
 
-use crate::external::{};
+use crate::{_kernel_end, _memory_end, _memory_start};
 
 pub fn init() {
     unsafe {

@@ -7,14 +7,13 @@ use crate::paged::page_table::PageTableEntryFlags;
 use crate::paged::unit::MemoryUnit;
 use crate::trap::TrapFrame;
 
-pub mod proc_control;
+pub mod scheduler;
 
 const PROCESS_ENTRY_ADDRESS: usize = 0x5000_0000;
 const PROCESS_STACK_ADDRESS: usize = 0x9000_0000;
 const PROCESS_STACK_PAGES: usize = 0x1;
-// 4k
-static mut NEXT_PID: u16 = 0;
 
+#[derive(PartialEq)]
 pub enum ProcessState {
     Running,
     Sleeping,
@@ -24,36 +23,29 @@ pub enum ProcessState {
 
 pub struct Process {
     trap: TrapFrame,
-    stack: *mut u8,
     pc: usize,
-    pid: u16,
+    pid: usize,
+    // set by scheduler
     memory: MemoryUnit,
     state: ProcessState,
+    exit_code: u32,
 }
 
 impl Process {
-    pub fn new(&self) -> Process {
-        todo!()
-    }
-
     pub fn new_fn(func: fn()) -> Self {
         let mut process = Process {
             trap: TrapFrame::zero(),
-            stack: null_mut(),
             pc: PROCESS_ENTRY_ADDRESS + (func as usize & 0xfff),
             pid: 0,
             memory: MemoryUnit::new(),
             state: ProcessState::Idle,
+            exit_code: 0,
         };
-        unsafe {
-            process.pid = NEXT_PID;
-            NEXT_PID += 1;
-        }
         println!("process entry (pa): {:#x}", func as usize);
         process.memory.init(PageTable::new(2, alloc().unwrap()));
-        process.stack = PROCESS_STACK_ADDRESS as *mut u8;
         process.trap.satp = process.memory.satp();
         process.trap.x[2] = PROCESS_STACK_ADDRESS + PROCESS_STACK_PAGES * 4096;
+        process.trap.status = 1 << 7 | 1 << 5 | 1 << 4;
         // map essential regions
         // map the kernel
         //process.memory.map(_kernel_start as usize, _kernel_start as usize, (_kernel_end as usize - _kernel_start as usize) >> 12, PageTableEntryFlags::User | PageTableEntryFlags::Readable | PageTableEntryFlags::Executable);
@@ -61,7 +53,7 @@ impl Process {
         process.memory.map(
             func as usize >> 12,
             PROCESS_ENTRY_ADDRESS >> 12,
-            1,
+            2,
             PageTableEntryFlags::UserReadWrite | PageTableEntryFlags::Executable,
         );
         // map the stack

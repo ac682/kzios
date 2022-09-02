@@ -24,8 +24,8 @@ use primitive::qemu;
 
 use crate::external::{_kernel_end, _kernel_start, _memory_end, _memory_start, _stack_end, _stack_start, _trap_stack_end, _trap_stack_start};
 use crate::lang_items::print;
-use crate::process::proc_control::add_process;
 use crate::process::Process;
+use crate::process::scheduler::{add_process, switch_to_user};
 use crate::timer::set_next_timer;
 
 mod driver;
@@ -42,7 +42,7 @@ mod vfs;
 
 global_asm!(include_str!("assembly.asm"));
 
-pub const DTB: &[u8] = include_bytes!("../platforms/qemu/device.dtb");
+const DTB: &[u8] = include_bytes!("../platforms/qemu/device.dtb");
 
 #[no_mangle]
 extern "C" fn main() -> ! {
@@ -50,7 +50,7 @@ extern "C" fn main() -> ! {
     pmp::init();
     mm::init();
     trap::init();
-    timer::init();
+    timer::enable_timers();
     vfs::init();
     // simple device init from device tree
     let tree = DeviceTree::from_bytes(DTB).unwrap();
@@ -65,7 +65,8 @@ extern "C" fn main() -> ! {
     add_process(process0);
     add_process(process1);
     add_process(process2);
-    set_next_timer();
+    switch_to_user(); // 从此开始内核只在 trap 中处理事务
+    // unreachable
     unsafe {
         loop {
             asm!("wfi")
@@ -74,17 +75,17 @@ extern "C" fn main() -> ! {
 }
 
 fn init0() {
-    loop{
-        syscall(0, '0' as usize, 0, 0, 0);
+    loop {
+        // syscall(0, '0' as usize, 0, 0, 0);
     }
 }
 
-fn init1(){
+fn init1() {
     syscall(0, '1' as usize, 0, 0, 0);
     syscall(0x22, 0, 0, 0, 0);
 }
 
-fn init2(){
+fn init2() {
     syscall(0, '2' as usize, 0, 0, 0);
     syscall(0, '2' as usize, 0, 0, 0);
     syscall(0, '2' as usize, 0, 0, 0);

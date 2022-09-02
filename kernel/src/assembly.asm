@@ -75,8 +75,11 @@ _m_trap_vector:
     csrr    a1, mepc
     la      sp, _trap_stack_end
     call    handle_machine_trap
-    csrw    mepc, a0
+    # csrw    mepc, a0 # set by rust code
 
+.section .text
+.global _switch_to_user
+_switch_to_user:
     # 恢复寄存器
     csrr	t6, mscratch
 

@@ -8,7 +8,7 @@ use riscv::register::mstatus::Mstatus;
 use riscv::register::mtvec::TrapMode;
 
 use crate::{println, timer};
-use crate::process::proc_control::schedule_next_process;
+use crate::process::scheduler::forward_tick;
 use crate::syscall::forward;
 use crate::timer::set_next_timer;
 
@@ -28,25 +28,9 @@ pub fn init() {
 }
 
 #[no_mangle]
-pub extern "C" fn handle_machine_trap(frame: *mut TrapFrame, epc: usize) -> usize {
+pub extern "C" fn handle_machine_trap(frame: *const TrapFrame, epc: usize) {
     let cause = mcause::read();
     match cause.cause() {
-        Trap::Exception(Exception::InstructionFault) => {
-            println!("inst access fault");
-            epc + 4
-        }
-        Trap::Exception(Exception::Breakpoint) => {
-            println!("break");
-            epc + 4
-        }
-        Trap::Exception(Exception::InstructionPageFault) => {
-            println!("inst page fault");
-            epc + 4
-        }
-        Trap::Exception(Exception::LoadPageFault) => {
-            println!("page fault");
-            epc + 4
-        }
         Trap::Exception(Exception::UserEnvCall) => unsafe {
             let frame = *frame;
             let id = frame.x[17];
@@ -54,27 +38,18 @@ pub extern "C" fn handle_machine_trap(frame: *mut TrapFrame, epc: usize) -> usiz
             let arg1 = frame.x[11];
             let arg2 = frame.x[12];
             let arg3 = frame.x[13];
-            forward(id, arg0, arg1, arg2, arg3);
-            epc + 4
+            forward(id, arg0, arg1, arg2, arg3)
         },
-        Trap::Exception(Exception::SupervisorEnvCall) => {
-            println!("supervisor ecall");
-            epc + 4
-        }
-        Trap::Exception(Exception::MachineEnvCall) => {
-            println!("machine ecall");
-            epc + 4
-        }
         Trap::Interrupt(Interrupt::MachineTimer) => {
-            println!("tick!");
-            set_next_timer();
-            let res = schedule_next_process(epc);
-            if res == 0{
-                panic!("the last process wants to quit");
-            }
-            res
+            forward_tick();
         }
         _ => panic!("unknown trap cause"),
+    };
+    if cause.is_exception() {
+        let new_mepc = mepc::read();
+        if new_mepc == epc {
+            mepc::write(epc + 4);
+        }
     }
 }
 

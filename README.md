@@ -6,11 +6,17 @@
 
 - [x] 进入 Rust环境
 - [x] 内存分页
-- [ ] 陷入处理
-- [ ] 进程/线程
+- [x] 陷入处理
+- [x] 进程
+- [ ] 线程
+- [ ] 多核
+- [ ] 外围设备管理
+- [ ] 文件系统
+- [ ] 系统调用
+- [ ] 用户可执行程序
 - [ ] ...
 
-## 受支持的平台
+## (将)受支持的平台
 
-- qemu-system-riscv64: 1 core 8MB dram with MMU
-- k210: 2 cores (suspend #1) 8MB dram with MMU
+- qemu-system-riscv64: 1 core 8MB ram with MMU
+- k210: 2 cores (suspend #1) 8MB ram with MMU
