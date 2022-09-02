@@ -3,11 +3,11 @@ use alloc::vec::Vec;
 
 use riscv::register::{mepc, mscratch};
 
-use crate::{println, Process, set_next_timer};
-use crate::process::ProcessState;
 use crate::process::scheduler::ProcessScheduler;
+use crate::process::ProcessState;
 use crate::timer::{disable_timers, enable_timers};
 use crate::trap::TrapFrame;
+use crate::{println, set_next_timer, Process};
 
 extern "C" {
     fn _switch_to_user();
@@ -48,6 +48,7 @@ impl FlatScheduler {
 
 impl ProcessScheduler for FlatScheduler {
     fn add_process(&mut self, proc: Process) {
+        //TODO: 检查当前进程列表,找到一个marked dead进程就将其替换,否则插入到末尾
         self.list.push(proc);
     }
 
@@ -69,7 +70,7 @@ impl ProcessScheduler for FlatScheduler {
                 ProcessState::Idle => {
                     do_next = false;
                 }
-                _ => ()
+                _ => (),
             }
         }
         if do_next {
@@ -79,8 +80,7 @@ impl ProcessScheduler for FlatScheduler {
         let mut skip = false;
         if let Some(next) = self.current() {
             match next.state {
-                ProcessState::Running |
-                ProcessState::Idle => {
+                ProcessState::Running | ProcessState::Idle => {
                     next_pid = next.pid;
                     mscratch::write(&next.trap as *const TrapFrame as usize);
                     mepc::write(next.pc);
@@ -89,7 +89,7 @@ impl ProcessScheduler for FlatScheduler {
                 ProcessState::Dead => {
                     skip = true;
                 }
-                _ => ()
+                _ => (),
             }
         }
         self.set_next_timer();

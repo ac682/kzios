@@ -1,7 +1,7 @@
 use spin::Mutex;
 
-use crate::Process;
 use crate::process::scheduler::flat_scheduler::FlatScheduler;
+use crate::Process;
 
 mod flat_scheduler;
 

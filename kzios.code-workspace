@@ -15,6 +15,7 @@
 			"ebss",
 			"ecall",
 			"ekernel",
+			"flagset",
 			"GETCHAR",
 			"GIGA",
 			"gpio",
@@ -24,7 +25,12 @@
 			"mmio",
 			"mscratch",
 			"Mstatus",
+			"mtimecmp",
+			"mtimer",
 			"mtvec",
+			"pmpaddr",
+			"pmpcfg",
+			"Pmpcsr",
 			"PUTCHAR",
 			"riscv",
 			"satp",
@@ -41,7 +47,8 @@
 			"stvec",
 			"syscall",
 			"tval",
-			"uart"
+			"uart",
+			"utimer"
 		],
 		"makefile.extensionOutputFolder": "./.vscode"
 	},

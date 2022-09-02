@@ -8,8 +8,8 @@ extern crate alloc;
 #[macro_use]
 extern crate lazy_static;
 
-use core::{arch::global_asm, panic};
 use core::arch::asm;
+use core::{arch::global_asm, panic};
 
 use dtb_parser::device_tree::DeviceTree;
 use dtb_parser::node::DeviceTreeNode;
@@ -22,10 +22,13 @@ use mm::{
 };
 use primitive::qemu;
 
-use crate::external::{_kernel_end, _kernel_start, _memory_end, _memory_start, _stack_end, _stack_start, _trap_stack_end, _trap_stack_start};
+use crate::external::{
+    _kernel_end, _kernel_start, _memory_end, _memory_start, _stack_end, _stack_start,
+    _trap_stack_end, _trap_stack_start,
+};
 use crate::lang_items::print;
-use crate::process::Process;
 use crate::process::scheduler::{add_process, switch_to_user};
+use crate::process::Process;
 use crate::timer::set_next_timer;
 
 mod driver;
@@ -66,7 +69,7 @@ extern "C" fn main() -> ! {
     add_process(process1);
     add_process(process2);
     switch_to_user(); // 从此开始内核只在 trap 中处理事务
-    // unreachable
+                      // unreachable
     unsafe {
         loop {
             asm!("wfi")

@@ -2,10 +2,10 @@ use core::arch::global_asm;
 use core::fmt::{Debug, Formatter};
 use core::ptr::null_mut;
 
-use crate::{_kernel_end, _kernel_start, alloc, PageTable, println};
 use crate::paged::page_table::PageTableEntryFlags;
 use crate::paged::unit::MemoryUnit;
 use crate::trap::TrapFrame;
+use crate::{_kernel_end, _kernel_start, alloc, println, PageTable};
 
 pub mod scheduler;
 
