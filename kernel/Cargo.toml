@@ -1,5 +1,5 @@
 [package]
-name = "kzios-kernel"
+name = "kzios_kernel"
 authors = ["Chien Zhang, zqy0224@live.com"]
 version = "0.1.0"
 edition = "2021"
@@ -13,5 +13,3 @@ spin = "0.9"
 riscv = "0.8"
 flagset = "0.4"
 dtb_parser = "0.1"
-
-kzios-system = { path = "../system" }

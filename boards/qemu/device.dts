@@ -19,7 +19,7 @@
 	};
 
 	chosen {
-		bootargs = [00];
+		bootargs = "";
 		stdout-path = "/soc/uart@10000000";
 	};
 
@@ -77,7 +77,7 @@
 		uart@10000000 {
 			interrupts = <0x0a>;
 			interrupt-parent = <0x03>;
-			clock-frequency = "\08@";
+			clock-frequency = <0x384000>;
 			reg = <0x00 0x10000000 0x00 0x100>;
 			compatible = "ns16550a";
 		};
@@ -99,7 +99,7 @@
 		test@100000 {
 			phandle = <0x04>;
 			reg = <0x00 0x100000 0x00 0x1000>;
-			compatible = "sifive,test1","sifive,test0","syscon";
+			compatible = "sifive,test1\0sifive,test0\0syscon";
 		};
 
 		pci@30000000 {

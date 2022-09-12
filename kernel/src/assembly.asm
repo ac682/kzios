@@ -35,6 +35,8 @@ _start:
     csrw	mstatus, t0
     la      t1, main
     csrw    mepc, t1
+    csrr    a0, mhartid
+    ld      a1, dtb_addr
     mret
 3:
 	wfi
@@ -73,7 +75,7 @@ _m_trap_vector:
     # 进入 rust 环境
     csrr	a0, mscratch
     csrr    a1, mepc
-    la      sp, _trap_stack_end
+    la      sp, _stack_end
     call    handle_machine_trap
     # csrw    mepc, a0 # set by rust code
 

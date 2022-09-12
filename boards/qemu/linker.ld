@@ -1,50 +1,48 @@
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
 
-INCLUDE kernel/platforms/qemu/memory.x
+MEMORY
+{
+    RAM (rwx) : ORIGIN = 0x80000000, LENGTH = 6M
+}
+
+STACK_SIZE = 0xC000;
 
 SECTIONS
 {
     PROVIDE(_memory_start = ORIGIN(RAM));
-    
+
     PROVIDE(_kernel_start = ORIGIN(RAM));
 
     .text : {
         *(.text.init)
         *(.text .text.*)
-    } > REGION_TEXT
+    } > RAM
 
     . = ALIGN(4);
     .rodata : {
         *(.rodata)
-    } > REGION_RODATA
+    } > RAM
 
     . = ALIGN(4);
     .data : {
         *(.data)
-    } > REGION_DATA
+    } > RAM
 
-    
+
     . = ALIGN(4);
     .bss (NOLOAD) : {
         PROVIDE(_bss_start = .);
         *(.bss)
         PROVIDE(_bss_end = .);
-    } > REGION_BSS
+    } > RAM
 
     . = ALIGN(4);
     .stack (NOLOAD) : {
         PROVIDE(_stack_start = .);
         . = . + STACK_SIZE;
         PROVIDE(_stack_end = .);
-    } > REGION_STACK
-
-    . = ALIGN(4);
-    .trap_stack (NOLOAD) : {
-        PROVIDE(_trap_stack_start = .);
-        . = . + TRAP_STACK_SIZE;
-        PROVIDE(_trap_stack_end = .);
-    } > REGION_TRAP_STACK
+    } > RAM
 
     . = ALIGN(4k); # make kernel 4k aligned
 

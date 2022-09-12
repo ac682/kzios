@@ -8,14 +8,12 @@ use riscv::register::mtvec::TrapMode;
 use riscv::register::{mcause, mepc, mscratch, mtvec};
 
 use crate::process::scheduler::forward_tick;
-use crate::syscall::forward;
+use crate::system_call::forward;
 use crate::timer::set_next_timer;
-use crate::{println, timer};
+use crate::{println, switch_to_user, timer};
 
 extern "C" {
     fn _m_trap_vector();
-
-    fn _trap_stack_end();
 }
 
 static mut KERNEL_TRAP: TrapFrame = TrapFrame::zero();
@@ -31,6 +29,17 @@ pub fn init() {
 pub extern "C" fn handle_machine_trap(frame: *const TrapFrame, epc: usize) {
     let cause = mcause::read();
     match cause.cause() {
+        Trap::Exception(Exception::MachineEnvCall) => unsafe {
+            let frame = *frame;
+            let which = frame.x[10];
+            match which {
+                0 => {
+                    // enter userspace
+                    switch_to_user();
+                },
+                _ => ()
+            };
+        },
         Trap::Exception(Exception::UserEnvCall) => unsafe {
             let frame = *frame;
             let id = frame.x[17];

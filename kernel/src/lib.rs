@@ -1,5 +1,4 @@
 #![no_std]
-#![no_main]
 #![feature(panic_info_message, alloc_error_handler)]
 #![feature(pin_macro)]
 #![allow(unused)]
@@ -8,8 +7,8 @@ extern crate alloc;
 #[macro_use]
 extern crate lazy_static;
 
-use core::arch::asm;
 use core::{arch::global_asm, panic};
+use core::arch::asm;
 
 use dtb_parser::device_tree::DeviceTree;
 use dtb_parser::node::DeviceTreeNode;
@@ -24,11 +23,10 @@ use primitive::qemu;
 
 use crate::external::{
     _kernel_end, _kernel_start, _memory_end, _memory_start, _stack_end, _stack_start,
-    _trap_stack_end, _trap_stack_start,
 };
 use crate::lang_items::print;
-use crate::process::scheduler::{add_process, switch_to_user};
 use crate::process::Process;
+use crate::process::scheduler::{add_process, switch_to_user};
 use crate::timer::set_next_timer;
 
 mod driver;
@@ -38,29 +36,24 @@ mod mm;
 mod pmp;
 mod primitive;
 mod process;
-mod syscall;
+mod system_call;
 mod timer;
 mod trap;
 mod vfs;
 
 global_asm!(include_str!("assembly.asm"));
 
-const DTB: &[u8] = include_bytes!("../platforms/qemu/device.dtb");
-
 #[no_mangle]
-extern "C" fn main() -> ! {
+extern "C" fn main(hartid: usize, dtb_addr: usize) -> ! {
     // kernel init
     pmp::init();
     mm::init();
     trap::init();
-    timer::enable_timers();
     vfs::init();
-    // simple device init from device tree
-    let tree = DeviceTree::from_bytes(DTB).unwrap();
     qemu::init();
     // hello world
     println!("Hello, World!");
-    println!("{}", tree);
+    println!("hart id: #{}, device tree at: {:#x}", hartid, dtb_addr);
     print_sections();
     let process0 = Process::new_fn(init0);
     let process1 = Process::new_fn(init1);
@@ -68,8 +61,11 @@ extern "C" fn main() -> ! {
     add_process(process0);
     add_process(process1);
     add_process(process2);
-    switch_to_user(); // 从此开始内核只在 trap 中处理事务
-                      // unreachable
+    // 从此开始内核只在 trap 中处理事务
+    unsafe {
+        asm!("ecall", in("x10") 0); // trap call, enter the userspace
+    }
+    // unreachable
     unsafe {
         loop {
             asm!("wfi")
@@ -111,8 +107,6 @@ fn print_sections() {
     let kernel_start = _kernel_start as usize;
     let stack_start = _stack_start as usize;
     let stack_end = _stack_end as usize;
-    let trap_stack_start = _trap_stack_start as usize;
-    let trap_stack_end = _trap_stack_end as usize;
     let kernel_end = _kernel_end as usize;
     let memory_end = _memory_end as usize;
 
@@ -133,12 +127,6 @@ fn print_sections() {
         stack_start,
         stack_end,
         (stack_end - stack_start) / 1024
-    );
-    println!(
-        "    trap_stack@{:#x}:{:#x}={}K;",
-        trap_stack_start,
-        trap_stack_end,
-        (trap_stack_end - trap_stack_start) / 1024
     );
     println!("  }}");
     println!(

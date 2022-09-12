@@ -28,7 +28,7 @@ pub struct Process {
     // set by scheduler
     memory: MemoryUnit,
     state: ProcessState,
-    exit_code: u32,
+    exit_code: i32,
 }
 
 impl Process {

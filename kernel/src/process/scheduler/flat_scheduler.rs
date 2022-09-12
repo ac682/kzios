@@ -7,7 +7,7 @@ use crate::process::scheduler::ProcessScheduler;
 use crate::process::ProcessState;
 use crate::timer::{disable_timers, enable_timers};
 use crate::trap::TrapFrame;
-use crate::{println, set_next_timer, Process};
+use crate::{println, set_next_timer, Process, timer};
 
 extern "C" {
     fn _switch_to_user();
@@ -27,6 +27,7 @@ impl FlatScheduler {
     }
 
     fn set_next_timer(&self) {
+        enable_timers();
         set_next_timer(10_000_0);
     }
 
@@ -38,7 +39,7 @@ impl FlatScheduler {
         self.current = (self.current + 1) % self.list.len();
     }
 
-    fn mark_dead(&mut self, pid: usize, exit_code: u32) {
+    fn mark_dead(&mut self, pid: usize, exit_code: i32) {
         if let Some(proc) = self.index(pid) {
             proc.state = ProcessState::Dead;
             proc.exit_code = exit_code;
@@ -52,12 +53,10 @@ impl ProcessScheduler for FlatScheduler {
         self.list.push(proc);
     }
 
-    fn exit_process(&mut self, exit_code: u32) {
+    fn exit_process(&mut self, exit_code: i32) {
         // 关闭时钟, 此时一般位于 ecall trap里,全局中断本来就关着吧?
-        disable_timers();
         self.mark_dead(self.current, exit_code);
         self.switch_next();
-        enable_timers();
     }
 
     fn switch_next(&mut self) -> usize {
@@ -104,7 +103,7 @@ impl ProcessScheduler for FlatScheduler {
     fn switch_to_user(&mut self) {
         // 从 0 号进程开始
         if self.list.len() > 0 {
-            self.set_next_timer();
+            self.switch_next();
         } else {
             panic!("no process to be switched to");
         }

@@ -13,7 +13,7 @@ lazy_static! {
 
 trait ProcessScheduler {
     fn add_process(&mut self, proc: Process);
-    fn exit_process(&mut self, exit_code: u32);
+    fn exit_process(&mut self, exit_code: i32);
     // 进程只能在运行状态下退出
     fn switch_next(&mut self) -> usize;
     // 强制从一个进程切换到下一个进程,返回新进程 pid
@@ -41,7 +41,7 @@ pub fn forward_tick() {
     scheduler.timer_tick();
 }
 
-pub fn exit_process(exit_code: u32) {
+pub fn exit_process(exit_code: i32) {
     let mut scheduler = SCHEDULER.lock();
     scheduler.exit_process(exit_code);
 }

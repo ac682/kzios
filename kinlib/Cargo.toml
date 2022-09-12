@@ -1,6 +1,5 @@
 [package]
-name = "kzios_init0"
-authors = ["Chien Zhang, zqy0224@live.com"]
+name = "kinlib"
 version = "0.1.0"
 edition = "2021"
 

@@ -6,7 +6,7 @@ use crate::qemu::UART;
 pub fn forward(id: usize, arg0: usize, arg1: usize, arg2: usize, arg3: usize) {
     match id {
         0 => put_char(arg0),
-        0x22 => exit(arg0 as u32),
+        0x22 => exit(i32::try_from(arg0).unwrap()),
         _ => todo!("{} not implemented", id),
     };
 }
@@ -53,7 +53,7 @@ fn fork() {}
 fn send_signal() {}
 
 // 0x22
-fn exit(code: u32) {
+fn exit(code: i32) {
     exit_process(code);
 }
 
