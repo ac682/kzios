@@ -36,8 +36,8 @@ pub extern "C" fn handle_machine_trap(frame: *const TrapFrame, epc: usize) {
                 0 => {
                     // enter userspace
                     switch_to_user();
-                },
-                _ => ()
+                }
+                _ => (),
             };
         },
         Trap::Exception(Exception::UserEnvCall) => unsafe {
@@ -66,13 +66,13 @@ pub extern "C" fn handle_machine_trap(frame: *const TrapFrame, epc: usize) {
 #[derive(Clone, Copy)]
 pub struct TrapFrame {
     // 0-255
-    pub x: [usize; 32],
+    pub x: [u64; 32],
     // 256 - 511
-    pub f: [usize; 32],
+    pub f: [u64; 32],
     // 512-519
-    pub satp: usize,
+    pub satp: u64,
     // 520-527
-    pub status: usize,
+    pub status: u64,
 }
 
 impl TrapFrame {

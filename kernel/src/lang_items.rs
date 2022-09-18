@@ -44,8 +44,8 @@ extern "C" fn abort() -> ! {
     }
 }
 
-#[no_mangle]
-extern "C" fn eh_personality() {}
+// #[no_mangle]
+// extern "C" fn eh_personality() {}
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {

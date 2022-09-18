@@ -7,7 +7,7 @@ use crate::process::scheduler::ProcessScheduler;
 use crate::process::ProcessState;
 use crate::timer::{disable_timers, enable_timers};
 use crate::trap::TrapFrame;
-use crate::{println, set_next_timer, Process, timer};
+use crate::{println, set_next_timer, timer, Process};
 
 extern "C" {
     fn _switch_to_user();
@@ -39,7 +39,7 @@ impl FlatScheduler {
         self.current = (self.current + 1) % self.list.len();
     }
 
-    fn mark_dead(&mut self, pid: usize, exit_code: i32) {
+    fn mark_dead(&mut self, pid: usize, exit_code: i64) {
         if let Some(proc) = self.index(pid) {
             proc.state = ProcessState::Dead;
             proc.exit_code = exit_code;
@@ -53,18 +53,18 @@ impl ProcessScheduler for FlatScheduler {
         self.list.push(proc);
     }
 
-    fn exit_process(&mut self, exit_code: i32) {
+    fn exit_process(&mut self, exit_code: i64) {
         // 关闭时钟, 此时一般位于 ecall trap里,全局中断本来就关着吧?
         self.mark_dead(self.current, exit_code);
         self.switch_next();
     }
 
-    fn switch_next(&mut self) -> usize {
+    fn switch_next(&mut self) -> u64 {
         let mut do_next = true;
         if let Some(current) = self.current() {
             match current.state {
                 ProcessState::Running => {
-                    current.pc = mepc::read();
+                    current.pc = mepc::read() as u64;
                 }
                 ProcessState::Idle => {
                     do_next = false;
@@ -82,7 +82,7 @@ impl ProcessScheduler for FlatScheduler {
                 ProcessState::Running | ProcessState::Idle => {
                     next_pid = next.pid;
                     mscratch::write(&next.trap as *const TrapFrame as usize);
-                    mepc::write(next.pc);
+                    mepc::write(next.pc as usize);
                     next.state = ProcessState::Running;
                 }
                 ProcessState::Dead => {

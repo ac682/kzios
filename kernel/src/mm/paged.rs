@@ -12,11 +12,11 @@ pub mod frame_allocator;
 pub mod page_table;
 pub mod unit;
 
-pub fn alloc() -> Option<usize> {
+pub fn alloc() -> Option<u64> {
     FRAME_ALLOCATOR.lock().alloc()
 }
 
-pub fn free(ppn: usize) {
+pub fn free(ppn: u64) {
     FRAME_ALLOCATOR.lock().free(ppn)
 }
 

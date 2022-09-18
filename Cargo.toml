@@ -2,7 +2,11 @@
 members = [
     "kernel",
     "kinlib",
-    #"init0",
+    "init0",
     "boards/qemu",
-    #"boards/k210"
+    #"boards/k210",
+    "systems/fs",
+    "systems/net",
+    "systems/driver",
+    "systems/ipc"
 ]

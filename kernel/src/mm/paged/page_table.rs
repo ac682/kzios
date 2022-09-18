@@ -7,12 +7,12 @@ use crate::primitive::mmio::mmio_read;
 use crate::{alloc, println};
 
 pub struct PageTable {
-    page_number: usize,
+    page_number: u64,
     level: usize,
 }
 
 impl PageTable {
-    pub fn new(level: usize, location: usize) -> Self {
+    pub fn new(level: usize, location: u64) -> Self {
         Self {
             level,
             page_number: location,
@@ -20,19 +20,14 @@ impl PageTable {
     }
 
     pub fn entry(&self, index: usize) -> PageTableEntry {
-        let address = (self.page_number << 12) + (index * 8);
+        let address = (self.page_number << 12) + (index * 8) as u64;
         PageTableEntry::new(PhysicalAddress::from(address))
     }
 
-    pub fn map(
-        &self,
-        ppn: usize,
-        vpn: usize,
-        flags: impl Into<FlagSet<PageTableEntryFlags>>,
-    ) -> Result<(), ()> {
+    pub fn locate(&self, vpn: u64) -> Result<PageTableEntry, ()> {
         if self.level != 0 {
             let index = (vpn >> (9 * self.level)) & 0x1ff;
-            let entry = self.entry(index);
+            let entry = self.entry(index as usize);
             let table_option = if entry.is_valid() && !entry.is_leaf() {
                 Some(entry.as_page_table(self.level - 1))
             } else {
@@ -43,17 +38,32 @@ impl PageTable {
                 }
             };
             if let Some(table) = table_option {
-                table.map(ppn, vpn, flags)
+                table.locate(vpn)
             } else {
                 Err(())
             }
         } else {
-            self.entry(vpn & 0x1ff).set(ppn, 0, flags);
+            Ok(self.entry(vpn as usize & 0x1ff))
+        }
+    }
+
+    pub fn map(
+        &self,
+        ppn: u64,
+        vpn: u64,
+        flags: impl Into<FlagSet<PageTableEntryFlags>>,
+    ) -> Result<(), ()> {
+        let entry = self.locate(vpn)?;
+        if entry.is_leaf() && entry.is_valid() {
+            // is set do not overwrite
+            Err(())
+        } else {
+            entry.set(ppn, 0, flags);
             Ok(())
         }
     }
 
-    pub fn page_number(&self) -> usize {
+    pub fn page_number(&self) -> u64 {
         self.page_number
     }
 
@@ -73,7 +83,7 @@ impl PageTable {
         }
     }
 
-    pub fn enumerate(&self, func: impl Fn(&PageTableEntry, usize)) {
+    pub fn enumerate(&self, func: impl Fn(&PageTableEntry, u64)) {
         let table2 = self;
         for vpn2 in 0..512 {
             let pte2 = table2.entry(vpn2);
@@ -93,7 +103,7 @@ impl PageTable {
                                 for vpn0 in 0..512 {
                                     let pte0 = table0.entry(vpn0);
                                     if pte0.is_valid() && pte0.is_leaf() {
-                                        func(&pte0, (vpn2 >> 18) + (vpn1 >> 9) + vpn0);
+                                        func(&pte0, ((vpn2 >> 18) + (vpn1 >> 9) + vpn0) as u64);
                                     }
                                 }
                             }
@@ -106,7 +116,7 @@ impl PageTable {
 }
 
 flags! {
-    pub enum PageTableEntryFlags: usize{
+    pub enum PageTableEntryFlags: u64{
         Valid = 0b1,
         Readable = 0b10,
         Writeable = 0b100,
@@ -121,13 +131,13 @@ flags! {
 }
 
 pub struct PageTableEntry {
-    address: usize,
+    address: u64,
 }
 
 impl PageTableEntry {
     pub fn new(address: PhysicalAddress) -> Self {
         Self {
-            address: usize::from(address),
+            address: u64::from(address),
         }
     }
 
@@ -139,21 +149,21 @@ impl PageTableEntry {
         self.val() & 0b1110 != 0
     }
 
-    pub fn val(&self) -> usize {
+    pub fn val(&self) -> u64 {
         unsafe {
-            let reg = self.address as *mut usize;
-            reg.read_volatile()
+            let reg = self.address as *const u64;
+            reg.read_volatile() as u64
         }
     }
 
-    pub fn set(&self, ppn: usize, rsw: usize, flags: impl Into<FlagSet<PageTableEntryFlags>>) {
+    pub fn set(&self, ppn: u64, rsw: u64, flags: impl Into<FlagSet<PageTableEntryFlags>>) {
         unsafe {
-            let reg = self.address as *mut usize;
-            reg.write_volatile((ppn << 10) | (rsw << 8) | flags.into().bits());
+            let reg = self.address as *mut u64;
+            reg.write_volatile(((ppn << 10) | (rsw << 8)) | flags.into().bits() as u64);
         }
     }
 
-    pub fn physical_page_number(&self) -> usize {
+    pub fn physical_page_number(&self) -> u64 {
         self.val() >> 10 & 0xFFFFFFFFFFF
     }
 
@@ -174,7 +184,7 @@ impl PageTableEntry {
         PageTable::new(level, ppn)
     }
 
-    pub fn set_as_page_table(&self, ppn: usize, level: usize) -> PageTable {
+    pub fn set_as_page_table(&self, ppn: u64, level: usize) -> PageTable {
         self.set(ppn, 0, PageTableEntryFlags::Valid);
         self.as_page_table(level)
     }

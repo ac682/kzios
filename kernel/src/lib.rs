@@ -7,8 +7,8 @@ extern crate alloc;
 #[macro_use]
 extern crate lazy_static;
 
-use core::{arch::global_asm, panic};
 use core::arch::asm;
+use core::{arch::global_asm, panic};
 
 use dtb_parser::device_tree::DeviceTree;
 use dtb_parser::node::DeviceTreeNode;
@@ -21,15 +21,16 @@ use mm::{
 };
 use primitive::qemu;
 
+use crate::board::BoardInfo;
 use crate::external::{
     _kernel_end, _kernel_start, _memory_end, _memory_start, _stack_end, _stack_start,
 };
 use crate::lang_items::print;
-use crate::process::Process;
 use crate::process::scheduler::{add_process, switch_to_user};
+use crate::process::Process;
 use crate::timer::set_next_timer;
 
-mod driver;
+mod board;
 mod external;
 mod lang_items;
 mod mm;
@@ -39,7 +40,6 @@ mod process;
 mod system_call;
 mod timer;
 mod trap;
-mod vfs;
 
 global_asm!(include_str!("assembly.asm"));
 
@@ -49,19 +49,15 @@ extern "C" fn main(hartid: usize, dtb_addr: usize) -> ! {
     pmp::init();
     mm::init();
     trap::init();
-    vfs::init();
-    qemu::init();
-    // hello world
+    // read device tree
+    let info = parse_board_info(dtb_addr); // 留以备用
+    qemu::init(); // 日后换掉
+                  // ----- 初始化完成
     println!("Hello, World!");
     println!("hart id: #{}, device tree at: {:#x}", hartid, dtb_addr);
-    print_sections();
-    let process0 = Process::new_fn(init0);
-    let process1 = Process::new_fn(init1);
-    let process2 = Process::new_fn(init2);
-    add_process(process0);
-    add_process(process1);
-    add_process(process2);
-    // 从此开始内核只在 trap 中处理事务
+    // print_sections();
+
+    // ----- 进入用户空间, 此后内核仅在陷入中受理事件
     unsafe {
         asm!("ecall", in("x10") 0); // trap call, enter the userspace
     }
@@ -138,8 +134,11 @@ fn print_sections() {
     println!("}}");
 }
 
-fn add_devices() {
-    // uart
-    // spi
-    // gpio
+fn parse_board_info(dtb_addr: usize) -> BoardInfo {
+    // anything wrong just go panic
+    if let Ok(tree) = DeviceTree::from_address(dtb_addr) {
+        BoardInfo {}
+    } else {
+        panic!("Device tree cannot be reached");
+    }
 }

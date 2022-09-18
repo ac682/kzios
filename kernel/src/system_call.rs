@@ -3,14 +3,15 @@ use crate::println;
 use crate::process::scheduler::exit_process;
 use crate::qemu::UART;
 
-pub fn forward(id: usize, arg0: usize, arg1: usize, arg2: usize, arg3: usize) {
+pub fn forward(id: u64, arg0: u64, arg1: u64, arg2: u64, arg3: u64) {
     match id {
-        0 => put_char(arg0),
-        0x22 => exit(i32::try_from(arg0).unwrap()),
+        0 => put_char(arg0 as usize),
+        0x22 => exit(i64::try_from(arg0).unwrap()),
         _ => todo!("{} not implemented", id),
     };
 }
 
+// # system internal
 // 0x0
 fn put_char(char: usize) {
     UART.write(char as u8);
@@ -25,27 +26,7 @@ fn get_char() -> Option<usize> {
     }
 }
 
-// 0x10
-fn open() {}
-
-// 0x11
-fn read() {}
-
-// 0x12
-fn write() {}
-
-// 0x13
-fn close() {}
-
-// 0x14
-fn delete() {}
-
-// 0x15
-fn get_modifier() {}
-
-// 0x16
-fn set_modifier() {}
-
+// # process
 // 0x20
 fn fork() {}
 
@@ -53,21 +34,13 @@ fn fork() {}
 fn send_signal() {}
 
 // 0x22
-fn exit(code: i32) {
+fn exit(code: i64) {
     exit_process(code);
 }
 
+// # ipc
 // 0x30
-fn set_pin() {}
+fn send() {}
 
 // 0x31
-fn digital_write() {}
-
-// 0x32
-fn digital_read() {}
-
-// 0x33
-fn analog_write() {}
-
-// 0x33
-fn analog_read() {}
+fn receive() {}

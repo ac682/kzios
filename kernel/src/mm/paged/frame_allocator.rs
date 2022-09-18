@@ -13,8 +13,8 @@ lazy_static! {
 }
 
 pub fn init() {
-    let start = _kernel_end as usize;
-    let end = _memory_end as usize;
+    let start = _kernel_end as u64;
+    let end = _memory_end as u64;
     FRAME_ALLOCATOR
         .lock()
         .init((start - 1 + 4096) / 4096, end / 4096);
@@ -22,19 +22,19 @@ pub fn init() {
 
 pub trait FrameAllocator {
     fn new() -> Self;
-    fn alloc(&mut self) -> Option<usize>;
-    fn free(&mut self, ppn: usize);
+    fn alloc(&mut self) -> Option<u64>;
+    fn free(&mut self, ppn: u64);
 }
 
 pub struct StackFrameAllocator {
-    page_number_start: usize,
-    page_number_pointer: usize,
-    page_number_end: usize,
-    recycled: Vec<usize>,
+    page_number_start: u64,
+    page_number_pointer: u64,
+    page_number_end: u64,
+    recycled: Vec<u64>,
 }
 
 impl StackFrameAllocator {
-    pub fn init(&mut self, ppn_start: usize, ppn_end: usize) {
+    pub fn init(&mut self, ppn_start: u64, ppn_end: u64) {
         self.page_number_start = ppn_start;
         self.page_number_end = ppn_end;
         self.page_number_pointer = ppn_start;
@@ -50,7 +50,7 @@ impl FrameAllocator for StackFrameAllocator {
             recycled: Vec::new(),
         }
     }
-    fn alloc(&mut self) -> Option<usize> {
+    fn alloc(&mut self) -> Option<u64> {
         if self.recycled.is_empty() {
             if self.page_number_pointer < self.page_number_end {
                 self.page_number_pointer += 1;
@@ -62,7 +62,7 @@ impl FrameAllocator for StackFrameAllocator {
             self.recycled.pop()
         }
     }
-    fn free(&mut self, ppn: usize) {
+    fn free(&mut self, ppn: u64) {
         if ppn > self.page_number_end || ppn < self.page_number_start {
             // panic!();
         }

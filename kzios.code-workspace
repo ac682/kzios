@@ -19,6 +19,7 @@
 			"GETCHAR",
 			"GIGA",
 			"gpio",
+			"hartid",
 			"kzios",
 			"Mcause",
 			"mepc",
