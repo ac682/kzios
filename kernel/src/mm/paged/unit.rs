@@ -3,8 +3,8 @@ use core::slice;
 use flagset::FlagSet;
 use riscv::{asm::sfence_vma_all, register::satp};
 
-use crate::paged::page_table::PageTableEntryFlags;
 use crate::{alloc, println};
+use crate::paged::page_table::PageTableEntryFlag;
 
 use super::page_table::{PageTable, PageTableEntry};
 
@@ -21,13 +21,13 @@ impl MemoryUnit {
         self.root = Some(root)
     }
 
-    pub fn map(
-        &self,
-        ppn: u64,
-        vpn: u64,
-        count: usize,
-        flags: impl Into<FlagSet<PageTableEntryFlags>>,
-    ) {
+    pub fn map(&self, ppn: u64, vpn: u64, flags: impl Into<FlagSet<PageTableEntryFlag>>) {
+        if let Some(table) = &self.root {
+            table.map(ppn, vpn, flags.into() | PageTableEntryFlag::Valid);
+        }
+    }
+
+    pub fn fill(&self, vpn: u64, count: usize, flags: impl Into<FlagSet<PageTableEntryFlag>>) {
         let f = flags.into();
         let cnt = match count {
             0 => 1,
@@ -35,59 +35,20 @@ impl MemoryUnit {
         };
         if let Some(table) = &self.root {
             for i in 0..cnt {
-                table
-                    .map(ppn + i as u64, vpn + i as u64, f)
-                    .expect("PANIC!");
+                table.map(alloc().unwrap(), vpn + i as u64, f).expect("PANIC!");
             }
         }
     }
 
-    pub fn fill(
-        &self,
-        ppn_factory: impl Fn() -> u64,
-        vpn: u64,
-        count: usize,
-        flags: impl Into<FlagSet<PageTableEntryFlags>>,
-    ) {
-        let f = flags.into();
-        let cnt = match count {
-            0 => 1,
-            _ => count,
-        };
+    pub fn ensure_created(&self, vpn: u64, flags: impl Into<FlagSet<PageTableEntryFlag>>) -> Option<u64> {
         if let Some(table) = &self.root {
-            for i in 0..cnt {
-                table.map(ppn_factory(), vpn + i as u64, f).expect("PANIC!");
-            }
+            table.ensure_created(vpn, flags.into() | PageTableEntryFlag::Valid)
+        } else {
+            None
         }
     }
 
-    pub fn ensure_created(
-        &self,
-        ppn_factory: impl Fn() -> u64,
-        vpn: u64,
-        flags: impl Into<FlagSet<PageTableEntryFlags>>,
-    ) -> Option<u64> {
-        if let Some(table) = &self.root {
-            if let Ok(entry) = table.locate(vpn) {
-                return if entry.is_valid() && entry.is_leaf() {
-                    Some(entry.physical_page_number())
-                } else {
-                    let ppn = ppn_factory();
-                    entry.set(ppn, 0, flags);
-                    Some(ppn)
-                };
-            }
-        }
-        None
-    }
-
-    pub fn write(
-        &self,
-        addr: u64,
-        ppn_factory: impl Fn() -> u64 + Clone,
-        data: &[u8],
-        flags: impl Into<FlagSet<PageTableEntryFlags>> + Clone,
-    ) {
+    pub fn write(&self, addr: u64, data: &[u8], flags: impl Into<FlagSet<PageTableEntryFlag>> + Clone) {
         // 把数据写到虚拟内存的指定地方
         let mut offset = addr & 0xFFF;
         let mut copied = 0usize;
@@ -95,23 +56,25 @@ impl MemoryUnit {
         unsafe {
             while copied < data.len() {
                 if let Some(ppn) =
-                    self.ensure_created(ppn_factory.clone(), addr >> 12 + page_count, flags.clone())
+                self.ensure_created((addr >> 12) + page_count as u64, flags.clone())
                 {
-                    let start = ppn + offset;
+                    let start = (ppn << 12) + offset;
                     let end = if (data.len() - copied) > (0x1000 - offset as usize) {
                         (ppn + 1) << 12
                     } else {
-                        start + data.len() as u64
+                        start + data.len() as u64 - copied as u64
                     };
                     let ptr = start as *mut u8;
-                    for i in start..end {
+                    for i in 0..(end - start) {
                         ptr.add(i as usize).write(data[copied + i as usize]);
                     }
                     copied += (end - start) as usize;
+                    page_count += 1;
+                }else{
+                    panic!("memory out");
                 }
             }
         }
-        todo!()
     }
 
     pub fn satp(&self) -> u64 {

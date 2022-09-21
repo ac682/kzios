@@ -35,6 +35,7 @@ fn send_signal() {}
 
 // 0x22
 fn exit(code: i64) {
+    println!("process exit with code {}", code);
     exit_process(code);
 }
 

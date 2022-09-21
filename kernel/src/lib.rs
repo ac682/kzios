@@ -7,8 +7,8 @@ extern crate alloc;
 #[macro_use]
 extern crate lazy_static;
 
-use core::arch::asm;
 use core::{arch::global_asm, panic};
+use core::arch::asm;
 
 use dtb_parser::device_tree::DeviceTree;
 use dtb_parser::node::DeviceTreeNode;
@@ -26,8 +26,8 @@ use crate::external::{
     _kernel_end, _kernel_start, _memory_end, _memory_start, _stack_end, _stack_start,
 };
 use crate::lang_items::print;
-use crate::process::scheduler::{add_process, switch_to_user};
 use crate::process::Process;
+use crate::process::scheduler::{add_process, switch_to_user};
 use crate::timer::set_next_timer;
 
 mod board;
@@ -52,11 +52,12 @@ extern "C" fn main(hartid: usize, dtb_addr: usize) -> ! {
     // read device tree
     let info = parse_board_info(dtb_addr); // 留以备用
     qemu::init(); // 日后换掉
-                  // ----- 初始化完成
+    // ----- 初始化完成
     println!("Hello, World!");
     println!("hart id: #{}, device tree at: {:#x}", hartid, dtb_addr);
     // print_sections();
-
+    let data = include_bytes!("../../init0/target/riscv64gc-unknown-none-elf/debug/kzios_init0");
+    add_process(Process::from_elf(data).unwrap());
     // ----- 进入用户空间, 此后内核仅在陷入中受理事件
     unsafe {
         asm!("ecall", in("x10") 0); // trap call, enter the userspace

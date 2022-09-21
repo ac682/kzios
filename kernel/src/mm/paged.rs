@@ -3,7 +3,7 @@ use riscv::register::satp::Mode;
 use spin::Mutex;
 
 use crate::mm::paged::{frame_allocator::FRAME_ALLOCATOR, unit::MemoryUnit};
-use crate::paged::page_table::PageTableEntryFlags;
+use crate::paged::page_table::PageTableEntryFlag;
 
 use self::{frame_allocator::FrameAllocator, page_table::PageTable};
 

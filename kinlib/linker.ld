@@ -1,13 +1,21 @@
-OUTPUT_ARCH(riscv)
-ENTRY(_start)
+OUTPUT_ARCH("riscv")
+ENTRY(lang_start)
 
-MEMORY
-{
-    VSPACE (rwx) : ORIGIN = 0x0, LENGTH = 5363336m
-}
 SECTIONS
 {
-    .* : {
-        .*
-    } > VSPACE
+  .text : {
+    *(.text .text.*)
+  }
+
+  .rodata : {
+    *(.rodata .rodata.*)
+  }
+
+  .data : {
+    *(.data .data.*)
+  }
+
+  .bss : {
+    *(.bss .bss.*)
+  }
 }

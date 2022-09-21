@@ -3,6 +3,9 @@
 #[macro_use]
 extern crate kinlib;
 
-fn main() {
-    println!("Hello");
+use kinlib::println;
+
+fn main()
+{
+    println!("Hello, App");
 }

@@ -79,6 +79,7 @@ _m_trap_vector:
     call    handle_machine_trap
     # csrw    mepc, a0 # set by rust code
 
+# unused
 .section .text
 .global _switch_to_user
 _switch_to_user:

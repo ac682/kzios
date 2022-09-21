@@ -1,26 +1,24 @@
 use core::arch::global_asm;
 use core::fmt::{Debug, Formatter};
+use core::ops::BitAnd;
 use core::ptr::null_mut;
 
-use elf_rs::{Elf, ElfAbi, ElfFile, ElfMachine, ElfType, ProgramType};
+use elf_rs::{Elf, ElfAbi, ElfFile, ElfMachine, ElfType, ProgramHeaderFlags, ProgramType};
+use flagset::FlagSet;
 
-use crate::paged::page_table::PageTableEntryFlags;
+use crate::{_kernel_end, _kernel_start, alloc, PageTable, println};
+use crate::paged::page_table::{PageTableEntry, PageTableEntryFlag};
 use crate::paged::unit::MemoryUnit;
 use crate::process::error::ProcessSpawnError;
 use crate::trap::TrapFrame;
-use crate::{_kernel_end, _kernel_start, alloc, println, PageTable};
 
 pub mod error;
 pub mod ipc;
 pub mod scheduler;
 pub mod signal;
 
-// 进程地址空间分配 for from_fn
-const PROCESS_CONTROL_BLOCK_ADDRESS: u64 = 0x5000_0000 - 0x1000;
-// 进程入口的前一个页
-const PROCESS_ENTRY_ADDRESS: u64 = 0x4000_0000;
-const PROCESS_STACK_ADDRESS: u64 = 0x8000_0000;
-const PROCESS_STACK_PAGES: usize = 0x1;
+// 进程地址空间分配
+const PROCESS_STACK_ADDRESS: u64 = 0x40_0000_0000 - 1; // 256GB
 
 #[derive(PartialEq)]
 pub enum ProcessState {
@@ -44,38 +42,7 @@ pub struct Process {
 }
 
 impl Process {
-    #[deprecated]
-    pub fn new_fn(func: fn()) -> Self {
-        let mut process = Self {
-            trap: TrapFrame::zero(),
-            pc: PROCESS_ENTRY_ADDRESS + (func as u64 & 0xfff),
-            pid: 0,
-            memory: MemoryUnit::new(),
-            state: ProcessState::Idle,
-            exit_code: 0,
-        };
-        println!("process entry (pa): {:#x}", func as usize);
-        process.memory.init(PageTable::new(2, alloc().unwrap()));
-        process.trap.satp = process.memory.satp();
-        process.trap.x[2] = PROCESS_STACK_ADDRESS + (PROCESS_STACK_PAGES * 4096) as u64;
-        process.trap.status = 1 << 7 | 1 << 5 | 1 << 4;
-        // map essential regions
-        process.memory.map(
-            func as u64 >> 12,
-            PROCESS_ENTRY_ADDRESS >> 12,
-            2,
-            PageTableEntryFlags::UserReadWrite | PageTableEntryFlags::Executable,
-        );
-        // map the stack
-        process.memory.fill(
-            || alloc().unwrap(),
-            PROCESS_STACK_ADDRESS >> 12,
-            PROCESS_STACK_PAGES,
-            PageTableEntryFlags::UserReadWrite,
-        );
-        process
-    }
-
+    #[no_mangle]
     pub fn from_elf(bytes: &[u8]) -> Result<Self, ProcessSpawnError> {
         if let Ok(elf) = Elf::from_bytes(bytes) {
             let mut process = Self {
@@ -86,6 +53,9 @@ impl Process {
                 state: ProcessState::Idle,
                 exit_code: 0,
             };
+            process.memory.init(PageTable::new(2, alloc().unwrap()));
+            process.trap.satp = process.memory.satp();
+            process.trap.status = 1 << 7 | 1 << 5 | 1 << 4;
             let header = elf.elf_header();
             // TODO: validate RV64 from flags parameter
             if header.machine() != ElfMachine::RISC_V || header.elftype() != ElfType::ET_EXEC {
@@ -93,12 +63,34 @@ impl Process {
             }
             for ph in elf.program_header_iter() {
                 if ph.ph_type() == ProgramType::LOAD {
-                    todo!("不写了把两本书看完")
+                    println!("map segment({:?}) {:#x}", ph.ph_type(), ph.vaddr());
+                    process.memory.write(ph.vaddr(), ph.content(), Self::flags_to_permission(ph.flags()));
                 }
             }
+            // map stack
+            process.memory.map(alloc().unwrap(), (PROCESS_STACK_ADDRESS) >> 12, PageTableEntryFlag::UserReadWrite);
+            // set context
+            process.trap.x[2] = PROCESS_STACK_ADDRESS;
+            println!("program created at {:#x} with sp pointed to {:#x}", process.pc, process.trap.x[2]);
+            process.memory.print_page_table();
             Ok(process)
         } else {
             Err(ProcessSpawnError::BrokenBinary)
         }
+    }
+
+    fn flags_to_permission(flags: ProgramHeaderFlags) -> impl Into<FlagSet<PageTableEntryFlag>> + Clone {
+        let mut perm = PageTableEntryFlag::Valid | PageTableEntryFlag::User;
+        let bits = flags.bits();
+        if bits & 0b1 == 1 {
+            perm |= PageTableEntryFlag::Executable;
+        }
+        if bits & 0b10 == 0b10 {
+            perm |= PageTableEntryFlag::Writeable;
+        }
+        if bits & 0b100 == 0b100 {
+            perm |= PageTableEntryFlag::Readable;
+        }
+        perm
     }
 }

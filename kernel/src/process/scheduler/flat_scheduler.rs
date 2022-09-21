@@ -9,9 +9,6 @@ use crate::timer::{disable_timers, enable_timers};
 use crate::trap::TrapFrame;
 use crate::{println, set_next_timer, timer, Process};
 
-extern "C" {
-    fn _switch_to_user();
-}
 
 pub struct FlatScheduler {
     list: Vec<Process>,

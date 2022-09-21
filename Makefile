@@ -4,8 +4,8 @@ TARGET := riscv64gc-unknown-none-elf
 KERNEL_ELF = target/$(TARGET)/$(MODE)/board_$(BOARD)
 KERNEL_BIN = target/$(TARGET)/$(MODE)/board_$(BOARD).bin
 CARGO_BUILD = RUSTFLAGS="-Clink-arg=-T$(CURDIR)/boards/$(BOARD)/linker.ld -Cforce-frame-pointers=yes" cargo build
-CARGO_BUILD_INIT0 = RUSTFLAGS="-Clink-arg=-T$(CURDIR)/kinlib/linker.ld" cargo build
-INIT0_ELF = target/$(TARGET)/$(MODE)/kzios_init0
+CARGO_BUILD_INIT = RUSTFLAGS="-Clink-arg=-T$(CURDIR)/kinlib/linker.ld -Clink-arg=--no-gc-sections" cargo build
+INIT_ELF = target/$(TARGET)/$(MODE)/kzios_init0
 
 K210_SERIAL_PORT := /dev/ttyUSB1
 
@@ -20,8 +20,8 @@ else
 endif
 	@rust-objcopy --strip-all $(KERNEL_ELF) -O binary $(KERNEL_BIN)
 
-build_init0:
-	@$(CARGO_BUILD_INIT0) --bin kzios_init0
+init:
+	@cd init0 && $(CARGO_BUILD_INIT) --bin kzios_init0
 
 run: build
 ifeq ($(BOARD),qemu)

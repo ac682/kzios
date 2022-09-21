@@ -47,19 +47,29 @@ pub extern "C" fn handle_machine_trap(frame: *const TrapFrame, epc: usize) {
             let arg1 = frame.x[11];
             let arg2 = frame.x[12];
             let arg3 = frame.x[13];
-            forward(id, arg0, arg1, arg2, arg3)
+            mepc::write(epc + 4);
+            forward(id, arg0, arg1, arg2, arg3);
         },
+        Trap::Exception(Exception::StorePageFault) => {
+            panic!("Store/AMO Page Fault");
+        },
+        Trap::Exception(Exception::LoadPageFault) => {
+            panic!("Load Page Fault. How to know which page");
+        }
         Trap::Interrupt(Interrupt::MachineTimer) => {
             forward_tick();
         }
         _ => panic!("unknown trap cause"),
     };
-    if cause.is_exception() {
-        let new_mepc = mepc::read();
-        if new_mepc == epc {
-            mepc::write(epc + 4);
-        }
-    }
+
+    // load page fault does not need to jump to the next instruction
+
+    // if cause.is_exception() {
+    //     let new_mepc = mepc::read();
+    //     if new_mepc == epc {
+    //         mepc::write(epc + 4);
+    //     }
+    // }
 }
 
 #[repr(C)]

@@ -2,9 +2,8 @@ use core::ops::BitOr;
 
 use flagset::{flags, FlagSet};
 
-use crate::paged::address::{PhysicalAddress, VirtualAddress};
-use crate::primitive::mmio::mmio_read;
 use crate::{alloc, println};
+use crate::paged::address::{PhysicalAddress, VirtualAddress};
 
 pub struct PageTable {
     page_number: u64,
@@ -47,15 +46,24 @@ impl PageTable {
         }
     }
 
-    pub fn map(
-        &self,
-        ppn: u64,
-        vpn: u64,
-        flags: impl Into<FlagSet<PageTableEntryFlags>>,
-    ) -> Result<(), ()> {
+    pub fn ensure_created(&self, vpn: u64, flags: impl Into<FlagSet<PageTableEntryFlag>>) -> Option<u64> {
+        if let Ok(entry) = self.locate(vpn) {
+            return if entry.is_valid() && entry.is_leaf() {
+                Some(entry.physical_page_number())
+            } else {
+                let ppn = alloc().unwrap();
+                entry.set(ppn, 0, flags);
+                Some(ppn)
+            };
+        }
+        None
+    }
+
+    pub fn map(&self, ppn: u64, vpn: u64, flags: impl Into<FlagSet<PageTableEntryFlag>>) -> Result<(), ()> {
         let entry = self.locate(vpn)?;
         if entry.is_leaf() && entry.is_valid() {
             // is set do not overwrite
+            println!("overwrite");
             Err(())
         } else {
             entry.set(ppn, 0, flags);
@@ -116,7 +124,7 @@ impl PageTable {
 }
 
 flags! {
-    pub enum PageTableEntryFlags: u64{
+    pub enum PageTableEntryFlag: u64{
         Valid = 0b1,
         Readable = 0b10,
         Writeable = 0b100,
@@ -126,7 +134,7 @@ flags! {
         Accessed = 0b100_0000,
         Dirty = 0b1000_0000,
 
-        UserReadWrite = (PageTableEntryFlags::User | PageTableEntryFlags::Readable | PageTableEntryFlags::Writeable | PageTableEntryFlags::Valid).bits(),
+        UserReadWrite = (PageTableEntryFlag::User | PageTableEntryFlag::Readable | PageTableEntryFlag::Writeable | PageTableEntryFlag::Valid).bits(),
     }
 }
 
@@ -156,10 +164,11 @@ impl PageTableEntry {
         }
     }
 
-    pub fn set(&self, ppn: u64, rsw: u64, flags: impl Into<FlagSet<PageTableEntryFlags>>) {
+    pub fn set(&self, ppn: u64, rsw: u64, flags: impl Into<FlagSet<PageTableEntryFlag>>) {
         unsafe {
+            let bits = flags.into().bits();
             let reg = self.address as *mut u64;
-            reg.write_volatile(((ppn << 10) | (rsw << 8)) | flags.into().bits() as u64);
+            reg.write_volatile(((ppn << 10) | (rsw << 8)) | bits);
         }
     }
 
@@ -185,11 +194,11 @@ impl PageTableEntry {
     }
 
     pub fn set_as_page_table(&self, ppn: u64, level: usize) -> PageTable {
-        self.set(ppn, 0, PageTableEntryFlags::Valid);
+        self.set(ppn, 0, PageTableEntryFlag::Valid);
         self.as_page_table(level)
     }
 
-    pub fn flags(&self) -> FlagSet<PageTableEntryFlags> {
+    pub fn flags(&self) -> FlagSet<PageTableEntryFlag> {
         FlagSet::new(self.val() & 0b1111_1111).unwrap()
     }
 }
