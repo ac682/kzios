@@ -16,8 +16,3 @@ impl Termination for () {
         0
     }
 }
-
-
-/// Expose a signal handler to the kernel
-pub fn set_signal_handler(handler: fn()){
-}

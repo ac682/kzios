@@ -63,6 +63,9 @@ pub extern "C" fn handle_machine_trap(frame: *const TrapFrame, epc: usize) {
         Trap::Exception(Exception::InstructionFault) => {
             panic!("Instruction Fault");
         }
+        Trap::Exception(Exception::InstructionPageFault) => {
+            panic!("Instruction Page Fault with mepc={:#x}", epc);
+        }
         Trap::Interrupt(Interrupt::MachineTimer) => {
             forward_tick();
         }
@@ -73,15 +76,6 @@ pub extern "C" fn handle_machine_trap(frame: *const TrapFrame, epc: usize) {
             unsafe { *frame }
         ),
     };
-
-    // load page fault does not need to jump to the next instruction
-
-    // if cause.is_exception() {
-    //     let new_mepc = mepc::read();
-    //     if new_mepc == epc {
-    //         mepc::write(epc + 4);
-    //     }
-    // }
 }
 
 #[repr(C)]

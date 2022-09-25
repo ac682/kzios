@@ -105,7 +105,7 @@ impl Process {
     }
 
     pub fn fork(&self) -> Process{
-        Self{
+        let mut proc = Self{
             trap: self.trap.clone(),
             pc: self.pc,
             pid: 0,
@@ -114,7 +114,9 @@ impl Process {
             exit_code: self.exit_code,
             signal_handler_address: self.signal_handler_address,
             state: self.state.clone()
-        }
+        };
+        proc.trap.satp = self.memory.satp();
+        proc
     }
 
     pub fn write_generic_register(&mut self, index: usize, value: u64){

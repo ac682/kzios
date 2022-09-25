@@ -140,15 +140,11 @@ impl MemoryUnit {
         }
     }
 
-    #[deprecated]
+    #[doc(hidden)]
     pub fn print_page_table(&self) {
         println!("VPN => PPN");
-        self.enumerate(|pte, vpn|{
-            println!(
-                "{:#x} => {:#x}",
-                vpn,
-                pte.physical_page_number()
-            );
+        self.enumerate(|pte, vpn| {
+            println!("{:#x} => {:#x}", vpn, pte.physical_page_number());
         });
     }
 }

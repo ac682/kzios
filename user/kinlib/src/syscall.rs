@@ -3,11 +3,11 @@ use core::arch::asm;
 use crate::process::Pid;
 
 fn raw_call(id: u64, arg0: u64, arg1: u64, arg2: u64, arg3: u64) -> u64 {
-    let mut ret = 0;
+    let mut _ret = 0u64;
     unsafe {
-        asm!("ecall", in("x17") id, inlateout("x10") arg0 => ret, in("x11") arg1, in("x12") arg2, in("x13") arg3);
+        asm!("ecall", in("x17") id, inlateout("x10") arg0 => _ret, in("x11") arg1, in("x12") arg2, in("x13") arg3);
     }
-    ret
+    _ret
 }
 
 /// Write char to stdout
