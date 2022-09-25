@@ -1,5 +1,6 @@
 use alloc::sync::Arc;
 use core::arch::global_asm;
+use core::fmt::Display;
 use core::ptr::null_mut;
 
 use riscv::register::mcause::{Exception, Interrupt, Mcause, Trap};
@@ -56,10 +57,21 @@ pub extern "C" fn handle_machine_trap(frame: *const TrapFrame, epc: usize) {
         Trap::Exception(Exception::LoadPageFault) => {
             panic!("Load Page Fault. How to know which page");
         }
+        Trap::Exception(Exception::IllegalInstruction) => {
+            panic!("Illegal Instruction");
+        }
+        Trap::Exception(Exception::InstructionFault) => {
+            panic!("Instruction Fault");
+        }
         Trap::Interrupt(Interrupt::MachineTimer) => {
             forward_tick();
         }
-        _ => panic!("unknown trap cause"),
+        _ => panic!(
+            "unknown trap cause: {:#b}({})\nTrapFrame:\n{}",
+            cause.bits(),
+            cause.bits(),
+            unsafe { *frame }
+        ),
     };
 
     // load page fault does not need to jump to the next instruction
@@ -73,7 +85,7 @@ pub extern "C" fn handle_machine_trap(frame: *const TrapFrame, epc: usize) {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct TrapFrame {
     // 0-255
     pub x: [u64; 32],
@@ -93,5 +105,11 @@ impl TrapFrame {
             satp: 0,
             status: 0,
         }
+    }
+}
+
+impl Display for TrapFrame {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        todo!("dump trap frame")
     }
 }

@@ -9,28 +9,21 @@ use crate::{alloc, println};
 use super::page_table::{PageTable, PageTableEntry};
 
 pub struct MemoryUnit {
-    root: Option<PageTable>,
+    root: PageTable,
 }
 
 impl MemoryUnit {
-    pub fn new() -> Self {
-        Self { root: None }
-    }
-
-    pub fn init(&mut self, root: PageTable) {
-        self.root = Some(root)
+    pub fn new(root: PageTable) -> Self {
+        Self { root }
     }
 
     pub fn map(&self, ppn: u64, vpn: u64, flags: impl Into<FlagSet<PageTableEntryFlag>>) {
-        if let Some(table) = &self.root {
-            table.map(ppn, vpn, flags.into() | PageTableEntryFlag::Valid);
-        }
+        self.root
+            .map(ppn, vpn, flags.into() | PageTableEntryFlag::Valid);
     }
 
     pub fn unmap(&self, vpn: u64) {
-        if let Some(table) = &self.root {
-            table.unmap(vpn);
-        }
+        self.root.unmap(vpn);
     }
 
     pub fn fill(&self, vpn: u64, count: usize, flags: impl Into<FlagSet<PageTableEntryFlag>>) {
@@ -39,12 +32,10 @@ impl MemoryUnit {
             0 => 1,
             _ => count,
         };
-        if let Some(table) = &self.root {
-            for i in 0..cnt {
-                table
-                    .map(alloc().unwrap(), vpn + i as u64, f)
-                    .expect("PANIC!");
-            }
+        for i in 0..cnt {
+            self.root
+                .map(alloc().unwrap(), vpn + i as u64, f)
+                .expect("PANIC!");
         }
     }
 
@@ -53,11 +44,8 @@ impl MemoryUnit {
         vpn: u64,
         flags: impl Into<FlagSet<PageTableEntryFlag>>,
     ) -> Option<u64> {
-        if let Some(table) = &self.root {
-            table.ensure_created(vpn, flags.into() | PageTableEntryFlag::Valid)
-        } else {
-            None
-        }
+        self.root
+            .ensure_created(vpn, flags.into() | PageTableEntryFlag::Valid)
     }
 
     pub fn write(
@@ -95,51 +83,53 @@ impl MemoryUnit {
     }
 
     pub fn satp(&self) -> u64 {
-        if let Some(table) = &self.root {
-            (8 << 60) | table.page_number()
-        } else {
-            0
-        }
+        (8 << 60) | self.root.page_number()
     }
 
     pub fn free(self) {
-        if let Some(table) = self.root {
-            table.free();
-        }
+        self.root.free();
     }
 
-    #[deprecated]
-    pub fn print_page_table(&self) {
-        println!("VPN => PPN");
-        if let Some(table2) = &self.root {
-            for vpn2 in 0..512 {
-                let pte2 = table2.entry(vpn2);
-                if pte2.is_valid() {
-                    if pte2.is_leaf() {
-                        // G page
-                        println!("invalid page table at {:#x}#{}", table2.page_number(), vpn2);
-                    } else {
-                        let table1 = pte2.as_page_table(1);
-                        for vpn1 in 0..512 {
-                            let pte1 = table1.entry(vpn1);
-                            if pte1.is_valid() {
-                                if pte1.is_leaf() {
-                                    println!(
-                                        "invalid page table at {:#x}#{}",
-                                        table2.page_number(),
-                                        vpn1
-                                    );
-                                } else {
-                                    let table0 = pte1.as_page_table(0);
-                                    for vpn0 in 0..512 {
-                                        let pte0 = table0.entry(vpn0);
-                                        if pte0.is_valid() && pte0.is_leaf() {
-                                            println!(
-                                                "{:#x} => {:#x}",
-                                                (vpn2 << 18) + (vpn1 << 9) + vpn0,
-                                                pte0.physical_page_number()
-                                            );
-                                        }
+    pub fn fork(&self) -> MemoryUnit {
+        let unit = Self::new(PageTable::new(2, alloc().unwrap()));
+        self.enumerate(|pte, vpn| {
+            unit.write(
+                vpn << 12,
+                unsafe {
+                    core::slice::from_raw_parts(
+                        (pte.physical_page_number() << 12) as *const u8,
+                        4096,
+                    )
+                },
+                pte.flags(),
+            );
+        });
+        unit
+    }
+
+    #[doc(hidden)]
+    pub fn enumerate(&self, func: impl Fn(&PageTableEntry, u64)) {
+        let table2 = &self.root;
+        for vpn2 in 0..512 {
+            let pte2 = table2.entry(vpn2);
+            if pte2.is_valid() {
+                if pte2.is_leaf() {
+                    // G page
+                    todo!()
+                } else {
+                    let table1 = pte2.as_page_table(1);
+                    for vpn1 in 0..512 {
+                        let pte1 = table1.entry(vpn1);
+                        if pte1.is_valid() {
+                            if pte1.is_leaf() {
+                                // M page
+                                todo!()
+                            } else {
+                                let table0 = pte1.as_page_table(0);
+                                for vpn0 in 0..512 {
+                                    let pte0 = table0.entry(vpn0);
+                                    if pte0.is_valid() && pte0.is_leaf() {
+                                        func(&pte0, ((vpn2 << 18) + (vpn1 << 9) + vpn0) as u64);
                                     }
                                 }
                             }
@@ -148,5 +138,17 @@ impl MemoryUnit {
                 }
             }
         }
+    }
+
+    #[deprecated]
+    pub fn print_page_table(&self) {
+        println!("VPN => PPN");
+        self.enumerate(|pte, vpn|{
+            println!(
+                "{:#x} => {:#x}",
+                vpn,
+                pte.physical_page_number()
+            );
+        });
     }
 }

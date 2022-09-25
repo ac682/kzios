@@ -17,6 +17,7 @@
 			"ecall",
 			"ekernel",
 			"elftype",
+			"Errno",
 			"flagset",
 			"GETCHAR",
 			"GIGA",
@@ -68,7 +69,7 @@
 				"type": "shell",
 				"command": "just",
 				"args": [
-					"qemu_debug"
+					"debug_qemu"
 				],
 				"isBackground": true,
 				"problemMatcher": [
@@ -111,7 +112,7 @@
 				},
 				"MIMode": "gdb",
 				"miDebuggerPath": "riscv64-elf-gdb",
-				"miDebuggerArgs": "-ex 'set arch riscv:rv64'"
+				"miDebuggerArgs": "-ex 'set arch riscv:rv64'",
 			}
 		]
 	}

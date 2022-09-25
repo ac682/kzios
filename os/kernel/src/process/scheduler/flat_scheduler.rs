@@ -4,14 +4,14 @@ use alloc::vec::Vec;
 use riscv::register::{mepc, mscratch};
 
 use crate::process::scheduler::ProcessScheduler;
-use crate::process::ProcessState;
+use crate::process::{ProcessState, Pid, ExitCode, Address};
 use crate::timer::{disable_timers, enable_timers};
 use crate::trap::TrapFrame;
 use crate::{println, set_next_timer, timer, Process};
 
 pub struct FlatScheduler {
     list: Vec<Process>,
-    current: usize,
+    current: Pid,
 }
 
 impl FlatScheduler {
@@ -27,15 +27,15 @@ impl FlatScheduler {
         set_next_timer(10_000_0);
     }
 
-    fn index(&mut self, pid: usize) -> Option<&mut Process> {
-        self.list.get_mut(pid)
+    fn index(&mut self, pid: Pid) -> Option<&mut Process> {
+        self.list.get_mut(pid as usize)
     }
 
     fn move_next(&mut self) {
-        self.current = (self.current + 1) % self.list.len();
+        self.current = (self.current + 1) % self.list.len() as Pid;
     }
 
-    fn mark_dead(&mut self, pid: usize, exit_code: i64) {
+    fn mark_dead(&mut self, pid: Pid, exit_code: ExitCode) {
         if let Some(proc) = self.index(pid) {
             proc.state = ProcessState::Dead;
             proc.exit_code = exit_code;
@@ -49,13 +49,13 @@ impl ProcessScheduler for FlatScheduler {
         self.list.push(proc);
     }
 
-    fn exit_process(&mut self, exit_code: i64) {
+    fn exit_process(&mut self, exit_code: ExitCode) {
         // 关闭时钟, 此时一般位于 ecall trap里,全局中断本来就关着吧?
         self.mark_dead(self.current, exit_code);
         self.switch_next();
     }
 
-    fn switch_next(&mut self) -> u64 {
+    fn switch_next(&mut self) -> Pid {
         let mut do_next = true;
         if let Some(current) = self.current() {
             match current.state {
@@ -110,7 +110,7 @@ impl ProcessScheduler for FlatScheduler {
     }
 
     fn current(&mut self) -> Option<&mut Process> {
-        self.list.get_mut(self.current)
+        self.list.get_mut(self.current as usize)
     }
 
     fn len(&self) -> usize {

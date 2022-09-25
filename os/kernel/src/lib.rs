@@ -56,10 +56,9 @@ extern "C" fn main(hartid: usize, dtb_addr: usize) -> ! {
                   // ----- 初始化完成
     println!("Hello, World!");
     println!("hart id: #{}, device tree at: {:#x}", hartid, dtb_addr);
-    // print_sections();
-    let data = include_bytes!("../../../user/init0/target/riscv64gc-unknown-none-elf/debug/kzios_init0");
-    add_process(Process::from_elf(data).unwrap());
     print_sections();
+    let data = include_bytes!("../../../artifacts/kzios_init0");
+    add_process(Process::from_elf(data).unwrap());
     // ----- 进入用户空间, 此后内核仅在陷入中受理事件
     unsafe {
         asm!("ecall", in("x10") 0); // trap call, enter the userspace

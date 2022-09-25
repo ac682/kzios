@@ -17,10 +17,14 @@ pub mod ipc;
 pub mod scheduler;
 pub mod signal;
 
-// 进程地址空间分配
-const PROCESS_STACK_ADDRESS: u64 = 0x40_0000_0000 - 1; // 256GB
+pub type ExitCode = i32;
+pub type Pid = u32;
+pub type Address = u64;
 
-#[derive(PartialEq)]
+// 进程地址空间分配
+const PROCESS_STACK_ADDRESS: Address = 0x40_0000_0000 - 1; // 256GB
+
+#[derive(PartialEq, Clone)]
 pub enum ProcessState {
     Idle,
     Running,
@@ -33,13 +37,14 @@ pub enum ProcessState {
 
 pub struct Process {
     trap: TrapFrame,
-    pc: u64,
-    pid: u64,
-    parent: u64,
+    pc: Address,
     // set by scheduler
+    pid: Pid,
+    parent: Pid,
     memory: MemoryUnit,
     state: ProcessState,
-    exit_code: i64,
+    signal_handler_address: Address,
+    exit_code: ExitCode,
 }
 
 impl Process {
@@ -52,11 +57,11 @@ impl Process {
                 pid: 0,
                 // 没有设置过那就直接送给 init0 当子进程
                 parent: 0,
-                memory: MemoryUnit::new(),
+                memory: MemoryUnit::new(PageTable::new(2, alloc().unwrap())),
                 state: ProcessState::Idle,
+                signal_handler_address: 0,
                 exit_code: 0,
             };
-            process.memory.init(PageTable::new(2, alloc().unwrap()));
             process.trap.satp = process.memory.satp();
             process.trap.status = 1 << 7 | 1 << 5 | 1 << 4;
             let header = elf.elf_header();
@@ -91,8 +96,41 @@ impl Process {
         }
     }
 
+    pub fn set_signal_handler(&mut self, address: u64) {
+        self.signal_handler_address = address;
+    }
+
     pub fn cleanup(self) {
         self.memory.free();
+    }
+
+    pub fn fork(&self) -> Process{
+        Self{
+            trap: self.trap.clone(),
+            pc: self.pc,
+            pid: 0,
+            parent: self.pid,
+            memory: self.memory.fork(),
+            exit_code: self.exit_code,
+            signal_handler_address: self.signal_handler_address,
+            state: self.state.clone()
+        }
+    }
+
+    pub fn write_generic_register(&mut self, index: usize, value: u64){
+        self.trap.x[index] = value;
+    }
+
+    pub fn write_float_register(&mut self, index: usize, value: u64){
+        self.trap.f[index] = value;
+    }
+
+    pub fn set_return_value_in_register(&mut self, value: u64){
+        self.write_generic_register(10, value);
+    }
+
+    pub fn move_to_next_instruction(&mut self){
+        self.pc += 4;
     }
 
     fn flags_to_permission(

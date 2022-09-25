@@ -1,21 +1,23 @@
-use spin::Mutex;
+use spin::{Mutex, MutexGuard};
 
 use crate::process::scheduler::flat_scheduler::FlatScheduler;
 use crate::Process;
+
+use super::{Address, ExitCode, Pid};
 
 mod flat_scheduler;
 
 type SchedulerImpl = FlatScheduler;
 
 lazy_static! {
-    pub static ref SCHEDULER: Mutex<SchedulerImpl> = Mutex::new(SchedulerImpl::new());
+    static ref SCHEDULER: Mutex<SchedulerImpl> = Mutex::new(SchedulerImpl::new());
 }
 
-trait ProcessScheduler {
+pub trait ProcessScheduler {
     fn add_process(&mut self, proc: Process);
-    fn exit_process(&mut self, exit_code: i64);
+    fn exit_process(&mut self, exit_code: ExitCode);
     // 进程只能在运行状态下退出
-    fn switch_next(&mut self) -> u64;
+    fn switch_next(&mut self) -> Pid;
     // 强制从一个进程切换到下一个进程,返回新进程 pid
     fn switch_to_user(&mut self);
     // 从当前进程开始跑,并且设定定时器
@@ -25,23 +27,44 @@ trait ProcessScheduler {
     fn len(&self) -> usize;
 }
 
-pub fn add_process(mut proc: Process) {
-    let mut scheduler = SCHEDULER.lock();
-    proc.pid = scheduler.len() as u64;
+pub fn get_scheduler() -> MutexGuard<'static,SchedulerImpl> {
+    if SCHEDULER.is_locked() {
+        // TODO: finish kernel smp support and add a spin lock which carries the thread tag can safely unlock
+        unsafe {
+            SCHEDULER.force_unlock();
+            SCHEDULER.lock()
+        } 
+    } else {
+        SCHEDULER.lock()
+    }
+}
+
+pub fn add_process(mut proc: Process) -> Pid {
+    let mut scheduler = get_scheduler();
+    let pid = scheduler.len() as Pid;
+    proc.pid = pid;
     scheduler.add_process(proc);
+    pid
 }
 
 pub fn switch_to_user() {
-    let mut scheduler = SCHEDULER.lock();
+    let mut scheduler = get_scheduler();
     scheduler.switch_to_user();
 }
 
 pub fn forward_tick() {
-    let mut scheduler = SCHEDULER.lock();
+    let mut scheduler = get_scheduler();
     scheduler.timer_tick();
 }
 
-pub fn exit_process(exit_code: i64) {
-    let mut scheduler = SCHEDULER.lock();
+pub fn exit_process(exit_code: ExitCode) {
+    let mut scheduler = get_scheduler();
     scheduler.exit_process(exit_code);
+}
+
+pub fn trap_with_current<F: Fn(&mut Process)>(func: F){
+    let mut scheduler = get_scheduler();
+    if let Some(current) = scheduler.current(){
+        func(current)
+    }
 }
