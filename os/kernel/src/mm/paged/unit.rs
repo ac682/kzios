@@ -3,8 +3,8 @@ use core::slice;
 use flagset::FlagSet;
 use riscv::{asm::sfence_vma_all, register::satp};
 
-use crate::{alloc, println};
 use crate::paged::page_table::PageTableEntryFlag;
+use crate::{alloc, println};
 
 use super::page_table::{PageTable, PageTableEntry};
 
@@ -27,6 +27,12 @@ impl MemoryUnit {
         }
     }
 
+    pub fn unmap(&self, vpn: u64) {
+        if let Some(table) = &self.root {
+            table.unmap(vpn);
+        }
+    }
+
     pub fn fill(&self, vpn: u64, count: usize, flags: impl Into<FlagSet<PageTableEntryFlag>>) {
         let f = flags.into();
         let cnt = match count {
@@ -35,12 +41,18 @@ impl MemoryUnit {
         };
         if let Some(table) = &self.root {
             for i in 0..cnt {
-                table.map(alloc().unwrap(), vpn + i as u64, f).expect("PANIC!");
+                table
+                    .map(alloc().unwrap(), vpn + i as u64, f)
+                    .expect("PANIC!");
             }
         }
     }
 
-    pub fn ensure_created(&self, vpn: u64, flags: impl Into<FlagSet<PageTableEntryFlag>>) -> Option<u64> {
+    pub fn ensure_created(
+        &self,
+        vpn: u64,
+        flags: impl Into<FlagSet<PageTableEntryFlag>>,
+    ) -> Option<u64> {
         if let Some(table) = &self.root {
             table.ensure_created(vpn, flags.into() | PageTableEntryFlag::Valid)
         } else {
@@ -48,7 +60,12 @@ impl MemoryUnit {
         }
     }
 
-    pub fn write(&self, addr: u64, data: &[u8], flags: impl Into<FlagSet<PageTableEntryFlag>> + Clone) {
+    pub fn write(
+        &self,
+        addr: u64,
+        data: &[u8],
+        flags: impl Into<FlagSet<PageTableEntryFlag>> + Clone,
+    ) {
         // 把数据写到虚拟内存的指定地方
         let mut offset = addr & 0xFFF;
         let mut copied = 0usize;
@@ -56,7 +73,7 @@ impl MemoryUnit {
         unsafe {
             while copied < data.len() {
                 if let Some(ppn) =
-                self.ensure_created((addr >> 12) + page_count as u64, flags.clone())
+                    self.ensure_created((addr >> 12) + page_count as u64, flags.clone())
                 {
                     let start = (ppn << 12) + offset;
                     let end = if (data.len() - copied) > (0x1000 - offset as usize) {
@@ -70,7 +87,7 @@ impl MemoryUnit {
                     }
                     copied += (end - start) as usize;
                     page_count += 1;
-                }else{
+                } else {
                     panic!("memory out");
                 }
             }
@@ -82,6 +99,12 @@ impl MemoryUnit {
             (8 << 60) | table.page_number()
         } else {
             0
+        }
+    }
+
+    pub fn free(self) {
+        if let Some(table) = self.root {
+            table.free();
         }
     }
 

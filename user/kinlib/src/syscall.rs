@@ -13,5 +13,5 @@ pub fn put_char(char: usize) {
 
 /// Process exit
 pub fn exit(exit_code: i64) {
-    raw_call(0x22, exit_code as u64, 0, 0, 0);
+    raw_call(0x20, exit_code as u64, 0, 0, 0);
 }

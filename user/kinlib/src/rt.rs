@@ -1,6 +1,9 @@
 use crate::process::Termination;
+use core::arch::global_asm;
 
-#[no_mangle]
+global_asm!(include_str!("rt.asm"));
+
+#[export_name = "lang_start"]
 #[lang = "start"]
 fn lang_start<T: Termination + 'static>(
     main: fn() -> T,

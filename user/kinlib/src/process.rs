@@ -1,3 +1,5 @@
+use crate::println;
+
 /// The object could be converted to a exit code
 pub trait Termination {
     /// To exit code and consume self
@@ -8,4 +10,9 @@ impl Termination for () {
     fn to_exit_code(self) -> isize {
         0
     }
+}
+
+
+/// Expose a signal handler to the kernel
+pub fn set_signal_handler(handler: fn()){
 }

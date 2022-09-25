@@ -24,6 +24,8 @@ pub trait FrameAllocator {
     fn new() -> Self;
     fn alloc(&mut self) -> Option<u64>;
     fn free(&mut self, ppn: u64);
+    fn available(&self) -> u64;
+    fn used(&self) -> u64;
 }
 
 pub struct StackFrameAllocator {
@@ -75,5 +77,13 @@ impl FrameAllocator for StackFrameAllocator {
                 self.recycled.push(ppn);
             }
         }
+    }
+
+    fn available(&self) -> u64 {
+        self.page_number_end - self.page_number_pointer + self.recycled.len() as u64
+    }
+
+    fn used(&self) -> u64 {
+        self.page_number_pointer - self.page_number_start - self.recycled.len() as u64
     }
 }

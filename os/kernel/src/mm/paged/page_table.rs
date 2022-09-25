@@ -2,8 +2,9 @@ use core::ops::BitOr;
 
 use flagset::{flags, FlagSet};
 
-use crate::{alloc, println};
 use crate::paged::address::{PhysicalAddress, VirtualAddress};
+use crate::paged::free;
+use crate::{alloc, println};
 
 pub struct PageTable {
     page_number: u64,
@@ -46,7 +47,11 @@ impl PageTable {
         }
     }
 
-    pub fn ensure_created(&self, vpn: u64, flags: impl Into<FlagSet<PageTableEntryFlag>>) -> Option<u64> {
+    pub fn ensure_created(
+        &self,
+        vpn: u64,
+        flags: impl Into<FlagSet<PageTableEntryFlag>>,
+    ) -> Option<u64> {
         if let Ok(entry) = self.locate(vpn) {
             return if entry.is_valid() && entry.is_leaf() {
                 Some(entry.physical_page_number())
@@ -59,7 +64,12 @@ impl PageTable {
         None
     }
 
-    pub fn map(&self, ppn: u64, vpn: u64, flags: impl Into<FlagSet<PageTableEntryFlag>>) -> Result<(), ()> {
+    pub fn map(
+        &self,
+        ppn: u64,
+        vpn: u64,
+        flags: impl Into<FlagSet<PageTableEntryFlag>>,
+    ) -> Result<(), ()> {
         let entry = self.locate(vpn)?;
         if entry.is_leaf() && entry.is_valid() {
             // is set do not overwrite
@@ -71,6 +81,17 @@ impl PageTable {
         }
     }
 
+    pub fn unmap(&self, vpn: u64) -> Result<u64, ()> {
+        let entry = self.locate(vpn)?;
+        if entry.is_valid() && entry.is_leaf() {
+            let ppn = entry.physical_page_number();
+            entry.clear();
+            Ok(ppn)
+        } else {
+            Err(())
+        }
+    }
+
     pub fn page_number(&self) -> u64 {
         self.page_number
     }
@@ -79,47 +100,19 @@ impl PageTable {
         self.level
     }
 
-    pub fn fork(&self) -> Option<PageTable> {
-        if let Some(root_page_number) = alloc() {
-            let res = PageTable::new(2, root_page_number);
-            self.enumerate(|pte, vpn| {
-                res.map(pte.physical_page_number(), vpn, pte.flags());
-            });
-            Some(res)
-        } else {
-            None
-        }
-    }
-
-    pub fn enumerate(&self, func: impl Fn(&PageTableEntry, u64)) {
-        let table2 = self;
-        for vpn2 in 0..512 {
-            let pte2 = table2.entry(vpn2);
-            if pte2.is_valid() {
-                if pte2.is_leaf() {
-                    // G page
-                    todo!("invalid page table at {:#x}#{}", table2.page_number(), vpn2);
+    pub fn free(self) {
+        for i in 0..512 {
+            let entry = self.entry(i);
+            if entry.is_valid() {
+                if entry.is_leaf() {
+                    free(entry.physical_page_number());
+                    entry.clear();
                 } else {
-                    let table1 = pte2.as_page_table(1);
-                    for vpn1 in 0..512 {
-                        let pte1 = table1.entry(vpn1);
-                        if pte1.is_valid() {
-                            if pte1.is_leaf() {
-                                todo!("invalid page table at {:#x}#{}", table2.page_number(), vpn1);
-                            } else {
-                                let table0 = pte1.as_page_table(0);
-                                for vpn0 in 0..512 {
-                                    let pte0 = table0.entry(vpn0);
-                                    if pte0.is_valid() && pte0.is_leaf() {
-                                        func(&pte0, ((vpn2 >> 18) + (vpn1 >> 9) + vpn0) as u64);
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    entry.as_page_table(self.level - 1).free();
                 }
             }
         }
+        free(self.page_number);
     }
 }
 
@@ -169,6 +162,13 @@ impl PageTableEntry {
             let bits = flags.into().bits();
             let reg = self.address as *mut u64;
             reg.write_volatile(((ppn << 10) | (rsw << 8)) | bits);
+        }
+    }
+
+    pub fn clear(&self) {
+        unsafe {
+            let reg = self.address as *mut u8;
+            reg.write_volatile(0);
         }
     }
 

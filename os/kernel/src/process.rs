@@ -6,11 +6,11 @@ use core::ptr::null_mut;
 use elf_rs::{Elf, ElfAbi, ElfFile, ElfMachine, ElfType, ProgramHeaderFlags, ProgramType};
 use flagset::FlagSet;
 
-use crate::{_kernel_end, _kernel_start, alloc, PageTable, println};
 use crate::paged::page_table::{PageTableEntry, PageTableEntryFlag};
 use crate::paged::unit::MemoryUnit;
 use crate::process::error::ProcessSpawnError;
 use crate::trap::TrapFrame;
+use crate::{_kernel_end, _kernel_start, alloc, println, PageTable};
 
 pub mod error;
 pub mod ipc;
@@ -35,6 +35,7 @@ pub struct Process {
     trap: TrapFrame,
     pc: u64,
     pid: u64,
+    parent: u64,
     // set by scheduler
     memory: MemoryUnit,
     state: ProcessState,
@@ -49,6 +50,8 @@ impl Process {
                 trap: TrapFrame::zero(),
                 pc: elf.entry_point(),
                 pid: 0,
+                // 没有设置过那就直接送给 init0 当子进程
+                parent: 0,
                 memory: MemoryUnit::new(),
                 state: ProcessState::Idle,
                 exit_code: 0,
@@ -63,23 +66,38 @@ impl Process {
             }
             for ph in elf.program_header_iter() {
                 if ph.ph_type() == ProgramType::LOAD {
-                    println!("map segment({:?}) {:#x}", ph.ph_type(), ph.vaddr());
-                    process.memory.write(ph.vaddr(), ph.content(), Self::flags_to_permission(ph.flags()));
+                    process.memory.write(
+                        ph.vaddr(),
+                        ph.content(),
+                        Self::flags_to_permission(ph.flags()),
+                    );
                 }
             }
             // map stack
-            process.memory.map(alloc().unwrap(), (PROCESS_STACK_ADDRESS) >> 12, PageTableEntryFlag::UserReadWrite);
+            process.memory.map(
+                alloc().unwrap(),
+                (PROCESS_STACK_ADDRESS) >> 12,
+                PageTableEntryFlag::UserReadWrite,
+            );
             // set context
             process.trap.x[2] = PROCESS_STACK_ADDRESS;
-            println!("program created at {:#x} with sp pointed to {:#x}", process.pc, process.trap.x[2]);
-            process.memory.print_page_table();
+            println!(
+                "program created at {:#x} with sp pointed to {:#x}",
+                process.pc, process.trap.x[2]
+            );
             Ok(process)
         } else {
             Err(ProcessSpawnError::BrokenBinary)
         }
     }
 
-    fn flags_to_permission(flags: ProgramHeaderFlags) -> impl Into<FlagSet<PageTableEntryFlag>> + Clone {
+    pub fn cleanup(self) {
+        self.memory.free();
+    }
+
+    fn flags_to_permission(
+        flags: ProgramHeaderFlags,
+    ) -> impl Into<FlagSet<PageTableEntryFlag>> + Clone {
         let mut perm = PageTableEntryFlag::Valid | PageTableEntryFlag::User;
         let bits = flags.bits();
         if bits & 0b1 == 1 {

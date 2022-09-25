@@ -9,17 +9,20 @@
 		"rust-analyzer.cargo.target": "riscv64gc-unknown-none-elf",
 		"cSpell.words": [
 			"ASID",
+			"cppdbg",
 			"dealloc",
 			"Deque",
 			"ebreak",
 			"ebss",
 			"ecall",
 			"ekernel",
+			"elftype",
 			"flagset",
 			"GETCHAR",
 			"GIGA",
 			"gpio",
 			"hartid",
+			"kinlib",
 			"kzios",
 			"Mcause",
 			"mepc",
@@ -34,11 +37,13 @@
 			"Pmpcsr",
 			"PUTCHAR",
 			"riscv",
+			"rustflags",
 			"satp",
 			"sbss",
 			"Scause",
 			"sepc",
 			"SFENCE",
+			"sigreturn",
 			"skernel",
 			"sscratch",
 			"sstatus",
@@ -49,29 +54,64 @@
 			"syscall",
 			"tval",
 			"uart",
-			"utimer"
+			"userspace",
+			"utimer",
+			"vaddr"
 		],
-		"makefile.extensionOutputFolder": "./.vscode"
+		"makefile.extensionOutputFolder": "/dev/null"
+	},
+	"tasks": {
+		"version": "2.0.0",
+		"tasks": [
+			{
+				"label": "launch_gdb_server",
+				"type": "shell",
+				"command": "just",
+				"args": [
+					"qemu_debug"
+				],
+				"isBackground": true,
+				"problemMatcher": [
+					{
+						"pattern": [
+							{
+								"regexp": ".",
+								"file": 1,
+								"location": 2,
+								"message": 3
+							}
+						],
+						"background": {
+							"activeOnStart": true,
+							"beginsPattern": ".",
+							"endsPattern": "."
+						}
+					}
+				]
+			},
+		]
 	},
 	"launch": {
 		"version": "0.2.0",
 		"configurations": [
 			{
-				"name": "kernel-debug",
+				"name": "qemu-debug",
 				"type": "cppdbg",
+				"preLaunchTask": "launch_gdb_server",
 				"request": "launch",
-				"miDebuggerServerAddress": "127.0.0.1:1234",
-				"program": "make",
-				"args": ["run", "BOARD=qemu", "QEMU_DEBUG=gdb"],
-				"stopAtEntry": false,
-				"cwd": "${workspace}",
+				"miDebuggerServerAddress": "localhost:1234",
+				"program": "artifacts/board_qemu",
+				"stopAtEntry": true,
+				"cwd": "${workspaceFolder}",
+				"launchCompleteCommand": "exec-continue",
 				"environment": [],
 				"externalConsole": false,
 				"logging": {
 					"engineLogging": false
 				},
 				"MIMode": "gdb",
-				"miDebuggerPath": "riscv64-gdb",
+				"miDebuggerPath": "riscv64-elf-gdb",
+				"miDebuggerArgs": "-ex 'set arch riscv:rv64'"
 			}
 		]
 	}

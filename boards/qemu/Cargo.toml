@@ -6,4 +6,4 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-kzios_kernel = { path = "../../kernel" }
+kzios_kernel = { path = "../../os/kernel" }

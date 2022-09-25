@@ -8,7 +8,7 @@ use riscv::register::mtvec::TrapMode;
 use riscv::register::{mcause, mepc, mscratch, mtvec};
 
 use crate::process::scheduler::forward_tick;
-use crate::system_call::forward;
+use crate::syscall::forward;
 use crate::timer::set_next_timer;
 use crate::{println, switch_to_user, timer};
 
@@ -52,7 +52,7 @@ pub extern "C" fn handle_machine_trap(frame: *const TrapFrame, epc: usize) {
         },
         Trap::Exception(Exception::StorePageFault) => {
             panic!("Store/AMO Page Fault");
-        },
+        }
         Trap::Exception(Exception::LoadPageFault) => {
             panic!("Load Page Fault. How to know which page");
         }
