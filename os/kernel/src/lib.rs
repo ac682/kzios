@@ -57,8 +57,10 @@ extern "C" fn main(hartid: usize, dtb_addr: usize) -> ! {
     println!("Hello, World!");
     println!("hart id: #{}, device tree at: {:#x}", hartid, dtb_addr);
     print_sections();
+    println!("available pages: {}", FRAME_ALLOCATOR.lock().available());
     let data = include_bytes!("../../../artifacts/kzios_init0");
     add_process(Process::from_elf(data).unwrap());
+    println!("available pages after spawned process: {}", FRAME_ALLOCATOR.lock().available());
     // ----- 进入用户空间, 此后内核仅在陷入中受理事件
     unsafe {
         asm!("ecall", in("x10") 0); // trap call, enter the userspace
@@ -80,26 +82,27 @@ fn print_sections() {
     let memory_end = _memory_end as usize;
 
     println!(
-        "memory@{:#x}:{:#x}={}K {{",
+        "memory@{:#x}..{:#x}={}K {{",
         memory_start,
         memory_end,
         (memory_end - memory_start) / 1024
     );
     println!(
-        "  kernel@{:#x}:{:#x}={}K {{",
+        "  kernel@{:#x}..{:#x}={}K {{",
         kernel_start,
         kernel_end,
         (kernel_end - kernel_start) / 1024
     );
+    println!("    heap={}K;", 0x1_0000 / 1024);
     println!(
-        "    stack@{:#x}:{:#x}={}K;",
+        "    stack@{:#x}..{:#x}={}K;",
         stack_start,
         stack_end,
         (stack_end - stack_start) / 1024
     );
     println!("  }}");
     println!(
-        "  user@{:#x}:{:#x}={}K;",
+        "  user@{:#x}..{:#x}={}K;",
         kernel_end,
         memory_end,
         (memory_end - kernel_end) / 1024

@@ -3,7 +3,7 @@ use core::usize;
 
 use spin::{self, Mutex};
 
-use crate::{_kernel_end, _memory_end};
+use crate::{_kernel_end, _memory_end, println};
 
 type FrameAllocatorImpl = StackFrameAllocator;
 
@@ -58,6 +58,12 @@ impl FrameAllocator for StackFrameAllocator {
                 self.page_number_pointer += 1;
                 Some(self.page_number_pointer)
             } else {
+                panic!(
+                    "memory not enough: {}P({}P/{}P)",
+                    self.available(),
+                    self.page_number_pointer - self.page_number_start,
+                    self.page_number_end - self.page_number_start
+                );
                 None
             }
         } else {

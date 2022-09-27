@@ -73,10 +73,11 @@ impl MemoryUnit {
                     for i in 0..(end - start) {
                         ptr.add(i as usize).write(data[copied + i as usize]);
                     }
+                    offset = 0;
                     copied += (end - start) as usize;
                     page_count += 1;
                 } else {
-                    panic!("memory out");
+                    panic!("out of memory");
                 }
             }
         }

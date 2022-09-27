@@ -1,5 +1,7 @@
 use core::panic::PanicInfo;
 
+use crate::syscall::exit;
+
 // #[no_mangle]
 // extern "C" fn eh_personality() {}
 
@@ -28,7 +30,7 @@ macro_rules! println
 }
 
 #[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
+fn handle_panic(info: &PanicInfo) -> ! {
     print!("Aborting: ");
     if let Some(location) = info.location() {
         println!(
@@ -40,5 +42,6 @@ fn panic(info: &PanicInfo) -> ! {
     } else {
         println!("no information available.");
     }
-    loop {}
+    exit(-1);
+    loop{}
 }

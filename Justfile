@@ -11,7 +11,7 @@ RUSTFLAGS_INIT := "-Clink-arg=-T"+invocation_directory()+"/user/kinlib/linker.ld
 # aliases
 alias b := build
 alias c := clean
-alias d := debug_qemu
+alias d := debug_local
 alias r := run
 
 # tools
@@ -21,7 +21,7 @@ K210_FLASH := "kflash"
 # k210
 
 # qemu
-QEMU_MEMORY := "6m"
+QEMU_MEMORY := "128m"
 QEMU_CORES := "1"
 
 QEMU_LAUNCH := "qemu-system-riscv64 -smp cores="+QEMU_CORES+" -M "+QEMU_MEMORY+" -machine virt -nographic -bios none -kernel "+KERNEL_ELF

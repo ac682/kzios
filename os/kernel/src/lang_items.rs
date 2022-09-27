@@ -35,21 +35,12 @@ macro_rules! println {
     }
 }
 
-#[no_mangle]
-extern "C" fn abort() -> ! {
-    loop {
-        unsafe {
-            asm!("wfi");
-        }
-    }
-}
-
 // #[no_mangle]
 // extern "C" fn eh_personality() {}
 
 #[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
-    print!("Aborting: ");
+fn handle_panic(info: &PanicInfo) -> ! {
+    print!("Kernel panicking: ");
     if let Some(location) = info.location() {
         println!(
             "file {}, {}: {}",
@@ -60,5 +51,9 @@ fn panic(info: &PanicInfo) -> ! {
     } else {
         println!("no information available.");
     }
-    abort();
+    unsafe {
+        loop {
+            asm!("wfi");
+        }
+    }
 }

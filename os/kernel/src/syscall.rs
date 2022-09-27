@@ -9,7 +9,7 @@ use crate::qemu::UART;
 pub fn forward(id: u64, arg0: u64, arg1: u64, arg2: u64, arg3: u64) {
     match id {
         0 => do_put_char(arg0 as usize),
-        0x20 => do_exit(ExitCode::try_from(arg0).unwrap()),
+        0x20 => do_exit(arg0 as ExitCode),
         0x21 => do_fork(),
         _ => todo!("{} not implemented", id),
     }
@@ -49,7 +49,7 @@ fn do_fork() {
         child.move_to_next_instruction();
         child.set_return_value_in_register(0u64);
         let new_pid = add_process(child);
-        parent.set_return_value_in_register(new_pid as u64); // TODO: now work!
+        parent.set_return_value_in_register(new_pid as u64); // TODO: not work!
     })
 }
 

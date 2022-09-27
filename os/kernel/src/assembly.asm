@@ -27,7 +27,7 @@ _start:
 	la		t2, _bss_end
 	bgeu	t1, t2, 2f
 1:
-	sd		zero, (a0)
+	sd		zero, (t1)
 	addi	t1, t1, 8
 	bltu	t1, t2, 1b
 2:
@@ -82,6 +82,7 @@ _m_trap_vector:
 # unused
 .section .text
 .global _switch_to_user
+.global _enter_user_breakpoint
 _switch_to_user:
     # 恢复寄存器
     csrr	t6, mscratch
@@ -105,4 +106,5 @@ _switch_to_user:
         .set	i,i+1
     .endr
     sfence.vma
+_enter_user_breakpoint:
     mret

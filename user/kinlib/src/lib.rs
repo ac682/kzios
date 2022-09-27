@@ -6,6 +6,8 @@
 #![no_std]
 #![warn(missing_docs)]
 
+extern crate alloc;
+
 /// Just io
 pub mod io;
 mod lang_items;

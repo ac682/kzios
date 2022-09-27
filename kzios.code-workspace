@@ -27,6 +27,7 @@
 			"kzios",
 			"Mcause",
 			"mepc",
+			"mmap",
 			"mmio",
 			"mscratch",
 			"Mstatus",

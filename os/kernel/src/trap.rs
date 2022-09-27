@@ -52,7 +52,7 @@ pub extern "C" fn handle_machine_trap(frame: *const TrapFrame, epc: usize) {
             forward(id, arg0, arg1, arg2, arg3);
         },
         Trap::Exception(Exception::StorePageFault) => {
-            panic!("Store/AMO Page Fault");
+            panic!("Store/AMO Page Fault, mepc={:#x}", epc);
         }
         Trap::Exception(Exception::LoadPageFault) => {
             panic!("Load Page Fault. How to know which page");

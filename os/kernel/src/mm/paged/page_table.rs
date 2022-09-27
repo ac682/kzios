@@ -52,16 +52,24 @@ impl PageTable {
         vpn: u64,
         flags: impl Into<FlagSet<PageTableEntryFlag>>,
     ) -> Option<u64> {
+        let flags_into = flags.into();
         if let Ok(entry) = self.locate(vpn) {
-            return if entry.is_valid() && entry.is_leaf() {
+            return if entry.is_valid()
+                && entry.is_leaf()
+                && entry.flags().bits() == flags_into.bits()
+            {
                 Some(entry.physical_page_number())
             } else {
-                let ppn = alloc().unwrap();
-                entry.set(ppn, 0, flags);
-                Some(ppn)
+                if let Some(ppn) = alloc() {
+                    entry.set(ppn, 0, flags_into);
+                    Some(ppn)
+                } else {
+                    None
+                }
             };
+        } else {
+            None
         }
-        None
     }
 
     pub fn map(
@@ -159,9 +167,11 @@ impl PageTableEntry {
 
     pub fn set(&self, ppn: u64, rsw: u64, flags: impl Into<FlagSet<PageTableEntryFlag>>) {
         unsafe {
-            let bits = flags.into().bits();
+            let flag_bits = flags.into().bits();
             let reg = self.address as *mut u64;
-            reg.write_volatile(((ppn << 10) | (rsw << 8)) | bits);
+            let bits = ((ppn << 10) | (rsw << 8)) | flag_bits;
+            println!("ppn {:#x} set to {:#b}", ppn, bits);
+            reg.write_volatile(bits);
         }
     }
 

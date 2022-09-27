@@ -22,7 +22,7 @@ pub type Pid = u32;
 pub type Address = u64;
 
 // 进程地址空间分配
-const PROCESS_STACK_ADDRESS: Address = 0x40_0000_0000 - 1; // 256GB
+const PROCESS_STACK_ADDRESS: Address = 0x40_0000_0000; // 256GB
 
 #[derive(PartialEq, Clone)]
 pub enum ProcessState {
@@ -71,6 +71,15 @@ impl Process {
             }
             for ph in elf.program_header_iter() {
                 if ph.ph_type() == ProgramType::LOAD {
+                    println!(
+                        "[{:?}]{:#x}..{:#x}({:#x} aligned, {:}B sized) written as {:?}",
+                        ph.ph_type(),
+                        ph.vaddr(),
+                        ph.vaddr() + ph.memsz(),
+                        ph.align(),
+                        ph.content().len(),
+                        ph.flags()
+                    );
                     process.memory.write(
                         ph.vaddr(),
                         ph.content(),
@@ -79,9 +88,15 @@ impl Process {
                 }
             }
             // map stack
-            process.memory.map(
-                alloc().unwrap(),
-                (PROCESS_STACK_ADDRESS) >> 12,
+            // process.memory.map(
+            //     alloc().unwrap(),
+            //     (PROCESS_STACK_ADDRESS) >> 12,
+            //     PageTableEntryFlag::UserReadWrite,
+            // );
+            println!("[STACK]");
+            process.memory.write(
+                PROCESS_STACK_ADDRESS - 4096,
+                &[0; 4096],
                 PageTableEntryFlag::UserReadWrite,
             );
             // set context
@@ -104,8 +119,8 @@ impl Process {
         self.memory.free();
     }
 
-    pub fn fork(&self) -> Process{
-        let mut proc = Self{
+    pub fn fork(&self) -> Process {
+        let mut proc = Self {
             trap: self.trap.clone(),
             pc: self.pc,
             pid: 0,
@@ -113,25 +128,25 @@ impl Process {
             memory: self.memory.fork(),
             exit_code: self.exit_code,
             signal_handler_address: self.signal_handler_address,
-            state: self.state.clone()
+            state: ProcessState::Dead,
         };
         proc.trap.satp = self.memory.satp();
         proc
     }
 
-    pub fn write_generic_register(&mut self, index: usize, value: u64){
+    pub fn write_generic_register(&mut self, index: usize, value: u64) {
         self.trap.x[index] = value;
     }
 
-    pub fn write_float_register(&mut self, index: usize, value: u64){
+    pub fn write_float_register(&mut self, index: usize, value: u64) {
         self.trap.f[index] = value;
     }
 
-    pub fn set_return_value_in_register(&mut self, value: u64){
+    pub fn set_return_value_in_register(&mut self, value: u64) {
         self.write_generic_register(10, value);
     }
 
-    pub fn move_to_next_instruction(&mut self){
+    pub fn move_to_next_instruction(&mut self) {
         self.pc += 4;
     }
 
