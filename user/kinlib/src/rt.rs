@@ -1,11 +1,11 @@
 use buddy_system_allocator::LockedHeap;
 
-use crate::process::Termination;
+use crate::{process::Termination, syscall::sys_map};
 use core::{alloc::Layout, arch::global_asm};
 
 global_asm!(include_str!("rt.asm"));
 
-const INITIAL_HEAP_SIZE: usize = 8 * 0x1000;
+const INITIAL_HEAP_SIZE: usize = 1 * 0x1000;
 const HEAP_ORDER: usize = 64;
 
 #[global_allocator]
@@ -28,8 +28,10 @@ fn lang_start<T: Termination + 'static>(
     _argc: isize,
     _argv: *const *const u8,
 ) -> isize {
-    // init heap
     unsafe {
+        // init heap
+        // map some
+        sys_map(_segment_break as u64 >> 12, 1, 0b110);
         HEAP_ALLOCATOR
             .lock()
             .init(_segment_break as usize, INITIAL_HEAP_SIZE);

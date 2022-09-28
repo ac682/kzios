@@ -41,6 +41,14 @@ impl FlatScheduler {
             proc.exit_code = exit_code;
         }
     }
+
+    fn pop_current(&mut self) -> Option<Process> {
+        if self.list.len() > 1 {
+            Some(self.list.swap_remove(self.current as usize))
+        } else {
+            self.list.pop()
+        }
+    }
 }
 
 impl ProcessScheduler for FlatScheduler {
@@ -57,15 +65,23 @@ impl ProcessScheduler for FlatScheduler {
 
     fn switch_next(&mut self) -> Pid {
         let mut do_next = true;
+        let mut do_clean = false;
         if let Some(current) = self.current() {
             match current.state {
                 ProcessState::Idle => {
                     do_next = false;
                 }
                 ProcessState::Dead => {
-                    // do nothing
+                    do_clean = true;
+                    do_next = false;
                 }
                 _ => (),
+            }
+        }
+        if do_clean {
+            if let Some(dead) = self.pop_current(){
+                dead.cleanup();
+                // TODO: notify children to call sys_call
             }
         }
         if do_next {

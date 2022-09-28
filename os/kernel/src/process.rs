@@ -12,6 +12,7 @@ use crate::paged::page_table::{PageTableEntry, PageTableEntryFlag};
 use crate::paged::unit::MemoryUnit;
 use crate::process::error::ProcessSpawnError;
 use crate::trap::TrapFrame;
+use crate::typedef::*;
 use crate::utils::calculate_instruction_length;
 use crate::{_kernel_end, _kernel_start, alloc, println, PageTable};
 
@@ -19,10 +20,6 @@ pub mod error;
 pub mod ipc;
 pub mod scheduler;
 pub mod signal;
-
-pub type ExitCode = i32;
-pub type Pid = u32;
-pub type Address = u64;
 
 // 进程地址空间分配
 const PROCESS_STACK_ADDRESS: Address = 0x40_0000_0000 - 1; // 256GB
@@ -41,12 +38,12 @@ pub enum ProcessState {
 pub struct Process {
     trap: TrapFrame,
     // set by scheduler
-    pid: Pid,
-    parent: Pid,
-    memory: MemoryUnit,
-    state: ProcessState,
+    pub pid: Pid,
+    pub parent: Pid,
+    pub memory: MemoryUnit,
+    pub state: ProcessState,
     signal_handler_address: Address,
-    exit_code: ExitCode,
+    pub exit_code: ExitCode,
 }
 
 impl Process {
@@ -81,17 +78,12 @@ impl Process {
                     );
                 }
             }
-            // map stack
             process.memory.write(
                 PROCESS_STACK_ADDRESS - 4095,
                 &[0; 4095],
                 0,
                 PageTableEntryFlag::UserReadWrite,
             );
-            process
-                .memory
-                .write(0x4000, &[0; 0x8000], 0, PageTableEntryFlag::UserReadWrite);
-            // set context
             process.trap.x[2] = PROCESS_STACK_ADDRESS;
             Ok(process)
         } else {

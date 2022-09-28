@@ -13,6 +13,7 @@ _start:
 2:
     la      a0, main
     call    lang_start
+    # pass a0 (lang_main set) to ecall
     addi    x17, x0, 0x20
     ecall
 

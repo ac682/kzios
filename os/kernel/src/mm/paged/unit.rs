@@ -35,8 +35,7 @@ impl MemoryUnit {
         };
         for i in 0..cnt {
             self.root
-                .map(alloc().unwrap(), vpn + i as u64, f)
-                .expect("PANIC!");
+                .map(alloc().unwrap(), vpn + i as u64, f).unwrap();
         }
     }
 

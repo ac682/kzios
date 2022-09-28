@@ -43,6 +43,7 @@ mod syscall;
 mod timer;
 mod trap;
 mod utils;
+mod typedef;
 
 global_asm!(include_str!("assembly.asm"));
 
@@ -69,51 +70,13 @@ extern "C" fn kernel_main(
     add_process(Process::from_elf(data).unwrap());
     // ----- 进入用户空间, 此后内核仅在陷入中受理事件
     unsafe {
-        asm!("ecall", in("x10") 0); // trap call, enter the userspace
-    }
-    // unreachable
-    unsafe {
+        // trap call, enter the userspace
+        asm!("ecall", in("x10") 0);
+        // unreachable
         loop {
             asm!("wfi")
         }
     }
-}
-
-fn print_sections() {
-    let memory_start = _memory_start as usize;
-    let kernel_start = _kernel_start as usize;
-    let stack_start = _stack_start as usize;
-    let stack_end = _stack_end as usize;
-    let kernel_end = _kernel_end as usize;
-    let memory_end = _memory_end as usize;
-
-    println!(
-        "memory@{:#x}..{:#x}={}K {{",
-        memory_start,
-        memory_end,
-        (memory_end - memory_start) / 1024
-    );
-    println!(
-        "  kernel@{:#x}..{:#x}={}K {{",
-        kernel_start,
-        kernel_end,
-        (kernel_end - kernel_start) / 1024
-    );
-    println!("    heap={}K;", 0x1_0000 / 1024);
-    println!(
-        "    stack@{:#x}..{:#x}={}K;",
-        stack_start,
-        stack_end,
-        (stack_end - stack_start) / 1024
-    );
-    println!("  }}");
-    println!(
-        "  user@{:#x}..{:#x}={}K;",
-        kernel_end,
-        memory_end,
-        (memory_end - kernel_end) / 1024
-    );
-    println!("}}");
 }
 
 fn parse_board_info(dtb_addr: usize) -> BoardInfo {

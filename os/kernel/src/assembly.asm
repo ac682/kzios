@@ -47,18 +47,17 @@ _start:
 .section .text
 .global _m_trap_vector
 _m_trap_vector:
-    # 保存通用寄存器
-    csrrw	t6, mscratch, t6 # 交换 t6 和 mscratch， t6 指向陷入帧, mscratch 是 t6 原内容
+    csrrw	t6, mscratch, t6
 
     .set	i,0
-    .rept	NUM_REGS-1 # 保存前 31 个寄存器，也就是除了 x31
+    .rept	NUM_REGS-1
             save_gp	%i,t6
             .set	i,i+1
     .endr
 
-    mv		t5, t6 # 现在 t5 指向陷入帧
-    csrr	t6, mscratch # 复原 t6
-    save_gp 31, t5 # 保存 t6
+    mv		t5, t6
+    csrr	t6, mscratch
+    save_gp 31, t5
 
     # .set	i,0
     # .rept	NUM_REGS
@@ -66,7 +65,6 @@ _m_trap_vector:
     #         .set	i,i+1
     # .endr
 
-    # 保存 satp, pc 和 mstatus
     csrr    t6, satp
     sd      t6, 512(t5)
     csrr    t6, mstatus
@@ -74,15 +72,13 @@ _m_trap_vector:
     csrr    t6, mepc
     sd      t6, 528(t5)
 
-    csrw	mscratch, t5 # mscratch 恢复
+    csrw	mscratch, t5
 
     # 进入 rust 环境
     csrr	a0, mscratch
     la      sp, _stack_end
     call    handle_machine_trap
-    # csrw    mepc, a0 # set by rust code
 
-# unused
 .section .text
 .global _switch_to_user
 .global _enter_user_breakpoint
@@ -104,7 +100,6 @@ _switch_to_user:
     # 		.set	i,i+1
     # .endr
 
-    # 复原包括 t6 在内的通用寄存器
     .set	i,0
     .rept	NUM_REGS
         load_gp	%i

@@ -1,6 +1,6 @@
 use core::panic::PanicInfo;
 
-use crate::syscall::exit;
+use crate::syscall::sys_exit;
 
 // #[no_mangle]
 // extern "C" fn eh_personality() {}
@@ -19,12 +19,15 @@ macro_rules! print
 macro_rules! println
 {
 	() => ({
+        use $crate::print;
 		print!("\r\n")
 	});
 	($fmt:expr) => ({
+        use $crate::print;
 		print!(concat!($fmt, "\r\n"))
 	});
 	($fmt:expr, $($args:tt)+) => ({
+        use $crate::print;
 		print!(concat!($fmt, "\r\n"), $($args)+)
 	});
 }
@@ -42,6 +45,6 @@ fn handle_panic(info: &PanicInfo) -> ! {
     } else {
         println!("no information available.");
     }
-    exit(-1);
+    sys_exit(-1);
     loop {}
 }

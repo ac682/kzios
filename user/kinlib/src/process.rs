@@ -4,6 +4,8 @@ pub type ExitCode = i32;
 pub type Pid = u32;
 /// Address(u64) type for process
 pub type Address = u64;
+/// PageNumber(u64) for process
+pub type PageNumber = u64;
 
 /// The object could be converted to a exit code
 pub trait Termination {

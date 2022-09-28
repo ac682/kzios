@@ -1,16 +1,20 @@
 use core::usize;
 
+use flagset::FlagSet;
+
+use crate::mm::paged::page_table::PageTableEntryFlag;
 use crate::primitive::uart::Uart;
 use crate::println;
 use crate::process::scheduler::{self, add_process, exit_process, trap_with_current};
-use crate::process::{Address, ExitCode, Pid};
 use crate::qemu::UART;
+use crate::typedef::*;
 
 pub fn forward(id: u64, arg0: u64, arg1: u64, arg2: u64, arg3: u64) {
     match id {
         0x00 => do_write(arg0 as usize),
         0x20 => do_exit(arg0 as ExitCode),
         0x21 => do_fork(),
+        0x50 => do_map(arg0, arg1 as usize, arg2),
         _ => todo!("{} not implemented", id),
     }
 }
@@ -21,7 +25,7 @@ fn do_write(char: usize) {
 }
 
 // 0x01
-fn do_read(fd: usize) -> Option<usize> {
+fn do_read() -> Option<usize> {
     if let Some(char) = UART.read() {
         Some(char as usize)
     } else {
@@ -29,10 +33,13 @@ fn do_read(fd: usize) -> Option<usize> {
     }
 }
 
+fn do_write_line(addr: Address, line: usize) {
+    todo!()
+}
+
 // # process
 // 0x20
 fn do_exit(code: ExitCode) {
-    println!("process exit with code {}", code);
     exit_process(code);
 }
 
@@ -84,3 +91,15 @@ fn do_send() {}
 
 // 0x41
 fn do_receive() {}
+
+// # mm
+// 0x50
+fn do_map(vpn: PageNumber, count: usize, flags: u64) {
+    trap_with_current(|proc| {
+        proc.memory.fill(
+            vpn,
+            count,
+            FlagSet::<PageTableEntryFlag>::new(flags).unwrap() | PageTableEntryFlag::User | PageTableEntryFlag::Valid,
+        );
+    })
+}
