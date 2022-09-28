@@ -33,7 +33,7 @@ _start:
 2:
     li		t0, (0b11 << 11) | (1 << 7) | (1 << 3)
     csrw	mstatus, t0
-    la      t1, main
+    la      t1, kernel_main
     csrw    mepc, t1
     csrr    a0, mhartid
     ld      a1, dtb_addr
@@ -64,17 +64,18 @@ _m_trap_vector:
     #         .set	i,i+1
     # .endr
 
-    # 保存 satp 和 mstatus
+    # 保存 satp, pc 和 mstatus
     csrr    t6, satp
     sd      t6, 512(t5)
     csrr    t6, mstatus
     sd      t6, 520(t5)
+    csrr    t6, mepc
+    sd      t6, 528(t5)
 
     csrw	mscratch, t5 # mscratch 恢复
 
     # 进入 rust 环境
     csrr	a0, mscratch
-    csrr    a1, mepc
     la      sp, _stack_end
     call    handle_machine_trap
     # csrw    mepc, a0 # set by rust code
@@ -92,6 +93,8 @@ _switch_to_user:
     csrw    satp, t5
     ld      t5, 520(t6)
     csrw    mstatus, t5
+    ld      t5, 528(t6)
+    csrw    mepc, t5
 
     # .set	i,0
     # .rept	NUM_REGS

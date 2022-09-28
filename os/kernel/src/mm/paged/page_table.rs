@@ -54,10 +54,10 @@ impl PageTable {
     ) -> Option<u64> {
         let flags_into = flags.into();
         if let Ok(entry) = self.locate(vpn) {
-            return if entry.is_valid()
-                && entry.is_leaf()
-                && entry.flags().bits() == flags_into.bits()
-            {
+            return if entry.is_valid() && entry.is_leaf() {
+                if entry.flags().bits() != flags_into.bits() {
+                    entry.write_bitor(flags_into.bits());
+                }
                 Some(entry.physical_page_number())
             } else {
                 if let Some(ppn) = alloc() {
@@ -151,17 +151,32 @@ impl PageTableEntry {
     }
 
     pub fn is_valid(&self) -> bool {
-        self.val() & 0b1 != 0
+        self.read() & 0b1 != 0
     }
 
     pub fn is_leaf(&self) -> bool {
-        self.val() & 0b1110 != 0
+        self.read() & 0b1110 != 0
     }
 
-    pub fn val(&self) -> u64 {
+    pub fn read(&self) -> u64 {
         unsafe {
             let reg = self.address as *const u64;
             reg.read_volatile() as u64
+        }
+    }
+
+    pub fn write(&self, bits: u64) {
+        unsafe {
+            let reg = self.address as *mut u64;
+            reg.write_volatile(bits);
+        }
+    }
+
+    pub fn write_bitor(&self, bits: u64) {
+        unsafe {
+            let reg = self.address as *mut u64;
+            let old = reg.read_volatile();
+            reg.write_volatile(bits | old);
         }
     }
 
@@ -170,7 +185,6 @@ impl PageTableEntry {
             let flag_bits = flags.into().bits();
             let reg = self.address as *mut u64;
             let bits = ((ppn << 10) | (rsw << 8)) | flag_bits;
-            println!("ppn {:#x} set to {:#b}", ppn, bits);
             reg.write_volatile(bits);
         }
     }
@@ -183,23 +197,23 @@ impl PageTableEntry {
     }
 
     pub fn physical_page_number(&self) -> u64 {
-        self.val() >> 10 & 0xFFFFFFFFFFF
+        self.read() >> 10 & 0xFFFFFFFFFFF
     }
 
     pub fn is_readable(&self) -> bool {
-        self.val() >> 1 & 1 != 0
+        self.read() >> 1 & 1 != 0
     }
 
     pub fn is_writeable(&self) -> bool {
-        self.val() >> 2 & 1 != 0
+        self.read() >> 2 & 1 != 0
     }
 
     pub fn is_executable(&self) -> bool {
-        self.val() >> 3 & 1 != 0
+        self.read() >> 3 & 1 != 0
     }
 
     pub fn as_page_table(&self, level: usize) -> PageTable {
-        let ppn = (self.val() >> 10) & 0x1FFFFFFFFFFF;
+        let ppn = (self.read() >> 10) & 0x1FFFFFFFFFFF;
         PageTable::new(level, ppn)
     }
 
@@ -209,6 +223,6 @@ impl PageTableEntry {
     }
 
     pub fn flags(&self) -> FlagSet<PageTableEntryFlag> {
-        FlagSet::new(self.val() & 0b1111_1111).unwrap()
+        FlagSet::new(self.read() & 0b1111_1111).unwrap()
     }
 }

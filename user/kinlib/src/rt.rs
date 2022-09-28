@@ -1,11 +1,11 @@
-use buddy_system_allocator::{Heap, LockedHeap};
+use buddy_system_allocator::LockedHeap;
 
 use crate::process::Termination;
 use core::{alloc::Layout, arch::global_asm};
 
 global_asm!(include_str!("rt.asm"));
 
-const INITIAL_HEAP_SIZE: usize = 1 * 4096;
+const INITIAL_HEAP_SIZE: usize = 8 * 0x1000;
 const HEAP_ORDER: usize = 64;
 
 #[global_allocator]
@@ -16,7 +16,7 @@ extern "C" {
 }
 
 #[alloc_error_handler]
-pub fn handle_alloc_error(layout: core::alloc::Layout) -> ! {
+pub fn handle_alloc_error(layout: Layout) -> ! {
     // TODO: mmap more
     panic!("Heap allocation error, layout = {:?}", layout);
 }

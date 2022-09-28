@@ -1,5 +1,6 @@
-use core::slice;
+use core::slice::{self, from_raw_parts};
 
+use alloc::vec::Vec;
 use flagset::FlagSet;
 use riscv::{asm::sfence_vma_all, register::satp};
 
@@ -52,26 +53,32 @@ impl MemoryUnit {
         &self,
         addr: u64,
         data: &[u8],
+        length: usize,
         flags: impl Into<FlagSet<PageTableEntryFlag>> + Clone,
     ) {
-        // 把数据写到虚拟内存的指定地方
+        let real_length = if length == 0 { data.len() } else { length };
         let mut offset = addr & 0xFFF;
         let mut copied = 0usize;
         let mut page_count = 0usize;
         unsafe {
-            while copied < data.len() {
+            while copied < real_length {
                 if let Some(ppn) =
                     self.ensure_created((addr >> 12) + page_count as u64, flags.clone())
                 {
                     let start = (ppn << 12) + offset;
-                    let end = if (data.len() - copied) > (0x1000 - offset as usize) {
+                    let end = if (real_length - copied) > (0x1000 - offset as usize) {
                         (ppn + 1) << 12
                     } else {
-                        start + data.len() as u64 - copied as u64
+                        start + real_length as u64 - copied as u64
                     };
                     let ptr = start as *mut u8;
                     for i in 0..(end - start) {
-                        ptr.add(i as usize).write(data[copied + i as usize]);
+                        ptr.add(i as usize)
+                            .write(if copied + i as usize >= data.len() {
+                                0
+                            } else {
+                                data[copied + i as usize]
+                            });
                     }
                     offset = 0;
                     copied += (end - start) as usize;
@@ -81,6 +88,39 @@ impl MemoryUnit {
                 }
             }
         }
+    }
+
+    // pub fn read(&self, addr: u64, len: usize) -> Result<&[u8], ()> {
+    //     let buff: [u8; len] = [0; len];
+    //     let mut offset = addr & 0xfff;
+    //     let mut read = 0usize;
+    //     let mut page_count = 0usize;
+
+    //     while let Ok(page) = self.root.locate((addr >> 12) + page_count as u64) {
+    //         let ppn = page.physical_page_number();
+    //         let start = (ppn << 12) + offset;
+    //         let end = if (len - read) > (0x1000 - offset as usize) {
+    //             (ppn + 1) << 12
+    //         } else {
+    //             start + len as u64 - read as u64
+    //         };
+    //         let ptr = start as *const u8;
+    //         offset = 0;
+    //         page_count += 1;
+    //     }
+    //     Err(())
+    // }
+
+    pub fn read_byte(&self, addr: u64) -> Result<u8, ()> {
+        if let Ok(entry) = self.root.locate(addr >> 12) {
+            if entry.is_leaf() & entry.is_valid() {
+                let ppn = entry.physical_page_number();
+                let offset = addr & 0xfff;
+                let paddr = (ppn << 12) + offset;
+                return unsafe { Ok((paddr as *const u8).read()) };
+            }
+        }
+        Err(())
     }
 
     pub fn satp(&self) -> u64 {
@@ -102,6 +142,7 @@ impl MemoryUnit {
                         4096,
                     )
                 },
+                0,
                 pte.flags(),
             );
         });

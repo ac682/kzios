@@ -44,12 +44,12 @@ fn do_exit(code: ExitCode) {
 // -1 -> udf
 // -2 -> udf
 fn do_fork() {
-    trap_with_current(|parent|{
+    trap_with_current(|parent| {
         let mut child = parent.fork();
         child.move_to_next_instruction();
         child.set_return_value_in_register(0u64);
         let new_pid = add_process(child);
-        parent.set_return_value_in_register(new_pid as u64); // TODO: not work!
+        parent.set_return_value_in_register(new_pid as u64);
     })
 }
 

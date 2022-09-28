@@ -43,5 +43,5 @@ fn handle_panic(info: &PanicInfo) -> ! {
         println!("no information available.");
     }
     exit(-1);
-    loop{}
+    loop {}
 }

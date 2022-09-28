@@ -10,6 +10,7 @@ use crate::paged::page_table::{PageTableEntry, PageTableEntryFlag};
 use crate::paged::unit::MemoryUnit;
 use crate::process::error::ProcessSpawnError;
 use crate::trap::TrapFrame;
+use crate::utils::calculate_instruction_length;
 use crate::{_kernel_end, _kernel_start, alloc, println, PageTable};
 
 pub mod error;
@@ -22,7 +23,7 @@ pub type Pid = u32;
 pub type Address = u64;
 
 // 进程地址空间分配
-const PROCESS_STACK_ADDRESS: Address = 0x40_0000_0000; // 256GB
+const PROCESS_STACK_ADDRESS: Address = 0x40_0000_0000 - 1; // 256GB
 
 #[derive(PartialEq, Clone)]
 pub enum ProcessState {
@@ -37,7 +38,6 @@ pub enum ProcessState {
 
 pub struct Process {
     trap: TrapFrame,
-    pc: Address,
     // set by scheduler
     pid: Pid,
     parent: Pid,
@@ -53,7 +53,6 @@ impl Process {
         if let Ok(elf) = Elf::from_bytes(bytes) {
             let mut process = Self {
                 trap: TrapFrame::zero(),
-                pc: elf.entry_point(),
                 pid: 0,
                 // 没有设置过那就直接送给 init0 当子进程
                 parent: 0,
@@ -62,6 +61,7 @@ impl Process {
                 signal_handler_address: 0,
                 exit_code: 0,
             };
+            process.trap.pc = elf.entry_point();
             process.trap.satp = process.memory.satp();
             process.trap.status = 1 << 7 | 1 << 5 | 1 << 4;
             let header = elf.elf_header();
@@ -71,40 +71,26 @@ impl Process {
             }
             for ph in elf.program_header_iter() {
                 if ph.ph_type() == ProgramType::LOAD {
-                    println!(
-                        "[{:?}]{:#x}..{:#x}({:#x} aligned, {:}B sized) written as {:?}",
-                        ph.ph_type(),
-                        ph.vaddr(),
-                        ph.vaddr() + ph.memsz(),
-                        ph.align(),
-                        ph.content().len(),
-                        ph.flags()
-                    );
                     process.memory.write(
                         ph.vaddr(),
                         ph.content(),
+                        ph.memsz() as usize,
                         Self::flags_to_permission(ph.flags()),
                     );
                 }
             }
             // map stack
-            // process.memory.map(
-            //     alloc().unwrap(),
-            //     (PROCESS_STACK_ADDRESS) >> 12,
-            //     PageTableEntryFlag::UserReadWrite,
-            // );
-            println!("[STACK]");
             process.memory.write(
-                PROCESS_STACK_ADDRESS - 4096,
-                &[0; 4096],
+                PROCESS_STACK_ADDRESS - 4095,
+                &[0; 4095],
+                0,
                 PageTableEntryFlag::UserReadWrite,
             );
+            process
+                .memory
+                .write(0x4000, &[0; 0x8000], 0, PageTableEntryFlag::UserReadWrite);
             // set context
             process.trap.x[2] = PROCESS_STACK_ADDRESS;
-            println!(
-                "program created at {:#x} with sp pointed to {:#x}",
-                process.pc, process.trap.x[2]
-            );
             Ok(process)
         } else {
             Err(ProcessSpawnError::BrokenBinary)
@@ -122,13 +108,12 @@ impl Process {
     pub fn fork(&self) -> Process {
         let mut proc = Self {
             trap: self.trap.clone(),
-            pc: self.pc,
             pid: 0,
             parent: self.pid,
             memory: self.memory.fork(),
             exit_code: self.exit_code,
             signal_handler_address: self.signal_handler_address,
-            state: ProcessState::Dead,
+            state: self.state.clone(),
         };
         proc.trap.satp = self.memory.satp();
         proc
@@ -147,7 +132,9 @@ impl Process {
     }
 
     pub fn move_to_next_instruction(&mut self) {
-        self.pc += 4;
+        let ins = self.memory.read_byte(self.trap.pc).unwrap();
+        let length = calculate_instruction_length(ins);
+        self.trap.pc += length as u64 / 8;
     }
 
     fn flags_to_permission(

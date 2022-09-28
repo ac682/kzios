@@ -21,7 +21,7 @@ pub fn exit(exit_code: i64) {
 }
 
 /// Fork current process and get its pid for the parent while zero for itself
-/// 
+///
 /// + Pid<u32> Child itself
 /// 0 Parent itself
 /// - Errno:
@@ -29,9 +29,9 @@ pub fn exit(exit_code: i64) {
 /// -2 -> udf
 pub fn fork() -> Result<Pid, ()> {
     let res = raw_call(0x21, 0, 0, 0, 0) as i64;
-    if res < 0{
+    if res < 0 {
         Err(())
-    }else{
+    } else {
         Ok(res as Pid)
     }
 }

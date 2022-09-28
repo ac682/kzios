@@ -11,6 +11,7 @@ use riscv::register::{mcause, mepc, mscratch, mtvec};
 use crate::process::scheduler::forward_tick;
 use crate::syscall::forward;
 use crate::timer::set_next_timer;
+use crate::utils::calculate_instruction_length;
 use crate::{println, switch_to_user, timer};
 
 extern "C" {
@@ -27,11 +28,10 @@ pub fn init() {
 }
 
 #[no_mangle]
-pub extern "C" fn handle_machine_trap(frame: *const TrapFrame, epc: usize) {
+pub extern "C" fn handle_machine_trap(frame: &mut TrapFrame) {
     let cause = mcause::read();
     match cause.cause() {
         Trap::Exception(Exception::MachineEnvCall) => unsafe {
-            let frame = *frame;
             let which = frame.x[10];
             match which {
                 0 => {
@@ -42,17 +42,16 @@ pub extern "C" fn handle_machine_trap(frame: *const TrapFrame, epc: usize) {
             };
         },
         Trap::Exception(Exception::UserEnvCall) => unsafe {
-            let frame = *frame;
             let id = frame.x[17];
             let arg0 = frame.x[10];
             let arg1 = frame.x[11];
             let arg2 = frame.x[12];
             let arg3 = frame.x[13];
-            mepc::write(epc + 4);
             forward(id, arg0, arg1, arg2, arg3);
+            frame.pc += 4;
         },
         Trap::Exception(Exception::StorePageFault) => {
-            panic!("Store/AMO Page Fault, mepc={:#x}", epc);
+            panic!("Store/AMO Page Fault, mepc={:#x}", frame.pc);
         }
         Trap::Exception(Exception::LoadPageFault) => {
             panic!("Load Page Fault. How to know which page");
@@ -64,7 +63,12 @@ pub extern "C" fn handle_machine_trap(frame: *const TrapFrame, epc: usize) {
             panic!("Instruction Fault");
         }
         Trap::Exception(Exception::InstructionPageFault) => {
-            panic!("Instruction Page Fault with mepc={:#x}", epc);
+            panic!("Instruction Page Fault with mepc={:#x}", frame.pc);
+        }
+        Trap::Exception(Exception::Breakpoint) => {
+            // TODO: dump frame
+            println!("break!");
+            frame.pc += 4;
         }
         Trap::Interrupt(Interrupt::MachineTimer) => {
             forward_tick();
@@ -73,7 +77,7 @@ pub extern "C" fn handle_machine_trap(frame: *const TrapFrame, epc: usize) {
             "unknown trap cause: {:#b}({})\nTrapFrame:\n{}",
             cause.bits(),
             cause.bits(),
-            unsafe { *frame }
+            frame
         ),
     };
 }
@@ -89,6 +93,8 @@ pub struct TrapFrame {
     pub satp: u64,
     // 520-527
     pub status: u64,
+    // 528-535
+    pub pc: u64,
 }
 
 impl TrapFrame {
@@ -98,6 +104,7 @@ impl TrapFrame {
             f: [0; 32],
             satp: 0,
             status: 0,
+            pc: 0,
         }
     }
 }

@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use riscv::register::{mepc, mscratch};
 
 use crate::process::scheduler::ProcessScheduler;
-use crate::process::{ProcessState, Pid, ExitCode, Address};
+use crate::process::{Address, ExitCode, Pid, ProcessState};
 use crate::timer::{disable_timers, enable_timers};
 use crate::trap::TrapFrame;
 use crate::{println, set_next_timer, timer, Process};
@@ -59,11 +59,11 @@ impl ProcessScheduler for FlatScheduler {
         let mut do_next = true;
         if let Some(current) = self.current() {
             match current.state {
-                ProcessState::Running => {
-                    current.pc = mepc::read() as u64;
-                }
                 ProcessState::Idle => {
                     do_next = false;
+                }
+                ProcessState::Dead => {
+                    // do nothing
                 }
                 _ => (),
             }
@@ -78,7 +78,6 @@ impl ProcessScheduler for FlatScheduler {
                 ProcessState::Running | ProcessState::Idle => {
                     next_pid = next.pid;
                     mscratch::write(&next.trap as *const TrapFrame as usize);
-                    mepc::write(next.pc as usize);
                     next.state = ProcessState::Running;
                 }
                 ProcessState::Dead => {

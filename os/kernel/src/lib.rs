@@ -41,26 +41,27 @@ mod process;
 mod syscall;
 mod timer;
 mod trap;
+mod utils;
 
 global_asm!(include_str!("assembly.asm"));
 
 #[no_mangle]
-extern "C" fn main(hartid: usize, dtb_addr: usize) -> ! {
+extern "C" fn kernel_main(hartid: usize, dtb_addr: usize) -> ! {
     // kernel init
     pmp::init();
     mm::init();
     trap::init();
     // read device tree
-    let info = parse_board_info(dtb_addr); // 留以备用
-    qemu::init(); // 日后换掉
-                  // ----- 初始化完成
+    // 留以备用
+    let info = parse_board_info(dtb_addr);
+    // 日后换掉
+    qemu::init();
+    // ----- 初始化完成
     println!("Hello, World!");
     println!("hart id: #{}, device tree at: {:#x}", hartid, dtb_addr);
     print_sections();
-    println!("available pages: {}", FRAME_ALLOCATOR.lock().available());
     let data = include_bytes!("../../../artifacts/kzios_init0");
     add_process(Process::from_elf(data).unwrap());
-    println!("available pages after spawned process: {}", FRAME_ALLOCATOR.lock().available());
     // ----- 进入用户空间, 此后内核仅在陷入中受理事件
     unsafe {
         asm!("ecall", in("x10") 0); // trap call, enter the userspace
