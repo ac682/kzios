@@ -1,12 +1,13 @@
-use crate::syscall::put_char;
+use crate::syscall::write;
 use core::fmt::{Arguments, Result, Write};
 
-struct Stdout;
+/// Standard output stream
+pub struct Stdout;
 
 impl Write for Stdout {
     fn write_str(&mut self, s: &str) -> Result {
         for i in s.chars() {
-            put_char(i as usize);
+            write(i as usize);
         }
         Ok(())
     }
@@ -14,5 +15,5 @@ impl Write for Stdout {
 
 #[doc(hidden)]
 pub fn _print(args: Arguments) {
-    Stdout.write_fmt(args).unwrap();
+    core::fmt::write(&mut Stdout, args).unwrap();
 }

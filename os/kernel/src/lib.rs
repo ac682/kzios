@@ -8,6 +8,7 @@ extern crate alloc;
 extern crate lazy_static;
 
 use core::arch::asm;
+use core::slice::from_raw_parts;
 use core::{arch::global_asm, panic};
 
 use dtb_parser::device_tree::DeviceTree;
@@ -46,7 +47,12 @@ mod utils;
 global_asm!(include_str!("assembly.asm"));
 
 #[no_mangle]
-extern "C" fn kernel_main(hartid: usize, dtb_addr: usize) -> ! {
+extern "C" fn kernel_main(
+    hartid: usize,
+    dtb_addr: usize,
+    init0_addr: usize,
+    init0_size: usize,
+) -> ! {
     // kernel init
     pmp::init();
     mm::init();
@@ -59,8 +65,7 @@ extern "C" fn kernel_main(hartid: usize, dtb_addr: usize) -> ! {
     // ----- 初始化完成
     println!("Hello, World!");
     println!("hart id: #{}, device tree at: {:#x}", hartid, dtb_addr);
-    print_sections();
-    let data = include_bytes!("../../../artifacts/kzios_init0");
+    let data = unsafe { from_raw_parts(init0_addr as *const u8, init0_size) };
     add_process(Process::from_elf(data).unwrap());
     // ----- 进入用户空间, 此后内核仅在陷入中受理事件
     unsafe {

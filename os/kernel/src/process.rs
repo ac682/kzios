@@ -3,7 +3,9 @@ use core::fmt::{Debug, Formatter};
 use core::ops::BitAnd;
 use core::ptr::null_mut;
 
-use elf_rs::{Elf, ElfAbi, ElfFile, ElfMachine, ElfType, ProgramHeaderFlags, ProgramType};
+use elf_rs::{
+    Elf, ElfAbi, ElfFile, ElfHeader, ElfMachine, ElfType, ProgramHeaderFlags, ProgramType,
+};
 use flagset::FlagSet;
 
 use crate::paged::page_table::{PageTableEntry, PageTableEntryFlag};
@@ -48,7 +50,7 @@ pub struct Process {
 }
 
 impl Process {
-    #[no_mangle]
+
     pub fn from_elf(bytes: &[u8]) -> Result<Self, ProcessSpawnError> {
         if let Ok(elf) = Elf::from_bytes(bytes) {
             let mut process = Self {

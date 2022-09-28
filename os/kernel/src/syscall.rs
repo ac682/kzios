@@ -8,21 +8,20 @@ use crate::qemu::UART;
 
 pub fn forward(id: u64, arg0: u64, arg1: u64, arg2: u64, arg3: u64) {
     match id {
-        0 => do_put_char(arg0 as usize),
+        0x00 => do_write(arg0 as usize),
         0x20 => do_exit(arg0 as ExitCode),
         0x21 => do_fork(),
         _ => todo!("{} not implemented", id),
     }
 }
 
-// # system internal
-// 0x0
-fn do_put_char(char: usize) {
+// 0x00
+fn do_write(char: usize) {
     UART.write(char as u8);
 }
 
 // 0x01
-fn do_get_char() -> Option<usize> {
+fn do_read(fd: usize) -> Option<usize> {
     if let Some(char) = UART.read() {
         Some(char as usize)
     } else {

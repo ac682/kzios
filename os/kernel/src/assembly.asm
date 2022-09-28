@@ -37,6 +37,8 @@ _start:
     csrw    mepc, t1
     csrr    a0, mhartid
     ld      a1, dtb_addr
+    ld      a2, init0_addr
+    ld      a3, init0_size
     mret
 3:
 	wfi
