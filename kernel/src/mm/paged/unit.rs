@@ -34,8 +34,7 @@ impl MemoryUnit {
             _ => count,
         };
         for i in 0..cnt {
-            self.root
-                .map(alloc().unwrap(), vpn + i as u64, f).unwrap();
+            self.root.map(alloc().unwrap(), vpn + i as u64, f).unwrap();
         }
     }
 

@@ -1,8 +1,0 @@
-[workspace]
-members = [
-    "kernel",
-    "systems/fs",
-    "systems/net",
-    "systems/driver",
-    "systems/ipc"
-]

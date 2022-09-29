@@ -42,8 +42,8 @@ mod process;
 mod syscall;
 mod timer;
 mod trap;
-mod utils;
 mod typedef;
+mod utils;
 
 global_asm!(include_str!("assembly.asm"));
 
@@ -67,7 +67,8 @@ extern "C" fn kernel_main(
     println!("Hello, World!");
     println!("hart id: #{}, device tree at: {:#x}", hartid, dtb_addr);
     let data = unsafe { from_raw_parts(init0_addr as *const u8, init0_size) };
-    add_process(Process::from_elf(data).unwrap());
+    let process = Process::from_elf(data).unwrap();
+    add_process(process);
     // ----- 进入用户空间, 此后内核仅在陷入中受理事件
     unsafe {
         // trap call, enter the userspace

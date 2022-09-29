@@ -79,7 +79,7 @@ impl ProcessScheduler for FlatScheduler {
             }
         }
         if do_clean {
-            if let Some(dead) = self.pop_current(){
+            if let Some(dead) = self.pop_current() {
                 dead.cleanup();
                 // TODO: notify children to call sys_call
             }

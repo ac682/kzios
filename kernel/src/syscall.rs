@@ -99,7 +99,9 @@ fn do_map(vpn: PageNumber, count: usize, flags: u64) {
         proc.memory.fill(
             vpn,
             count,
-            FlagSet::<PageTableEntryFlag>::new(flags).unwrap() | PageTableEntryFlag::User | PageTableEntryFlag::Valid,
+            FlagSet::<PageTableEntryFlag>::new(flags).unwrap()
+                | PageTableEntryFlag::User
+                | PageTableEntryFlag::Valid,
         );
     })
 }

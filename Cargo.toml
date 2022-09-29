@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "kernel",
+    "boards/qemu",
+    "kinlib",
+    "init0",
+]

@@ -47,7 +47,7 @@ pub fn sys_signal_set(handler: fn(u8)) {
 /// Readable = 0b10
 /// Writeable = 0b100
 /// Executable = 0b1000
-/// 
+///
 /// Its valid to set other bits to 1, but not safe and recommended
 pub fn sys_map(vpn: PageNumber, count: usize, flags: usize) {
     raw_call(0x50, vpn as usize, count, flags, 0);

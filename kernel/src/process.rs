@@ -47,7 +47,6 @@ pub struct Process {
 }
 
 impl Process {
-
     pub fn from_elf(bytes: &[u8]) -> Result<Self, ProcessSpawnError> {
         if let Ok(elf) = Elf::from_bytes(bytes) {
             let mut process = Self {
