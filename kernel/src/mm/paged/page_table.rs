@@ -2,9 +2,9 @@ use core::ops::BitOr;
 
 use flagset::{flags, FlagSet};
 
+use crate::{alloc, println};
 use crate::paged::address::{PhysicalAddress, VirtualAddress};
 use crate::paged::free;
-use crate::{alloc, println};
 
 pub struct PageTable {
     page_number: u64,

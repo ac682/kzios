@@ -12,6 +12,7 @@ RUSTFLAGS_INIT := "-Clink-arg=-T"+invocation_directory()+"/kinlib/linker.ld"
 alias b := build
 alias c := clean
 alias d := debug_local
+alias s := debug_qemu
 alias r := run
 
 # tools

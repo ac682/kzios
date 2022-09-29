@@ -1,11 +1,11 @@
+use alloc::vec::Vec;
 use core::slice::{self, from_raw_parts};
 
-use alloc::vec::Vec;
 use flagset::FlagSet;
 use riscv::{asm::sfence_vma_all, register::satp};
 
-use crate::paged::page_table::PageTableEntryFlag;
 use crate::{alloc, println};
+use crate::paged::page_table::PageTableEntryFlag;
 
 use super::page_table::{PageTable, PageTableEntry};
 
@@ -61,7 +61,7 @@ impl MemoryUnit {
         unsafe {
             while copied < real_length {
                 if let Some(ppn) =
-                    self.ensure_created((addr >> 12) + page_count as u64, flags.clone())
+                self.ensure_created((addr >> 12) + page_count as u64, flags.clone())
                 {
                     let start = (ppn << 12) + offset;
                     let end = if (real_length - copied) > (0x1000 - offset as usize) {
@@ -72,11 +72,11 @@ impl MemoryUnit {
                     let ptr = start as *mut u8;
                     for i in 0..(end - start) {
                         ptr.add(i as usize)
-                            .write(if copied + i as usize >= data.len() {
-                                0
-                            } else {
-                                data[copied + i as usize]
-                            });
+                           .write(if copied + i as usize >= data.len() {
+                               0
+                           } else {
+                               data[copied + i as usize]
+                           });
                     }
                     offset = 0;
                     copied += (end - start) as usize;

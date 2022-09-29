@@ -1,15 +1,14 @@
 #![no_std]
 #![feature(panic_info_message, alloc_error_handler)]
-#![feature(pin_macro)]
 #![allow(unused)]
 
 extern crate alloc;
 #[macro_use]
 extern crate lazy_static;
 
+use core::{arch::global_asm, panic};
 use core::arch::asm;
 use core::slice::from_raw_parts;
-use core::{arch::global_asm, panic};
 
 use dtb_parser::device_tree::DeviceTree;
 use dtb_parser::node::DeviceTreeNode;
@@ -27,9 +26,9 @@ use crate::external::{
     _kernel_end, _kernel_start, _memory_end, _memory_start, _stack_end, _stack_start,
 };
 use crate::lang_items::print;
-use crate::paged::frame_allocator::{FrameAllocator, FRAME_ALLOCATOR};
-use crate::process::scheduler::{add_process, switch_to_user};
+use crate::paged::frame_allocator::{FRAME_ALLOCATOR, FrameAllocator};
 use crate::process::Process;
+use crate::process::scheduler::{add_process, switch_to_user};
 use crate::timer::set_next_timer;
 
 mod board;

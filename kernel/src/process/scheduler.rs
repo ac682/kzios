@@ -1,7 +1,7 @@
 use spin::{Mutex, MutexGuard};
 
-use crate::process::scheduler::flat_scheduler::FlatScheduler;
 use crate::Process;
+use crate::process::scheduler::flat_scheduler::FlatScheduler;
 
 use super::{Address, ExitCode, Pid};
 

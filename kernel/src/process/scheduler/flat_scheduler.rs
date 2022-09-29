@@ -3,11 +3,11 @@ use alloc::vec::Vec;
 
 use riscv::register::{mepc, mscratch};
 
-use crate::process::scheduler::ProcessScheduler;
+use crate::{println, Process, set_next_timer, timer};
 use crate::process::{Address, ExitCode, Pid, ProcessState};
+use crate::process::scheduler::ProcessScheduler;
 use crate::timer::{disable_timers, enable_timers};
 use crate::trap::TrapFrame;
-use crate::{println, set_next_timer, timer, Process};
 
 pub struct FlatScheduler {
     list: Vec<Process>,

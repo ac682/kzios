@@ -7,4 +7,4 @@ edition = "2021"
 
 [dependencies]
 buddy_system_allocator = "0.8"
-once_cell = { version = "1.15", default-features = false}
+once_cell = { version = "1.15", default-features = false }

@@ -3,16 +3,16 @@ use core::arch::global_asm;
 use core::fmt::Display;
 use core::ptr::null_mut;
 
+use riscv::register::{mcause, mepc, mscratch, mtvec};
 use riscv::register::mcause::{Exception, Interrupt, Mcause, Trap};
 use riscv::register::mstatus::Mstatus;
 use riscv::register::mtvec::TrapMode;
-use riscv::register::{mcause, mepc, mscratch, mtvec};
 
+use crate::{println, switch_to_user, timer};
 use crate::process::scheduler::forward_tick;
 use crate::syscall::forward;
 use crate::timer::set_next_timer;
 use crate::utils::calculate_instruction_length;
-use crate::{println, switch_to_user, timer};
 
 extern "C" {
     fn _m_trap_vector();

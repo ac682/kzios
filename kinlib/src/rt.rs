@@ -1,10 +1,13 @@
+use core::{
+    alloc::Layout,
+    arch::global_asm,
+};
+
 use buddy_system_allocator::LockedHeap;
 
 use crate::{process::Termination, syscall::sys_map};
-use core::{
-    alloc::Layout,
-    arch::{asm},
-};
+
+global_asm!(include_str!("rt.asm"));
 
 const INITIAL_HEAP_SIZE: usize = 1 * 0x1000;
 const HEAP_ORDER: usize = 64;
@@ -30,19 +33,6 @@ fn lang_start<T: Termination + 'static>(
     _argv: *const *const u8,
 ) -> isize {
     unsafe {
-        // write 0 to bss section
-        extern "C" {
-            fn _bss_start();
-            fn _bss_end();
-        }
-
-        let start = _bss_start as usize;
-        let end = _bss_end as usize;
-        let ptr = start as *mut u8;
-        for i in 0..(end - start) {
-            ptr.add(i).write(0);
-        }
-
         // init heap
         // map some
         sys_map(_segment_break as u64 >> 12, 1, 0b110);
@@ -53,11 +43,4 @@ fn lang_start<T: Termination + 'static>(
 
     // call main
     main().to_exit_code()
-}
-
-#[export_name = "_signal_return"]
-fn signal_return() {
-    unsafe {
-        asm!("ecall", in("x17") 0x30);
-    }
 }

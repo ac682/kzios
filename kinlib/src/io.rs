@@ -1,5 +1,6 @@
-use crate::syscall::sys_write;
 use core::fmt::{Arguments, Result, Write};
+
+use crate::syscall::sys_write;
 
 /// Standard output stream
 pub struct Stdout;

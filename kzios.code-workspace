@@ -66,48 +66,15 @@
 		],
 		"makefile.extensionOutputFolder": "/dev/null"
 	},
-	"tasks": {
-		"version": "2.0.0",
-		"tasks": [
-			{
-				"label": "launch_gdb_server",
-				"type": "shell",
-				"command": "just",
-				"args": [
-					"debug_qemu"
-				],
-				"isBackground": true,
-				"problemMatcher": [
-					{
-						"pattern": [
-							{
-								"regexp": ".",
-								"file": 1,
-								"location": 2,
-								"message": 3
-							}
-						],
-						"background": {
-							"activeOnStart": true,
-							"beginsPattern": ".",
-							"endsPattern": "."
-						}
-					}
-				]
-			},
-		]
-	},
 	"launch": {
 		"version": "0.2.0",
 		"configurations": [
 			{
 				"name": "kernel-debug",
 				"type": "cppdbg",
-				"preLaunchTask": "launch_gdb_server",
 				"request": "launch",
 				"miDebuggerServerAddress": "localhost:1234",
 				"program": "artifacts/board_qemu",
-				"stopAtEntry": false,
 				"cwd": "${workspaceFolder}",
 				"launchCompleteCommand": "exec-continue",
 				"environment": [],
@@ -122,11 +89,9 @@
 			{
 				"name": "init0-debug",
 				"type": "cppdbg",
-				"preLaunchTask": "launch_gdb_server",
 				"request": "launch",
 				"miDebuggerServerAddress": "localhost:1234",
 				"program": "artifacts/kzios_init0",
-				"stopAtEntry": false,
 				"cwd": "${workspaceFolder}",
 				"launchCompleteCommand": "exec-continue",
 				"environment": [],
