@@ -22,3 +22,9 @@
 
 - qemu-system-riscv64: 1 core 8MB ram with MMU
 - k210: 2 cores (suspend #1) 8MB ram with MMU
+
+## 标准库
+
+~~Porting std is a huge thing, I wont do it at the current stage.~~
+
+仅提供 `kinlib`

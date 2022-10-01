@@ -1,0 +1,11 @@
+[package]
+name = "kinlib"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# compiler_builtins = "0.1" # -Zbuild-std-features=compiler-builtins-mem instead
+buddy_system_allocator = "0.8"
+once_cell = { version = "1.15", default-features = false }

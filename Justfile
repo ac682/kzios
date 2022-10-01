@@ -1,12 +1,13 @@
 MODE := "debug"
 RELEASE := if MODE == "release" { "--release" } else { "" }
 BOARD := "qemu"
-TARGET := "riscv64gc-unknown-none-elf"
-KERNEL_ELF := "target"/TARGET/MODE/"board_"+BOARD
-KERNEL_BIN := "target"/TARGET/MODE/"board_"+BOARD+".bin"
-INIT_ELF := "target"/TARGET/MODE/"kzios_init0"
-RUSTFLAGS_KERNEL := "'-Clink-arg=-T"+invocation_directory()+"/boards"/BOARD/"linker.ld -Cforce-frame-pointers=yes'"
-RUSTFLAGS_INIT := "-Clink-arg=-T"+invocation_directory()+"/kinlib/linker.ld"
+TARGET_KERNEL := "riscv64gc-unknown-none-elf"
+TARGET_USER:= "riscv64gc-unknown-kzios-elf"
+KERNEL_ELF := "os/target"/TARGET_KERNEL/MODE/"board_"+BOARD
+KERNEL_BIN := "os/target"/TARGET_KERNEL/MODE/"board_"+BOARD+".bin"
+INIT_ELF := "user/target"/TARGET_USER/MODE/"kzios_init0"
+RUSTFLAGS_KERNEL := "'-Clink-arg=-T"+invocation_directory()+"/os/boards"/BOARD/"linker.ld -Cforce-frame-pointers=yes'"
+RUSTFLAGS_USER := ""
 
 # aliases
 alias b := build
@@ -39,11 +40,11 @@ artifact_dir:
     fi
 
 build_init: artifact_dir
-    @RUSTFLAGS={{RUSTFLAGS_INIT}} cargo build --bin kzios_init0 {{RELEASE}}
+    @cd user && RUSTFLAGS={{RUSTFLAGS_USER}} cargo build --bin kzios_init0 {{RELEASE}}
     @cp {{INIT_ELF}} artifacts/
 
 build_os: artifact_dir build_init # 暂时需要, 未来就不要求了
-    @RUSTFLAGS={{RUSTFLAGS_KERNEL}} cargo build --bin board_{{BOARD}} {{RELEASE}}
+    @cd os && RUSTFLAGS={{RUSTFLAGS_KERNEL}} cargo build --bin board_{{BOARD}} {{RELEASE}}
     @{{OBJCOPY}} --strip-all {{KERNEL_ELF}} -O binary {{KERNEL_BIN}}
     @cp {{KERNEL_ELF}} artifacts/
     @cp {{KERNEL_BIN}} artifacts/

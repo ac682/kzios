@@ -8,8 +8,10 @@
 		"rust-analyzer.checkOnSave.allTargets": false,
 		"rust-analyzer.cargo.target": "riscv64gc-unknown-none-elf",
 		"cSpell.words": [
+			"abiname",
 			"ASID",
 			"bitor",
+			"builtins",
 			"cppdbg",
 			"dealloc",
 			"Deque",
@@ -50,6 +52,7 @@
 			"sepc",
 			"SFENCE",
 			"sigreturn",
+			"singlethread",
 			"skernel",
 			"sscratch",
 			"sstatus",

@@ -1,0 +1,6 @@
+[build]
+target = "riscv64gc-unknown-kzios-elf.json"
+
+[unstable]
+build-std = ["core", "alloc"]
+build-std-features = ["compiler-builtins-mem"]
