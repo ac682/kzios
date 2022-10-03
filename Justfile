@@ -61,10 +61,10 @@ run: (debug_qemu "")
 
 clean:
     #!/usr/bin/env sh
-    echo Cleaning boards workspace...
-    cd user && cargo clean
+    echo Cleaning os workspace...
+    cd os && cargo clean
     echo Cleaning user workspace...
-    cd ../boards && cargo clean
+    cd ../user && cargo clean
     cd ..
     echo Removing artifacts...
     if [ -d "artfacts" ]; then
