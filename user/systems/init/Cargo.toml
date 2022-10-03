@@ -1,10 +1,11 @@
 [package]
-name = "board_qemu"
+name = "system_init"
 version = "0.1.0"
 authors = [ "Chien Zhang (zqy0224@live.com)"]
-description = "QEMU board support"
+description = "Preinstalled init process"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+rinlib = { path = "../../rinlib" }

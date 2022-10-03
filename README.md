@@ -1,4 +1,4 @@
-# kzios
+# ~~kzios~~ eRhino!
 
 操作系统学习：RV64 嵌入式系统
 
@@ -27,4 +27,4 @@
 
 ~~Porting std is a huge thing, I wont do it at the current stage.~~
 
-仅提供 `kinlib`
+仅提供 ~~`kinlib`~~`rinlib`
