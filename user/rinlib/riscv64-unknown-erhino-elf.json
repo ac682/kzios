@@ -19,7 +19,7 @@
     "pre-link-args": {
       "ld.lld": [
         "-T",
-        "linker.ld"
+        "rinlib/linker.ld"
       ]
     }
   }

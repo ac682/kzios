@@ -2,6 +2,6 @@
 // Don't link to std. We are std.
 #![no_std]
 
-pub use shared::*;
+pub use erhino_shared::*;
 
 mod rt;

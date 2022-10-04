@@ -20,6 +20,7 @@
 			"ecall",
 			"ekernel",
 			"elftype",
+			"erhino",
 			"Errno",
 			"flagset",
 			"GETCHAR",
@@ -66,9 +67,40 @@
 			"uart",
 			"userspace",
 			"utimer",
+			"utvec",
 			"vaddr"
 		],
 		"makefile.extensionOutputFolder": "/dev/null"
+	},"tasks": {
+		"version": "2.0.0",
+		"tasks": [
+			{
+				"label": "launch_gdb_server",
+				"type": "shell",
+				"command": "just",
+				"args": [
+					"run_qemu"
+				],
+				"isBackground": true,
+				"problemMatcher": [
+					{
+						"pattern": [
+							{
+								"regexp": ".",
+								"file": 1,
+								"location": 2,
+								"message": 3
+							}
+						],
+						"background": {
+							"activeOnStart": true,
+							"beginsPattern": ".",
+							"endsPattern": "."
+						}
+					}
+				]
+			},
+		]
 	},
 	"launch": {
 		"version": "0.2.0",
@@ -77,25 +109,9 @@
 				"name": "kernel-debug",
 				"type": "cppdbg",
 				"request": "launch",
+				"preLaunchTask": "launch_gdb_server",
 				"miDebuggerServerAddress": "localhost:1234",
 				"program": "artifacts/board_qemu",
-				"cwd": "${workspaceFolder}",
-				"launchCompleteCommand": "exec-continue",
-				"environment": [],
-				"externalConsole": false,
-				"logging": {
-					"engineLogging": false
-				},
-				"MIMode": "gdb",
-				"miDebuggerPath": "riscv64-elf-gdb",
-				"miDebuggerArgs": "-ex 'set arch riscv:rv64'",
-			},
-			{
-				"name": "init0-debug",
-				"type": "cppdbg",
-				"request": "launch",
-				"miDebuggerServerAddress": "localhost:1234",
-				"program": "artifacts/kzios_init0",
 				"cwd": "${workspaceFolder}",
 				"launchCompleteCommand": "exec-continue",
 				"environment": [],
