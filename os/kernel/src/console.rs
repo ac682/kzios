@@ -2,14 +2,14 @@ use core::fmt::Arguments;
 
 extern "Rust"{
     #[linkage = "extern_weak"]
-    pub fn write_out(args: Arguments);
+    pub fn board_write(args: Arguments);
 }
 
 #[macro_export]
 macro_rules! print
 {
 	($($arg:tt)*) => {{
-        unsafe {$crate::console::write_out(format_args!($($arg)*));}
+        unsafe {$crate::console::board_write(format_args!($($arg)*));}
     }};
 }
 

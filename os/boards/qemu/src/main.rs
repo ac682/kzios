@@ -6,6 +6,7 @@ extern crate erhino_kernel;
 use core::fmt::{Arguments, Result, Write};
 
 use alloc::borrow::ToOwned;
+use dtb_parser::{traits::HasNamedProperty, prop::PropertyValue};
 use erhino_kernel::{board::BoardInfo, init, println, env};
 
 fn main() {
@@ -17,11 +18,20 @@ fn main() {
     init(info);
     let dtb_addr = env::args()[1] as usize;
     let tree = dtb_parser::device_tree::DeviceTree::from_address(dtb_addr).unwrap();
-    todo!("find clint base and store into BoardInfo");
-    
+    let mut clint_base = 0u64;
+    for node in tree.into_iter(){
+        if node.name().starts_with("clint"){
+            if let Some(prop) = node.find_prop("reg"){
+                if let PropertyValue::Address(address, _size) = prop.value(){
+                    clint_base = *address;
+                }
+            }
+        }
+    }
+    println!("Got clint address but not knowing how to use it: {:#x}", clint_base);
 }
 
-#[export_name = "write_out"]
+#[export_name = "board_write"]
 pub fn uart_write(args: Arguments) {
     NS16550a.write_fmt(args).unwrap();
 }
