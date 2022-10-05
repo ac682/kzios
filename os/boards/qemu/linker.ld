@@ -6,20 +6,20 @@ MEMORY
     RAM (rwx) : ORIGIN = 0x80000000, LENGTH = 6M
 }
 
-HEAP_SIZE = 0xA000;
-STACK_SIZE = 0x8000;
+HEAP_SIZE = 0xC000;
+HART_NUM = 2;
+STACK_SIZE = 0x4000*HART_NUM;
 
 SECTIONS
 {
     PROVIDE(_memory_start = ORIGIN(RAM));
 
-    .text : {
+    .text : ALIGN(4) {
         *(.text.init)
         *(.text .text.*)
     } > RAM
 
-    . = ALIGN(4);
-    .rodata : {
+    .rodata : ALIGN(4) {
         *(.rodata)
     } > RAM
 
@@ -29,27 +29,22 @@ SECTIONS
     } > RAM
 
 
-    . = ALIGN(4);
-    .bss (NOLOAD) : {
+    .bss (NOLOAD) : ALIGN(4) {
         PROVIDE(_bss_start = .);
         *(.bss)
         PROVIDE(_bss_end = .);
     } > RAM
 
-    . = ALIGN(8);
-    .runtime (NOLOAD) : {
+    .runtime (NOLOAD) : ALIGN(4) {
+        . = ALIGN(8);
         PROVIDE(_heap_start = .);
         . = . + HEAP_SIZE;
         . = ALIGN(8);
-        PROVIDE(_separator = .);
+        PROVIDE(_stack_start = .);
         . = . + STACK_SIZE;
-        . = ALIGN(8);
-        PROVIDE(_stack_end = .);
+        . = ALIGN(4k); # make kernel 4k aligned
+        PROVIDE(_kernel_end = .);
     } > RAM
-
     
-    . = ALIGN(4k); # make kernel 4k aligned
-    PROVIDE(_kernel_end = .);
-
     PROVIDE(_memory_end = ORIGIN(RAM) + LENGTH(RAM));
 }

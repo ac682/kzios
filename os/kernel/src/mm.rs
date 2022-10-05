@@ -5,4 +5,5 @@ pub mod unit;
 
 pub fn init() {
     heap::init();
+    frame::init();
 }

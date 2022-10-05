@@ -1,18 +1,18 @@
 #![no_std]
 
-extern crate erhino_kernel;
 extern crate alloc;
+extern crate erhino_kernel;
 
-use core::fmt::{Arguments, Write, Result};
+use core::fmt::{Arguments, Result, Write};
 
 use alloc::borrow::ToOwned;
 use erhino_kernel::{board::BoardInfo, init};
 
 fn main() {
     // prepare BoardInfo
-    let info = BoardInfo{
+    let info = BoardInfo {
         name: "qemu".to_owned(),
-        mtimecmp_addr: 0x0200_4000
+        mtimecmp_addr: 0x0200_4000,
     };
     init(info);
 }
@@ -23,7 +23,7 @@ pub fn uart_write(args: Arguments) {
 }
 
 #[export_name = "board_init"]
-pub fn board_init(){
+pub fn board_init() {
     ns16550a_init();
 }
 

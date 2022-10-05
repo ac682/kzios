@@ -8,16 +8,17 @@ pub use erhino_shared::*;
 
 extern crate alloc;
 
+pub mod board;
 mod external;
 mod mm;
+mod pmp;
 mod rt;
 mod trap;
-pub mod board;
+mod sync;
 
 global_asm!(include_str!("assembly.asm"));
 
-
-pub fn init(info: BoardInfo){
+pub fn init(info: BoardInfo) {
     println!("boot stage #3: kernel initialization");
     println!("{}", info);
     println!("boot completed");

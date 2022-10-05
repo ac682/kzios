@@ -68,7 +68,8 @@
 			"userspace",
 			"utimer",
 			"utvec",
-			"vaddr"
+			"vaddr",
+			"xlen"
 		],
 		"makefile.extensionOutputFolder": "/dev/null"
 	},"tasks": {

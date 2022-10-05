@@ -16,7 +16,7 @@ alias d := debug
 alias r := run
 
 # qemu
-QEMU_CORES := "1"
+QEMU_CORES := "2"
 QEMU_MEMORY := "6m"
 QEMU_LAUNCH := "qemu-system-riscv64 -smp cores="+QEMU_CORES+" -M "+QEMU_MEMORY+" -machine virt -nographic -bios none -kernel "+OS_BIN
 
@@ -34,10 +34,11 @@ build_os: artifact_dir
     @rust-objcopy --strip-all {{OS_ELF}} -O binary {{OS_BIN}} 
 
 build: build_os build_user
-    @echo Build Successfully!
+    @echo -e "\033[0;32mBuild Successfully!\033[0m"
 
 run_qemu EXPOSE="-s -S": build
-     @{{QEMU_LAUNCH}} {{EXPOSE}}
+    @echo -e "\033[0;36mQEMU: Simulating\033[0m"
+    @{{QEMU_LAUNCH}} {{EXPOSE}}
 
 run: (run_qemu "")
 
@@ -55,4 +56,4 @@ clean:
     if [ -d "artfacts" ]; then
         rm -r artifacts
     fi
-    echo Done!
+    echo -e "\033[0;35mDone!\033[0m"

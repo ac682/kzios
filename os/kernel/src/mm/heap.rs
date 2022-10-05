@@ -1,6 +1,6 @@
 use buddy_system_allocator::LockedHeap;
 
-use crate::external::{_heap_start, _separator};
+use crate::external::{_heap_start, _stack_start};
 
 const HEAP_ORDER: usize = 64;
 
@@ -15,7 +15,7 @@ pub fn handle_alloc_error(layout: core::alloc::Layout) -> ! {
 pub fn init() {
     unsafe {
         let heap_start = _heap_start as usize;
-        let size = _separator as usize - heap_start;
+        let size = _stack_start as usize - heap_start;
         HEAP_ALLOCATOR.lock().init(heap_start, size);
     }
 }

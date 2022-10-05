@@ -1,6 +1,6 @@
 use core::fmt::Display;
 
-use riscv::register::{mscratch, mtvec, utvec::TrapMode, mcause::Mcause};
+use riscv::register::{mcause::Mcause, mscratch, mtvec, utvec::TrapMode};
 
 extern "C" {
     fn _trap_vector();
@@ -17,8 +17,8 @@ pub fn init() {
 
 #[no_mangle]
 fn handle_trap(cause: Mcause, _frame: &mut TrapFrame) {
-    match cause.cause(){
-        _ => panic!("unknown trap cause: {}", cause.bits())
+    match cause.cause() {
+        _ => panic!("unknown trap cause: {}", cause.bits()),
     }
 }
 

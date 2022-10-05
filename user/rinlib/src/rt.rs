@@ -1,12 +1,12 @@
 use core::{alloc::Layout, panic::PanicInfo};
 
-use buddy_system_allocator::LockedHeap;
+use buddy_system_allocator::{LockedHeapWithRescue, Heap};
 
 const INITIAL_HEAP_SIZE: usize = 1 * 0x1000;
 const HEAP_ORDER: usize = 64;
 
 #[global_allocator]
-static HEAP_ALLOCATOR: LockedHeap<HEAP_ORDER> = LockedHeap::empty();
+static HEAP_ALLOCATOR: LockedHeapWithRescue<HEAP_ORDER> = LockedHeapWithRescue::new(heap_rescue);
 
 
 #[lang = "start"]
@@ -22,7 +22,11 @@ fn lang_start<T: 'static>(
 
 #[panic_handler]
 fn handle_panic(_info: &PanicInfo) -> ! {
-    loop {}
+    todo!();
+}
+
+fn heap_rescue(_heap: &mut Heap<HEAP_ORDER>, _layout: &Layout){
+    todo!();
 }
 
 #[alloc_error_handler]
