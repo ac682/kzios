@@ -33,6 +33,15 @@ _start:
 2:
     li		t0, (0b11 << 11) | (1 << 7) | (1 << 3)
     csrw	mstatus, t0
+    # store args passed from the board bootloader
+    la      t1, _env
+    sd      a0, 0(t1)
+    sd      a1, 8(t1)
+    sd      a3, 24(t1)
+    sd      a4, 32(t1)
+    sd      a5, 40(t1)
+    sd      a6, 48(t1)
+    sd      a7, 56(t1)
     la      t1, main
     csrw    mepc, t1
     mret
@@ -71,8 +80,9 @@ _trap_vector:
     csrw	mscratch, t5
 
     # 进入 rust 环境
-    csrr	a0, mcause
-    csrr    a1, mscratch
+    csrr    a0, mhartid
+    csrr	a1, mcause
+    csrr    a2, mscratch
     la      sp, _kernel_end
     call    handle_trap
 

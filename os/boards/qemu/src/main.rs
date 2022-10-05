@@ -6,7 +6,7 @@ extern crate erhino_kernel;
 use core::fmt::{Arguments, Result, Write};
 
 use alloc::borrow::ToOwned;
-use erhino_kernel::{board::BoardInfo, init};
+use erhino_kernel::{board::BoardInfo, init, println, env};
 
 fn main() {
     // prepare BoardInfo
@@ -15,6 +15,10 @@ fn main() {
         mtimecmp_addr: 0x0200_4000,
     };
     init(info);
+    let dtb_addr = env::args()[1] as usize;
+    let tree = dtb_parser::device_tree::DeviceTree::from_address(dtb_addr).unwrap();
+    todo!("find clint base and store into BoardInfo");
+    
 }
 
 #[export_name = "write_out"]

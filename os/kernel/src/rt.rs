@@ -1,5 +1,5 @@
 use alloc::{format, string::String};
-use core::{arch::asm, fmt::Arguments, panic::PanicInfo};
+use core::{arch::asm, panic::PanicInfo};
 use erhino_shared::process::Termination;
 use riscv::register::misa;
 
@@ -7,9 +7,7 @@ use crate::{mm, pmp, print, println, trap};
 
 #[lang = "start"]
 fn rust_start<T: Termination + 'static>(
-    main: fn() -> T,
-    _argc: isize,
-    _argv: *const *const u8,
+    main: fn() -> T
 ) -> isize {
     unsafe {
         board_init();
@@ -72,31 +70,4 @@ fn handle_panic(info: &PanicInfo) -> ! {
 extern "Rust" {
     #[linkage = "extern_weak"]
     pub fn board_init();
-    #[linkage = "extern_weak"]
-    pub fn write_out(args: Arguments);
-}
-
-#[macro_export]
-macro_rules! print
-{
-	($($arg:tt)*) => {{
-        unsafe {$crate::rt::write_out(format_args!($($arg)*));}
-    }};
-}
-
-#[macro_export]
-macro_rules! println
-{
-	() => ({
-        use $crate::print;
-		print!("\r\n")
-	});
-	($fmt:expr) => ({
-        use $crate::print;
-		print!(concat!($fmt, "\r\n"))
-	});
-	($fmt:expr, $($args:tt)+) => ({
-        use $crate::print;
-		print!(concat!($fmt, "\r\n"), $($args)+)
-	});
 }

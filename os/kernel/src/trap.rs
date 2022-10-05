@@ -16,9 +16,9 @@ pub fn init() {
 }
 
 #[no_mangle]
-fn handle_trap(cause: Mcause, _frame: &mut TrapFrame) {
+fn handle_trap(hartid: usize, cause: Mcause, _frame: &mut TrapFrame) {
     match cause.cause() {
-        _ => panic!("unknown trap cause: {}", cause.bits()),
+        _ => panic!("unknown trap cause at hart #{}: {}", hartid, cause.bits()),
     }
 }
 
