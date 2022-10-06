@@ -1,15 +1,20 @@
 use core::fmt::Display;
 
-use riscv::register::mcause::{Exception, Interrupt, Mcause, Trap};
+use riscv::register::{mcause::{Exception, Interrupt, Mcause, Trap}, mhartid};
+
+use crate::{
+    println,
+    sync::{hart::HartLock, Lock},
+};
 
 // 内核陷入帧只会在第一个陷入时用到，之后大概率用不到，所以第一个陷入帧应该分配在一个垃圾堆(_memory_end - 4096)或者栈上
 // 这么做是为了避免多核同时写入，但寻思了一下，根本不会去读，那多核写就写呗，写坏了也无所谓
 // 那么！就这么决定了，这个内核陷入帧是只写的！也就是它是所谓的垃圾堆！
 #[export_name = "_kernel_trap"]
-static KERNEL_TRAP: TrapFrame = TrapFrame::zero();
+static KERNEL_TRAP: TrapFrame = TrapFrame::new();
 
 #[no_mangle]
-fn handle_trap(hartid: usize, cause: Mcause, frame: &mut TrapFrame) {
+unsafe fn handle_trap(hartid: usize, cause: Mcause, frame: &mut TrapFrame) {
     match cause.cause() {
         Trap::Interrupt(Interrupt::MachineSoft) => {
             panic!("Machine Soft Interrupt at hart#{}", hartid);
@@ -43,7 +48,7 @@ pub struct TrapFrame {
 }
 
 impl TrapFrame {
-    pub const fn zero() -> Self {
+    pub const fn new() -> Self {
         Self {
             x: [0; 32],
             f: [0; 32],

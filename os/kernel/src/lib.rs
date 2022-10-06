@@ -1,7 +1,8 @@
 #![feature(lang_items, alloc_error_handler, panic_info_message, linkage)]
 #![no_std]
+#![allow(dead_code)]
 
-use core::arch::{asm, global_asm};
+use core::arch::global_asm;
 
 use board::BoardInfo;
 pub use erhino_shared::*;
@@ -21,7 +22,7 @@ mod pmp;
 mod process;
 mod rt;
 mod schedule;
-mod sync;
+pub mod sync;
 mod trap;
 
 global_asm!(include_str!("assembly.asm"));

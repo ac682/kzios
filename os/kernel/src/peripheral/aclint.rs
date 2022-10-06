@@ -1,5 +1,3 @@
-use crate::println;
-
 pub struct Aclint {
     mswi_address: usize,
     mtimer_address: usize,

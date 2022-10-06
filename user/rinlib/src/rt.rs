@@ -2,6 +2,7 @@ use core::{alloc::Layout, panic::PanicInfo};
 
 use buddy_system_allocator::{LockedHeapWithRescue, Heap};
 
+#[allow(unused)]
 const INITIAL_HEAP_SIZE: usize = 1 * 0x1000;
 const HEAP_ORDER: usize = 64;
 

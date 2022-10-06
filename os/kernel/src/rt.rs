@@ -3,7 +3,7 @@ use core::{arch::asm, panic::PanicInfo};
 use erhino_shared::process::Termination;
 use riscv::register::misa;
 
-use crate::{mm, pmp, print, println, trap};
+use crate::{mm, pmp, print, println, console};
 
 #[lang = "start"]
 fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize) -> isize {
@@ -40,7 +40,7 @@ fn print_isa() {
     let bits = isa.bits() & 0x3FF_FFFF;
     for i in 0..26 {
         if (bits >> i) & 1 == 1 {
-            isa_str.push(('A' as u8 + i) as char);
+            isa_str.push((b'A' + i) as char);
         }
     }
     println!("ISA: {}", isa_str);

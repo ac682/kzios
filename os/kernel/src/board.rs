@@ -10,6 +10,8 @@ pub struct BoardInfo {
 
 impl Display for BoardInfo {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "Board: {}", self.name)
+        write!(f, "{} {{ ", self.name)?;
+        write!(f, "mswi={:#x}, mtimer={:#x}", self.mswi_address, self.mtimer_address)?;
+        write!(f, " }}")
     }
 }

@@ -1,5 +1,4 @@
 use core::{
-    cell::UnsafeCell,
     ops::{Deref, DerefMut},
 };
 
@@ -36,8 +35,8 @@ impl<T> OptimisticLock<T> {
 
 unsafe impl<T> Sync for OptimisticLock<T> {}
 
-impl<T> Lock<T, OptimisticLockGuard<T>> for OptimisticLock<T> {
-    fn lock(&self) -> OptimisticLockGuard<T> {
+impl<'a, T> Lock<'a, T, OptimisticLockGuard<T>> for OptimisticLock<T> {
+    fn lock(&mut self) -> OptimisticLockGuard<T> {
         OptimisticLockGuard {
             data: self.data.as_mut_ptr(),
         }

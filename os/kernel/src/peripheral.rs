@@ -10,12 +10,12 @@ use crate::{
 pub mod aclint;
 pub mod plic;
 
-static ACLINT: OptimisticLock<Aclint> = OptimisticLock::empty();
+static mut ACLINT: OptimisticLock<Aclint> = OptimisticLock::empty();
 
 pub fn init(info: BoardInfo) {
-    ACLINT.put(Aclint::new(info.mswi_address, info.mtimer_address));
+    unsafe {ACLINT.put(Aclint::new(info.mswi_address, info.mtimer_address))}
 }
 
 pub fn aclint() -> OptimisticLockGuard<Aclint> {
-    ACLINT.lock()
+    unsafe {ACLINT.lock()}
 }

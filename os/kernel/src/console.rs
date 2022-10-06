@@ -9,7 +9,9 @@ extern "Rust" {
 macro_rules! print
 {
 	($($arg:tt)*) => {{
-        unsafe {$crate::console::board_write(format_args!($($arg)*));}
+        unsafe {
+			$crate::console::board_write(format_args!($($arg)*));
+		}
     }};
 }
 
