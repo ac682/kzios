@@ -6,29 +6,30 @@ extern crate erhino_kernel;
 use core::fmt::{Arguments, Result, Write};
 
 use alloc::borrow::ToOwned;
-use dtb_parser::{traits::HasNamedProperty, prop::PropertyValue};
-use erhino_kernel::{board::BoardInfo, init, println, env};
+use dtb_parser::{prop::PropertyValue, traits::HasNamedProperty};
+use erhino_kernel::{board::BoardInfo, env, init};
 
 fn main() {
     // prepare BoardInfo
-    let info = BoardInfo {
-        name: "qemu".to_owned(),
-        mtimecmp_addr: 0x0200_4000,
-    };
-    init(info);
     let dtb_addr = env::args()[1] as usize;
     let tree = dtb_parser::device_tree::DeviceTree::from_address(dtb_addr).unwrap();
-    let mut clint_base = 0u64;
-    for node in tree.into_iter(){
-        if node.name().starts_with("clint"){
-            if let Some(prop) = node.find_prop("reg"){
-                if let PropertyValue::Address(address, _size) = prop.value(){
-                    clint_base = *address;
+    //println!("{}", tree);
+    let mut clint_base = 0usize;
+    for node in tree.into_iter() {
+        if node.name().starts_with("clint") {
+            if let Some(prop) = node.find_prop("reg") {
+                if let PropertyValue::Address(address, _size) = prop.value() {
+                    clint_base = *address as usize;
                 }
             }
         }
     }
-    println!("Got clint address but not knowing how to use it: {:#x}", clint_base);
+    let info = BoardInfo {
+        name: "qemu".to_owned(),
+        mswi_address: clint_base,
+        mtimer_address: clint_base + 0x0000_4000,
+    };
+    init(info);
 }
 
 #[export_name = "board_write"]

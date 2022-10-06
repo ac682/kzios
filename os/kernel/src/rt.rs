@@ -6,24 +6,23 @@ use riscv::register::misa;
 use crate::{mm, pmp, print, println, trap};
 
 #[lang = "start"]
-fn rust_start<T: Termination + 'static>(
-    main: fn() -> T
-) -> isize {
+fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize) -> isize {
+    // boot stage #0: enter rust environment
+    // boot stage #1: hart(core & trap context) initialization
+    // 👆 both done in _start@assembly.asm
+    if hartid != 0 {
+        park();
+    }
+    // boot stage #2: board(memory & peripheral) initialization
     unsafe {
         board_init();
     }
     pmp::init();
     mm::init();
-    trap::init();
-    println!("boot stage #2: board initialization");
     print_isa();
     main();
-    println!("unreachable here");
-    unsafe {
-        loop {
-            asm!("wfi");
-        }
-    }
+    panic!("unreachable here");
+    // do board clean
 }
 
 fn print_isa() {
@@ -60,6 +59,10 @@ fn handle_panic(info: &PanicInfo) -> ! {
     } else {
         println!("no information available.");
     }
+    park();
+}
+
+pub fn park() -> !{
     unsafe {
         loop {
             asm!("wfi");

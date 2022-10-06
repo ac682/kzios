@@ -1,5 +1,4 @@
 use buddy_system_allocator::LockedFrameAllocator;
-use lazy_static::lazy_static;
 
 use crate::external::{_kernel_end, _memory_end};
 

@@ -1,7 +1,8 @@
 MODE := "debug"
 RELEASE := if MODE == "release" { "--release" } else { "" }
 BOARD := "qemu"
-RUSTFLAGS_OS := "-Clink-arg=-T"+invocation_directory()+"/os/boards"/BOARD/"linker.ld"
+RUSTFLAGS_OS := "-Clink-arg=-T"+invocation_directory()+"/os/boards"/BOARD/"linker.ld -Clinker=riscv64-elf-ld"
+# its better to use -Clinker=riscv64-elf-ld as linker in user app which was set to rust-lld in target json
 RUSTFLAGS_USER := ""
 TARGET_OS := "riscv64gc-unknown-none-elf"
 TARGET_USER := "riscv64gc-unknown-erhino-elf"

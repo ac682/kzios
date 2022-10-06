@@ -4,7 +4,8 @@ use alloc::string::String;
 
 pub struct BoardInfo {
     pub name: String,
-    pub mtimecmp_addr: usize,
+    pub mswi_address: usize,
+    pub mtimer_address: usize,
 }
 
 impl Display for BoardInfo {

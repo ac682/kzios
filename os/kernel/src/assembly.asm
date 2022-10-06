@@ -15,14 +15,22 @@
 .macro load_fp i, basereg=t6
 	fld	f\i, ((NUM_REGS+(\i))*REG_SIZE)(\basereg)
 .endm
+# calculate sp pointer, sp = _kernel_end - _stack_size * mhartid
+.macro locate_sp out=t0, tmp=t1 
+    csrr    \tmp, mhartid
+    la      \out, _stack_size
+    mul    \tmp, \tmp, \out
+    la      \out, _kernel_end
+    sub    \out, \out, \tmp
+.endm
 
 .section .text.init
 .global _start
 _start:
-    csrr	t0, mhartid
+    csrr    t0, mhartid
 	bnez	t0, 3f
     csrw    satp, zero
-    la      sp, _kernel_end
+0:
     la 		t1, _bss_start
 	la		t2, _bss_end
 	bgeu	t1, t2, 2f
@@ -31,33 +39,48 @@ _start:
 	addi	t1, t1, 8
 	bltu	t1, t2, 1b
 2:
-    li		t0, (0b11 << 11) | (1 << 7) | (1 << 3)
-    csrw	mstatus, t0
     # store args passed from the board bootloader
     la      t1, _env
     sd      a0, 0(t1)
     sd      a1, 8(t1)
+    sd      a2, 16(t1)
     sd      a3, 24(t1)
     sd      a4, 32(t1)
     sd      a5, 40(t1)
     sd      a6, 48(t1)
     sd      a7, 56(t1)
+3:
+    # do hart preinitialization & setup trap context
+    # enable interrupt
+    li		t0, (0b11 << 11) | (1 << 7) | (1 << 3)
+    csrw	mstatus, t0
+    li      t0, (1 << 3)
+    csrw    mie, t0
+    # setup trap
+    la      t1, _kernel_trap
+    csrw    mscratch, t1
+    la      t1, _trap_vector
+    csrw    mtvec, t1
+    # main function
+    locate_sp
+    mv      sp, t0
     la      t1, main
     csrw    mepc, t1
+    csrr    a0, mhartid
     mret
-3:
+4:
 	wfi
-	j	3b
+	j	4b
 
 .section .text
 .global _trap_vector
 _trap_vector:
     csrrw	t6, mscratch, t6
 
-    .set	i,0
-    .rept	NUM_REGS-1
-            save_gp	%i,t6
-            .set	i,i+1
+    .set	i, 0
+    .rept	NUM_REGS - 1
+            save_gp	%i, t6
+            .set	i, i + 1
     .endr
 
     mv		t5, t6
@@ -83,7 +106,8 @@ _trap_vector:
     csrr    a0, mhartid
     csrr	a1, mcause
     csrr    a2, mscratch
-    la      sp, _kernel_end
+    locate_sp
+    mv      sp, t0
     call    handle_trap
 
 .section .text
@@ -107,10 +131,10 @@ _switch_to_user:
     # 		.set	i,i+1
     # .endr
 
-    .set	i,0
+    .set	i , 0
     .rept	NUM_REGS
         load_gp	%i
-        .set	i,i+1
+        .set	i, i + 1
     .endr
     sfence.vma
 _enter_user_breakpoint:

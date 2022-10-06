@@ -1,6 +1,6 @@
 use core::fmt::Arguments;
 
-extern "Rust"{
+extern "Rust" {
     #[linkage = "extern_weak"]
     pub fn board_write(args: Arguments);
 }

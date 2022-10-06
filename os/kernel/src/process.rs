@@ -1,5 +1,5 @@
 use alloc::{string::String, vec::Vec};
-use erhino_shared::{Pid, process::ProcessState};
+use erhino_shared::{process::ProcessState, Pid};
 
 use crate::trap::TrapFrame;
 
@@ -8,10 +8,10 @@ pub struct Process {
     pid: Pid,
     parent: Pid,
     trap: TrapFrame,
-    state: ProcessState
+    state: ProcessState,
 }
 
-pub struct ProcessTable{
+pub struct ProcessTable {
     inner: Vec<Process>,
-    current: usize
+    current: usize,
 }

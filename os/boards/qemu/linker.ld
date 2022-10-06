@@ -7,12 +7,14 @@ MEMORY
 }
 
 HEAP_SIZE = 0xC000;
+STACK_SIZE = 0x4000;
 HART_NUM = 2;
-STACK_SIZE = 0x4000*HART_NUM;
 
 SECTIONS
 {
     PROVIDE(_memory_start = ORIGIN(RAM));
+    PROVIDE(_stack_size = STACK_SIZE);
+    PROVIDE(_hart_num = HART_NUM);
 
     .text : ALIGN(4) {
         *(.text.init)
@@ -41,7 +43,7 @@ SECTIONS
         . = . + HEAP_SIZE;
         . = ALIGN(8);
         PROVIDE(_stack_start = .);
-        . = . + STACK_SIZE;
+        . = . + STACK_SIZE*HART_NUM;
         . = ALIGN(4k); # make kernel 4k aligned
         PROVIDE(_kernel_end = .);
     } > RAM
