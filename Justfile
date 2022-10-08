@@ -1,7 +1,7 @@
 MODE := "debug"
 RELEASE := if MODE == "release" { "--release" } else { "" }
 BOARD := "qemu"
-RUSTFLAGS_OS := "-Clink-arg=-T"+invocation_directory()+"/os/boards"/BOARD/"linker.ld -Clinker=riscv64-elf-ld"
+RUSTFLAGS_OS := "-Clink-arg=-Tboards/linker.ld -Clinker=riscv64-elf-ld"
 # its better to use -Clinker=riscv64-elf-ld as linker in user app which was set to rust-lld in target json
 RUSTFLAGS_USER := ""
 TARGET_OS := "riscv64gc-unknown-none-elf"
@@ -18,23 +18,32 @@ alias r := run
 
 # qemu
 QEMU_CORES := "2"
-QEMU_MEMORY := "6m"
-QEMU_LAUNCH := "qemu-system-riscv64 -smp cores="+QEMU_CORES+" -M "+QEMU_MEMORY+" -machine virt -nographic -bios none -kernel "+OS_BIN
+QEMU_MEMORY := "64m"
+QEMU_LAUNCH := "qemu-system-riscv64 -smp cores="+QEMU_CORES+" -M "+QEMU_MEMORY+" -machine virt -nographic -bios none -kernel "+OS_ELF
 
 artifact_dir:
     #!/usr/bin/env bash
     if [ ! -d "artifacts" ]; then
     	mkdir artifacts
     fi
+    cd artifacts
+    #!/usr/bin/env bash
+    if [ ! -d "initfs" ]; then
+    	mkdir initfs
+    fi
 
 build_user: artifact_dir
-    @cd user && RUSTFLAGS="{{RUSTFLAGS_USER}}" cargo build --bin system_init {{RELEASE}} -Z unstable-options --out-dir {{TARGET_DIR}}
+    @cd user && RUSTFLAGS="{{RUSTFLAGS_USER}}" cargo build --bin user_init {{RELEASE}} -Z unstable-options --out-dir "{{TARGET_DIR}}/initfs"
+
+build_initfs: build_user
+    @cd "{{TARGET_DIR}}/initfs" && tar -cf ../initfs.tar *
 
 build_os: artifact_dir
+    @cp "os/boards/{{BOARD}}/memory.ld" "{{TARGET_DIR}}"
     @cd os && RUSTFLAGS="{{RUSTFLAGS_OS}}" cargo build --bin board_{{BOARD}} {{RELEASE}} -Z unstable-options --out-dir {{TARGET_DIR}}
     @rust-objcopy --strip-all {{OS_ELF}} -O binary {{OS_BIN}} 
 
-build: build_os build_user
+build: build_initfs build_os
     @echo -e "\033[0;32mBuild Successfully!\033[0m"
 
 run_qemu EXPOSE="-s -S": build
@@ -54,7 +63,7 @@ clean:
     cd ../user && cargo clean
     cd ..
     echo Removing artifacts...
-    if [ -d "artfacts" ]; then
-        rm -r artifacts
+    if [ -d "artifacts" ]; then
+        rm -r "artifacts"
     fi
     echo -e "\033[0;35mDone!\033[0m"

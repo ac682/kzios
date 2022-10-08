@@ -1,5 +1,5 @@
 [package]
-name = "system_init"
+name = "user_init"
 version = "0.1.0"
 authors = [ "Chien Zhang (zqy0224@live.com)"]
 description = "Preinstalled init process"

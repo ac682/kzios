@@ -3,7 +3,9 @@ use core::{arch::asm, panic::PanicInfo};
 use erhino_shared::process::Termination;
 use riscv::register::misa;
 
-use crate::{mm, pmp, print, println, console};
+use crate::{mm, pmp, print, println};
+
+const LOGO: &str = include_str!("../logo.txt");
 
 #[lang = "start"]
 fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize) -> isize {
@@ -19,6 +21,7 @@ fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize) -> isize
     }
     pmp::init();
     mm::init();
+    println!("{}\nis still booting", LOGO);
     print_isa();
     main();
     panic!("unreachable here");
@@ -62,7 +65,7 @@ fn handle_panic(info: &PanicInfo) -> ! {
     park();
 }
 
-pub fn park() -> !{
+pub fn park() -> ! {
     unsafe {
         loop {
             asm!("wfi");

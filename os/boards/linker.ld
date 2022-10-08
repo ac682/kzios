@@ -1,14 +1,7 @@
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
 
-MEMORY
-{
-    RAM (rwx) : ORIGIN = 0x80000000, LENGTH = 6M
-}
-
-HEAP_SIZE = 0xC000;
-STACK_SIZE = 0x4000;
-HART_NUM = 2;
+INCLUDE "../artifacts/memory.ld"
 
 SECTIONS
 {
@@ -25,8 +18,8 @@ SECTIONS
         *(.rodata)
     } > RAM
 
-    . = ALIGN(4);
-    .data : {
+
+    .data : ALIGN(4) {
         *(.data)
     } > RAM
 
@@ -44,9 +37,11 @@ SECTIONS
         . = ALIGN(8);
         PROVIDE(_stack_start = .);
         . = . + STACK_SIZE*HART_NUM;
-        . = ALIGN(4k); # make kernel 4k aligned
-        PROVIDE(_kernel_end = .);
     } > RAM
     
+    . = ALIGN(4k) - 1; # make kernel 4k aligned
+    PROVIDE(_kernel_end = .);
+
+
     PROVIDE(_memory_end = ORIGIN(RAM) + LENGTH(RAM));
 }

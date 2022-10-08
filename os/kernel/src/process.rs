@@ -1,36 +1,38 @@
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use erhino_shared::{process::ProcessState, Pid, Address};
 
-use crate::trap::TrapFrame;
+use crate::{trap::TrapFrame, mm::unit::MemoryUnit};
 
-pub struct Process {
+pub struct Process<'root> {
     name: String,
     pid: Pid,
     parent: Pid,
     entry_point: Address,
+    memory: MemoryUnit<'root>,
     trap: TrapFrame,
     state: ProcessState,
 }
 
-pub struct ProcessTable {
-    inner: Vec<Process>,
+pub struct ProcessTable<'root> {
+    inner: Vec<Process<'root>>,
     current: usize,
 }
 
-impl Process {
-    pub fn from_fn<F: Fn()>(func: F) -> Self {
+impl<'root> Process<'root> {
+    pub fn from_bytes<F: Fn()>(data: &[u8]) -> Self {
         Self {
             name: "any".to_owned(),
             pid: 0,
             parent: 0,
-            entry_point: &func as *const F as Address,
+            entry_point: 0,
+            memory: MemoryUnit::new(),
             trap: TrapFrame::new(),
             state: ProcessState::Ready,
         }
     }
 }
 
-impl ProcessTable {
+impl<'root> ProcessTable<'root> {
     pub const fn new() -> Self {
         Self {
             inner: Vec::new(),

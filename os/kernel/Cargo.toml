@@ -14,3 +14,5 @@ spin = "0.9"
 lazy_static = { version = "1.4", features = ["spin_no_std"]}
 buddy_system_allocator = { version = "0.8", default-features = false, features = ["const_fn", "use_spin"] }
 embedded-hal = "0.2"
+tar-no-std = "0.1"
+flagset = "0.4"

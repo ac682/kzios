@@ -3,11 +3,14 @@
 extern crate alloc;
 extern crate erhino_kernel;
 
-use core::fmt::{Arguments, Result, Write};
+use core::{
+    arch::global_asm,
+    fmt::{Arguments, Result, Write},
+};
 
 use alloc::borrow::ToOwned;
 use dtb_parser::{prop::PropertyValue, traits::HasNamedProperty};
-use erhino_kernel::{board::BoardInfo, env, init};
+use erhino_kernel::{board::BoardInfo, env, init, println};
 
 fn main() {
     // prepare BoardInfo
