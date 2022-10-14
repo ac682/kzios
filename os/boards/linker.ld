@@ -38,7 +38,8 @@ SECTIONS
         PROVIDE(_stack_start = .);
         . = . + STACK_SIZE*HART_NUM;
     } > RAM
-    
+
+
     . = ALIGN(4k) - 1; # make kernel 4k aligned
     PROVIDE(_kernel_end = .);
 

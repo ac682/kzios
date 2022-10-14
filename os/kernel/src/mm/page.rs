@@ -41,7 +41,7 @@ impl PageLevel {
         }
     }
 
-    pub fn extract(&self, page_number: PageNumber) -> usize{
+    pub fn extract(&self, page_number: PageNumber) -> usize {
         ((page_number >> (9 * self.value())) & 0x1ff) as usize
     }
 }

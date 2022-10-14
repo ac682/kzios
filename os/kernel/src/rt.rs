@@ -3,24 +3,23 @@ use core::{arch::asm, panic::PanicInfo};
 use erhino_shared::process::Termination;
 use riscv::register::misa;
 
-use crate::{mm, pmp, print, println};
+use crate::{mm, peripheral, pmp, print, println, proc::pm};
 
 const LOGO: &str = include_str!("../logo.txt");
 
+// only #0 goes here, others only called in trap context
 #[lang = "start"]
 fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize) -> isize {
     // boot stage #0: enter rust environment
     // boot stage #1: hart(core & trap context) initialization
     // 👆 both done in _start@assembly.asm
-    if hartid != 0 {
-        park();
-    }
     // boot stage #2: board(memory & peripheral) initialization
     unsafe {
         board_init();
     }
     pmp::init();
     mm::init();
+    pm::init();
     println!("{}\nis still booting", LOGO);
     print_isa();
     main();

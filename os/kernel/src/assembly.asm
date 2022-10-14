@@ -61,8 +61,11 @@ _start:
     csrw    mscratch, t1
     la      t1, _trap_vector
     csrw    mtvec, t1
-    # main function
+    # park non-zero and #0 jumps into main for kernel initialization 
+    csrr    t0, mhartid
+	bnez	t0, 4f
     locate_sp
+    # main function
     mv      sp, t0
     la      t1, main
     csrw    mepc, t1

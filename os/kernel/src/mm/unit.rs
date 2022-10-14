@@ -3,7 +3,10 @@ use core::f32::consts::E;
 use erhino_shared::PageNumber;
 use flagset::FlagSet;
 
-use super::page::{PageTable, PageTableEntryFlag, PageTableError, PageLevel};
+use super::{
+    frame::frame_alloc,
+    page::{PageLevel, PageTable, PageTableEntryFlag, PageTableError},
+};
 
 pub struct MemoryUnit<'root> {
     root: PageTable<'root>,
@@ -11,9 +14,10 @@ pub struct MemoryUnit<'root> {
 
 impl<'root> MemoryUnit<'root> {
     pub fn new() -> Self {
-        Self { root: PageTable::new(1, PageLevel::Giga) }
+        Self {
+            root: PageTable::new(frame_alloc(1).unwrap() as u64, PageLevel::Giga),
+        }
     }
-
 
     pub fn map<F: Into<FlagSet<PageTableEntryFlag>>>(
         &'root mut self,

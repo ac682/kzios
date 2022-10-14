@@ -1,19 +1,16 @@
 use core::{
     ops::{Deref, DerefMut},
-    sync::atomic::{AtomicBool, AtomicU64, Ordering},
+    sync::atomic::{AtomicU64, Ordering},
 };
 
-use riscv::{
-    asm::{delay, nop},
-    register::mhartid,
-};
+use riscv::{asm::nop, register::mhartid};
 use spin::Once;
 
 use super::Lock;
 
 /// 和 [spin::mutex::Spin] 差不多是同一个东西，功能和效果却完全相同
 /// 前者对于能对于任何线程实现锁的效果，而这个在同一个 hart 时能跳过自旋直接获得锁。由于本内核没有内核线程*，所以不存在一个 hart 在没释放锁时又去获得锁的情况，故两者等价。
-/// 
+///
 /// *内核代码执行全部位于陷入上下文中且不可打断，内核的多个引导过程都由引导核完成，也不存在并发
 pub struct HartLock<T: Sized> {
     data: Once<T>,

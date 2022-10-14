@@ -10,3 +10,4 @@ edition = "2021"
 [dependencies]
 erhino_kernel = {path = "../../kernel"}
 dtb_parser = "0.1"
+tar-no-std = "0.1"

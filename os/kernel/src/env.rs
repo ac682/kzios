@@ -1,7 +1,5 @@
 #[export_name = "_env"]
-static ENVIRONMENT: Environment = Environment {
-    boot_args: [0; 8],
-};
+static ENVIRONMENT: Environment = Environment { boot_args: [0; 8] };
 
 #[repr(C)]
 pub struct Environment {

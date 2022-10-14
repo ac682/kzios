@@ -1,6 +1,9 @@
 use core::fmt::Display;
 
-use riscv::register::{mcause::{Exception, Interrupt, Mcause, Trap}, mhartid};
+use riscv::register::{
+    mcause::{Exception, Interrupt, Mcause, Trap},
+    mhartid,
+};
 
 use crate::{
     println,

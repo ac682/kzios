@@ -10,7 +10,12 @@ use core::{
 
 use alloc::borrow::ToOwned;
 use dtb_parser::{prop::PropertyValue, traits::HasNamedProperty};
-use erhino_kernel::{board::BoardInfo, env, init, println};
+use erhino_kernel::{board::BoardInfo, env, kernel_init, kernel_main, println, proc::Process};
+use tar_no_std::TarArchiveRef;
+
+// 测试用，日后 initfs 应该由 board crate 提供
+// board crate 会在 artifacts 里选择部分包括驱动添加到 initfs 里
+const INITFS: &[u8] = include_bytes!("../../../../artifacts/initfs.tar");
 
 fn main() {
     // prepare BoardInfo
@@ -32,7 +37,15 @@ fn main() {
         mswi_address: clint_base,
         mtimer_address: clint_base + 0x0000_4000,
     };
-    init(info);
+    kernel_init(info);
+    // add processes to scheduler
+    let archive = TarArchiveRef::new(INITFS);
+    let user_init = archive
+        .entries()
+        .find(|f| f.filename().as_str() == "user_init")
+        .unwrap();
+    let process = Process::from_bytes(user_init.data());
+    kernel_main();
 }
 
 #[export_name = "board_write"]

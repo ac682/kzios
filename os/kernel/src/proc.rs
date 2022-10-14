@@ -1,7 +1,11 @@
-use alloc::{borrow::ToOwned, string::String, vec::Vec};
-use erhino_shared::{process::ProcessState, Pid, Address};
+pub(crate) mod pm;
+pub(crate) mod sch;
 
-use crate::{trap::TrapFrame, mm::unit::MemoryUnit};
+use alloc::{borrow::ToOwned, string::String, vec::Vec};
+use elf_rs::Elf;
+use erhino_shared::{process::ProcessState, Address, Pid};
+
+use crate::{mm::unit::MemoryUnit, trap::TrapFrame};
 
 pub struct Process<'root> {
     name: String,
@@ -19,7 +23,9 @@ pub struct ProcessTable<'root> {
 }
 
 impl<'root> Process<'root> {
-    pub fn from_bytes<F: Fn()>(data: &[u8]) -> Self {
+    pub fn from_bytes(data: &[u8]) -> Self {
+        let elf = Elf::from_bytes(data);
+
         Self {
             name: "any".to_owned(),
             pid: 0,
