@@ -7,13 +7,14 @@ pub struct PageTable<'pt> {
     held_entries: &'pt mut [PageTableEntry; 512],
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum PageLevel {
     Kilo,
     Mega,
     Giga,
 }
 
+#[derive(Debug)]
 pub enum PageTableError {
     EntryNotFound,
     EntryDefinitionConflicts,
@@ -41,8 +42,28 @@ impl PageLevel {
         }
     }
 
+    pub fn next_level(&self) -> Option<PageLevel> {
+        match self {
+            PageLevel::Giga => Some(PageLevel::Mega),
+            PageLevel::Mega => Some(PageLevel::Kilo),
+            PageLevel::Kilo => None,
+        }
+    }
+
+    pub fn floor(&self, page_number: PageNumber) -> PageNumber {
+        page_number >> (9 * self.value()) << (9 * self.value())
+    }
+
+    pub fn ceil(&self, page_number: PageNumber) -> PageNumber {
+        (page_number >> (9 * self.value()) << (9 * self.value())) + self.size() as PageNumber
+    }
+
+    pub fn measure(&self, page_count: usize) -> usize {
+        page_count >> (9 * self.value())
+    }
+
     pub fn extract(&self, page_number: PageNumber) -> usize {
-        ((page_number >> (9 * self.value())) & 0x1ff) as usize
+        (page_number >> (9 * self.value())) as usize
     }
 }
 
@@ -61,7 +82,7 @@ impl<'pt> PageTable<'pt> {
         page_number & mask == 0
     }
 
-    pub fn page_number(&self) -> PageNumber {
+    pub fn location(&self) -> PageNumber {
         self.root
     }
 
@@ -125,6 +146,15 @@ impl PageTableEntry {
     ) {
         let val = ppn << 10 | ((rsw & 0b11) << 8) as u64 | flags.into().bits();
         self.write(val);
+    }
+
+    pub fn set_as_page_table(&mut self, table_root: PageNumber, level: PageLevel) -> PageTable{
+        self.set(table_root, 0, PageTableEntryFlag::Valid);
+        PageTable::new(table_root, level)
+    }
+
+    pub fn as_page_table(&self, level: PageLevel) -> PageTable{
+        PageTable::new(self.physical_page_number(), level)
     }
 
     pub fn physical_page_number(&self) -> PageNumber {

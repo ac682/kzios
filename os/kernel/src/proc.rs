@@ -2,10 +2,17 @@ pub(crate) mod pm;
 pub(crate) mod sch;
 
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
-use elf_rs::Elf;
+use elf_rs::{Elf, ElfFile, Error, ProgramHeaderFlags, ProgramType};
 use erhino_shared::{process::ProcessState, Address, Pid};
+use flagset::FlagSet;
 
-use crate::{mm::unit::MemoryUnit, trap::TrapFrame};
+use crate::{
+    mm::{
+        page::{PageLevel, PageTableEntryFlag},
+        unit::MemoryUnit,
+    },
+    trap::TrapFrame,
+};
 
 pub struct Process<'root> {
     name: String,
@@ -23,10 +30,9 @@ pub struct ProcessTable<'root> {
 }
 
 impl<'root> Process<'root> {
-    pub fn from_bytes(data: &[u8]) -> Self {
-        let elf = Elf::from_bytes(data);
-
-        Self {
+    pub fn from_bytes(data: &[u8]) -> Result<Self, Error> {
+        let elf = Elf::from_bytes(data)?;
+        let mut process = Self {
             name: "any".to_owned(),
             pid: 0,
             parent: 0,
@@ -34,8 +40,49 @@ impl<'root> Process<'root> {
             memory: MemoryUnit::new(),
             trap: TrapFrame::new(),
             state: ProcessState::Ready,
+        };
+
+        process
+            .memory
+            .map(
+                0x0,
+                0x0,
+                // 1 G 2 M 3K
+                0,
+                PageLevel::Giga,
+                PageTableEntryFlag::Valid,
+            )
+            .unwrap();
+
+        for ph in elf.program_header_iter() {
+            if ph.ph_type() == ProgramType::LOAD {
+                process.memory.write(
+                    ph.vaddr(),
+                    ph.content(),
+                    ph.memsz() as usize,
+                    flags_to_permission(ph.flags()),
+                );
+            }
         }
+        Ok(process)
     }
+}
+
+fn flags_to_permission(
+    flags: ProgramHeaderFlags,
+) -> impl Into<FlagSet<PageTableEntryFlag>> + Clone {
+    let mut perm = PageTableEntryFlag::Valid | PageTableEntryFlag::User;
+    let bits = flags.bits();
+    if bits & 0b1 == 1 {
+        perm |= PageTableEntryFlag::Executable;
+    }
+    if bits & 0b10 == 0b10 {
+        perm |= PageTableEntryFlag::Writeable;
+    }
+    if bits & 0b100 == 0b100 {
+        perm |= PageTableEntryFlag::Readable;
+    }
+    perm
 }
 
 impl<'root> ProcessTable<'root> {

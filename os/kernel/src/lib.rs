@@ -1,6 +1,7 @@
 #![feature(lang_items, alloc_error_handler, panic_info_message, linkage)]
 #![no_std]
 #![allow(dead_code)]
+#![allow(unused)]
 
 use core::arch::global_asm;
 
