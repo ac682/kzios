@@ -63,7 +63,11 @@ impl PageLevel {
     }
 
     pub fn extract(&self, page_number: PageNumber) -> usize {
-        (page_number >> (9 * self.value())) as usize
+        ((page_number >> (9 * self.value())) & 0x1ff) as usize
+    }
+
+    pub fn shift(&self, index: PageNumber) -> PageNumber {
+        index << (9 * self.value())
     }
 }
 
@@ -90,7 +94,7 @@ impl<'pt> PageTable<'pt> {
         self.level
     }
 
-    pub fn entry(&'pt self, index: usize) -> Option<&'pt PageTableEntry> {
+    pub fn entry(&self, index: usize) -> Option<&PageTableEntry> {
         if index >= 512 {
             None
         } else {
@@ -98,7 +102,7 @@ impl<'pt> PageTable<'pt> {
         }
     }
 
-    pub fn entry_mut(&'pt mut self, index: usize) -> Option<&mut PageTableEntry> {
+    pub fn entry_mut(&mut self, index: usize) -> Option<&mut PageTableEntry> {
         if index >= 512 {
             None
         } else {
@@ -148,12 +152,12 @@ impl PageTableEntry {
         self.write(val);
     }
 
-    pub fn set_as_page_table(&mut self, table_root: PageNumber, level: PageLevel) -> PageTable{
+    pub fn set_as_page_table(&mut self, table_root: PageNumber, level: PageLevel) -> PageTable {
         self.set(table_root, 0, PageTableEntryFlag::Valid);
         PageTable::new(table_root, level)
     }
 
-    pub fn as_page_table(&self, level: PageLevel) -> PageTable{
+    pub fn as_page_table(&self, level: PageLevel) -> PageTable {
         PageTable::new(self.physical_page_number(), level)
     }
 

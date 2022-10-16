@@ -12,6 +12,12 @@ pub struct MemoryUnit<'root> {
     root: PageTable<'root>,
 }
 
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum MemoryUnitError {
+    PageNumberOutOfBound,
+    RanOutOfFrames,
+}
+
 impl<'root> MemoryUnit<'root> {
     pub fn new() -> Self {
         Self {
@@ -19,19 +25,18 @@ impl<'root> MemoryUnit<'root> {
         }
     }
 
-    pub fn map<'a: 'root, F: Into<FlagSet<PageTableEntryFlag>> + Copy>(
-        &'a mut self,
+    pub fn map<F: Into<FlagSet<PageTableEntryFlag>> + Copy>(
+        &mut self,
         vpn: PageNumber,
         ppn: PageNumber,
         count: usize,
         max_level: PageLevel,
         flags: F,
-    ) -> Result<(), PageTableError> {
+    ) -> Result<(), MemoryUnitError> {
         // 写法注意 u64 溢出以及运算中不能有(小-大)
         let start = vpn;
         let end = vpn + count as u64;
         if max_level == PageLevel::Kilo {
-            println!("K {:#x}:{} => {:#x}", start, count, ppn);
             for i in 0u64..count as u64 {
                 self.map_one(vpn + i, ppn + i, PageLevel::Kilo, flags)?;
             }
@@ -57,19 +62,14 @@ impl<'root> MemoryUnit<'root> {
                 }
                 if r != l {
                     // l..r 段，这一部分是对齐的
-                    println!(
-                        "{} {:#x}:{} => {:#x}",
-                        match max_level {
-                            PageLevel::Giga => "G",
-                            PageLevel::Mega => "M",
-                            PageLevel::Kilo => "N",
-                        },
-                        l,
-                        max_level.measure((r - l) as usize),
-                        l - start + ppn
-                    );
-                    for i in 0u64..max_level.measure((r - l) as usize) as u64 {
-                        self.map_one(l + i, l - start + ppn + i, max_level, flags)?;
+                    let mid_count = max_level.measure((r - l) as usize) as u64;
+                    for i in 0u64..mid_count {
+                        self.map_one(
+                            l + max_level.shift(i),
+                            l - start + ppn + max_level.shift(i),
+                            max_level,
+                            flags,
+                        )?;
                     }
                 }
                 if l != start {
@@ -88,41 +88,46 @@ impl<'root> MemoryUnit<'root> {
         Ok(())
     }
 
-    pub fn map_one<'pt: 'root, F: Into<FlagSet<PageTableEntryFlag>>>(
-        &'pt  mut self,
+    pub fn map_one<F: Into<FlagSet<PageTableEntryFlag>>>(
+        &mut self,
         vpn: PageNumber,
         ppn: PageNumber,
         level: PageLevel,
         flags: F,
-    ) -> Result<(), PageTableError> {
-        Self::map_one_internal(vpn, ppn, level, flags, level, &mut self.root)
+    ) -> Result<(), MemoryUnitError> {
+        Self::map_one_internal(vpn, ppn, level, flags, PageLevel::Giga, &mut self.root)
     }
 
-    fn map_one_internal<'pt, F: Into<FlagSet<PageTableEntryFlag>>>(
+    fn map_one_internal<F: Into<FlagSet<PageTableEntryFlag>>>(
         vpn: PageNumber,
         ppn: PageNumber,
         target_level: PageLevel,
         flags: F,
         current_level: PageLevel,
-        root: &'pt mut PageTable<'pt>,
-    ) -> Result<(), PageTableError> {
-        if let Some(entry) = root.entry_mut(current_level.extract(vpn)) {
+        root: &mut PageTable,
+    ) -> Result<(), MemoryUnitError> {
+        let index = current_level.extract(vpn);
+        if let Some(entry) = root.entry_mut(index) {
             if target_level == current_level {
                 entry.set(ppn, 0, flags);
                 Ok(())
             } else {
-                let mut table = entry.set_as_page_table(frame_alloc(1).unwrap(), current_level);
-                Self::map_one_internal(
-                    vpn,
-                    ppn,
-                    target_level,
-                    flags,
-                    current_level.next_level().unwrap(),
-                    & mut table,
-                )
+                if let Some(frame) = frame_alloc(1) {
+                    let mut table = entry.set_as_page_table(frame, current_level);
+                    Self::map_one_internal(
+                        vpn,
+                        ppn,
+                        target_level,
+                        flags,
+                        current_level.next_level().unwrap(),
+                        &mut table,
+                    )
+                } else {
+                    Err(MemoryUnitError::RanOutOfFrames)
+                }
             }
         } else {
-            Err(PageTableError::EntryNotFound)
+            Err(MemoryUnitError::PageNumberOutOfBound)
         }
     }
 
@@ -136,7 +141,7 @@ impl<'root> MemoryUnit<'root> {
         //
     }
 
-    pub fn unmap(&'root mut self, vpn: PageNumber) -> Result<(), PageTableError> {
+    pub fn unmap(&'root mut self, vpn: PageNumber) -> Result<(), MemoryUnitError> {
         todo!();
     }
 }

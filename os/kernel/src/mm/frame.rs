@@ -20,13 +20,13 @@ pub fn init() {
 pub fn frame_alloc(count: usize) -> Option<PageNumber> {
     unsafe {
         let mut allocator = FRAME_ALLOCATOR.lock();
-        allocator.alloc(count).map(|x| x as PageNumber)
+        allocator.alloc(count).map(|x| (x >> 12) as PageNumber)
     }
 }
 
 pub fn frame_dealloc(frame: PageNumber, count: usize) {
     unsafe {
         let mut allocator = FRAME_ALLOCATOR.lock();
-        allocator.dealloc(frame as usize, count)
+        allocator.dealloc((frame << 12) as usize, count)
     }
 }

@@ -2,7 +2,7 @@ pub(crate) mod pm;
 pub(crate) mod sch;
 
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
-use elf_rs::{Elf, ElfFile, Error, ProgramHeaderFlags, ProgramType};
+use elf_rs::{Elf, ElfFile, ProgramHeaderFlags, ProgramType};
 use erhino_shared::{process::ProcessState, Address, Pid};
 use flagset::FlagSet;
 
@@ -30,7 +30,7 @@ pub struct ProcessTable<'root> {
 }
 
 impl<'root> Process<'root> {
-    pub fn from_bytes(data: &[u8]) -> Result<Self, Error> {
+    pub fn from_bytes(data: &[u8]) -> Result<Self, elf_rs::Error> {
         let elf = Elf::from_bytes(data)?;
         let mut process = Self {
             name: "any".to_owned(),
@@ -41,18 +41,6 @@ impl<'root> Process<'root> {
             trap: TrapFrame::new(),
             state: ProcessState::Ready,
         };
-
-        process
-            .memory
-            .map(
-                0x0,
-                0x0,
-                // 1 G 2 M 3K
-                0,
-                PageLevel::Giga,
-                PageTableEntryFlag::Valid,
-            )
-            .unwrap();
 
         for ph in elf.program_header_iter() {
             if ph.ph_type() == ProgramType::LOAD {

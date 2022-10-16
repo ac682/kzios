@@ -1,9 +1,9 @@
 /// Predefined system calls
-/// 
+///
 /// Not available for userspace
 /// Using service call instead
 #[repr(u64)]
-pub enum SystemCall{
+pub enum SystemCall {
     // System reserved
     /// Write to board defined output stream
     Write = 0x0,
@@ -34,16 +34,16 @@ pub enum SystemCall{
     // Process memory
     /// Map a range of virtual addresses for the process with kernel served pages
     Map = 0x30,
-    /// discard and tell kernel to reuse a range of virtual addresses mapped before 
+    /// discard and tell kernel to reuse a range of virtual addresses mapped before
     Free = 0x31,
 }
 
 /// Predefined kernel calls (aka trap calls)
-/// 
+///
 /// Not available for userspace
 /// Using service call instead
 #[repr(u64)]
-pub enum KernelCall{
+pub enum KernelCall {
     /// Enter user mode and begin scheduling
-    EnterUserSpace = 0x0
+    EnterUserSpace = 0x0,
 }

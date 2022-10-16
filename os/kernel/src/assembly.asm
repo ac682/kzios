@@ -16,7 +16,7 @@
 	fld	f\i, ((NUM_REGS+(\i))*REG_SIZE)(\basereg)
 .endm
 # calculate sp pointer, sp = _kernel_end - _stack_size * mhartid
-.macro locate_sp out=t0, tmp=t1 
+.macro locate_sp out=sp, tmp=t1 
     csrr    \tmp, mhartid
     la      \out, _stack_size
     mul    \tmp, \tmp, \out
@@ -61,12 +61,11 @@ _start:
     csrw    mscratch, t1
     la      t1, _trap_vector
     csrw    mtvec, t1
+    locate_sp
     # park non-zero and #0 jumps into main for kernel initialization 
     csrr    t0, mhartid
 	bnez	t0, 4f
-    locate_sp
     # main function
-    mv      sp, t0
     la      t1, main
     csrw    mepc, t1
     csrr    a0, mhartid
@@ -110,7 +109,6 @@ _trap_vector:
     csrr	a1, mcause
     csrr    a2, mscratch
     locate_sp
-    mv      sp, t0
     call    handle_trap
 
 .section .text

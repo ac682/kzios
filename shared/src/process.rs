@@ -1,7 +1,7 @@
 use crate::ExitCode;
 
 /// States of process
-pub enum ProcessState{
+pub enum ProcessState {
     /// Can be picked as running process
     Ready,
     /// Code is being executed
@@ -9,7 +9,7 @@ pub enum ProcessState{
     /// Waiting for some signal and need to be waked up
     Sleeping,
     /// Finished, process would be cleaned up and pid put into recycling
-    Dead
+    Dead,
 }
 
 /// Process's main function product
@@ -18,7 +18,7 @@ pub trait Termination {
     fn to_exit_code(self) -> ExitCode;
 }
 
-impl Termination for (){
+impl Termination for () {
     fn to_exit_code(self) -> ExitCode {
         0
     }

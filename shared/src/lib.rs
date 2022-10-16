@@ -2,7 +2,7 @@
 #![warn(missing_docs)]
 
 //! # eRhino shared lib
-//! 
+//!
 //! Predefined types and system calls
 
 /// System calls
