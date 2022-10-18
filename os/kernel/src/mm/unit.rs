@@ -1,4 +1,4 @@
-use erhino_shared::PageNumber;
+use erhino_shared::{Address, PageNumber};
 use flagset::FlagSet;
 
 use crate::println;
@@ -25,6 +25,7 @@ impl<'root> MemoryUnit<'root> {
         }
     }
 
+    // vpn 和 ppn 都得是连续的
     pub fn map<F: Into<FlagSet<PageTableEntryFlag>> + Copy>(
         &mut self,
         vpn: PageNumber,
@@ -131,14 +132,52 @@ impl<'root> MemoryUnit<'root> {
         }
     }
 
-    pub fn write<F: Into<FlagSet<PageTableEntryFlag>>>(
+    pub fn fill<F: Into<FlagSet<PageTableEntryFlag>>>(
         &mut self,
         vpn: PageNumber,
+        count: usize,
+        flags: F,
+    ) {
+        todo!()
+    }
+
+    // 如果对应的页面没有则创建
+    pub fn write<F: Into<FlagSet<PageTableEntryFlag>>>(
+        &mut self,
+        addr: Address,
         data: &[u8],
         count: usize,
         flags: F,
     ) {
-        //
+        todo!()
+    }
+
+    pub fn lookup(&self, addr: Address) -> Option<(PageNumber, PageLevel)> {
+        // 递归查找直到遇到一个 leaf
+        Self::lookup_internal(addr, PageLevel::Giga, &self.root)
+    }
+
+    fn lookup_internal(
+        addr: Address,
+        current_level: PageLevel,
+        root: &PageTable,
+    ) -> Option<(PageNumber, PageLevel)> {
+        let vpn = addr >> 12;
+        let index = current_level.extract(vpn);
+        if let Some(entry) = root.entry(index) {
+            if entry.is_leaf() {
+                Some((entry.physical_page_number(), current_level))
+            } else {
+                if current_level != PageLevel::Kilo {
+                    let next_level = current_level.next_level().unwrap();
+                    Self::lookup_internal(addr, next_level, &entry.as_page_table(next_level))
+                } else {
+                    None
+                }
+            }
+        } else {
+            None
+        }
     }
 
     pub fn unmap(&'root mut self, vpn: PageNumber) -> Result<(), MemoryUnitError> {

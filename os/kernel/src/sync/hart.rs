@@ -6,7 +6,7 @@ use core::{
 use riscv::{asm::nop, register::mhartid};
 use spin::Once;
 
-use super::Lock;
+use super::{Lock, ReadWriteLock};
 
 /// 和 [spin::mutex::Spin] 差不多是同一个东西，功能和效果却完全相同
 /// 前者对于能对于任何线程实现锁的效果，而这个在同一个 hart 时能跳过自旋直接获得锁。由于本内核没有内核线程*，所以不存在一个 hart 在没释放锁时又去获得锁的情况，故两者等价。
@@ -34,6 +34,8 @@ impl<T> HartLock<T> {
         self.data.call_once(|| data);
     }
 }
+
+unsafe impl<T> Sync for HartLock<T>{}
 
 impl<'a, T> Lock<'a, T, HartLockGuard<'a, T>> for HartLock<T> {
     fn lock(&'a mut self) -> HartLockGuard<'a, T> {
@@ -78,5 +80,30 @@ impl<'a, T> Deref for HartLockGuard<'a, T> {
 impl<'a, T> DerefMut for HartLockGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *self.data }
+    }
+}
+
+
+pub struct HartReadWriteLock{
+    
+}
+
+pub struct HartReadLockGuard{
+
+}
+
+pub struct HartWriteLockGuard{
+
+}
+
+impl<'a, T> ReadWriteLock<'a, T, HartReadLockGuard, HartWriteLockGuard> for HartReadWriteLock{
+    fn lock_mut(&'a mut self) -> HartWriteLockGuard {
+        todo!()
+    }
+}
+
+impl<'a, T> Lock<'a, T, HartReadLockGuard> for HartReadWriteLock{
+    fn lock(&'a mut self) -> HartReadLockGuard{
+        todo!()
     }
 }
