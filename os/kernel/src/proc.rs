@@ -9,9 +9,9 @@ use flagset::FlagSet;
 use crate::{
     mm::{
         page::{PageTableEntryFlag},
-        unit::MemoryUnit,
+        unit::MemoryUnit, frame::frame_alloc,
     },
-    trap::TrapFrame,
+    trap::TrapFrame, println,
 };
 use erhino_shared::page::PageLevel;
 
@@ -42,8 +42,8 @@ impl<'root> Process<'root> {
             trap: TrapFrame::new(),
             state: ProcessState::Ready,
         };
-        process.memory.map(0x3ff,0x2ff,0x28, PageTableEntryFlag::Valid);
-        process.memory.fill(0x4_0000, 0x4_0000, PageTableEntryFlag::Valid);
+        process.memory.write(0x1ff, &[0;0], 0x3ff, PageTableEntryFlag::Valid);
+        todo!("UNIMP");
         for ph in elf.program_header_iter() {
             if ph.ph_type() == ProgramType::LOAD {
                 process.memory.write(
@@ -60,7 +60,7 @@ impl<'root> Process<'root> {
 
 fn flags_to_permission(
     flags: ProgramHeaderFlags,
-) -> impl Into<FlagSet<PageTableEntryFlag>> + Clone {
+) -> impl Into<FlagSet<PageTableEntryFlag>> + Copy {
     let mut perm = PageTableEntryFlag::Valid | PageTableEntryFlag::User;
     let bits = flags.bits();
     if bits & 0b1 == 1 {

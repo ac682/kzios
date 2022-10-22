@@ -31,10 +31,11 @@ pub fn kernel_init(info: BoardInfo) {
     println!("{}", info);
     peripheral::init(&info);
     println!("boot stage #4: prepare user environment");
-    println!("boot completed, enter user mode");
 
     // 内核任务完成了， 回收免得 board 占用 uart 设备
     // 把任务转到 console 设备上
 }
 
-pub fn kernel_main() {}
+pub fn kernel_main() {
+    println!("boot completed, enter user mode");
+}

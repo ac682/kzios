@@ -17,8 +17,8 @@ alias d := debug
 alias r := run
 
 # qemu
-QEMU_CORES := "2"
-QEMU_MEMORY := "64m"
+QEMU_CORES := "1"
+QEMU_MEMORY := "8m"
 QEMU_LAUNCH := "qemu-system-riscv64 -smp cores="+QEMU_CORES+" -M "+QEMU_MEMORY+" -machine virt -nographic -bios none -kernel "+OS_ELF
 
 artifact_dir:

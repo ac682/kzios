@@ -1,8 +1,11 @@
 use erhino_shared::{page::PageLevel, Address, PageNumber};
 use flagset::{flags, FlagSet};
 
-#[repr(C)]
-pub struct PageTable([PageTableEntry; 512]);
+use crate::println;
+
+pub struct PageTable {
+    entries: [PageTableEntry; 512],
+}
 
 #[derive(Debug)]
 pub enum PageTableError {
@@ -17,18 +20,27 @@ pub enum PageTableError {
 
 impl PageTable {
     pub fn new<'a>(root: PageNumber) -> &'a mut Self {
+        let mut res = unsafe { ((root << 12) as *mut PageTable).as_mut().unwrap() };
+        for i in 0..512usize {
+            res.entries[i].write(0);
+        }
+        //println!("addr {:#x}", res as *const PageTable as usize);
+        res
+    }
+
+    pub fn from_exist<'a>(root: PageNumber) -> &'a mut Self {
         unsafe { &mut *((root << 12) as *mut PageTable) }
     }
 
     pub fn location(&self) -> PageNumber {
-        self as *const PageTable as PageNumber
+        self as *const PageTable as PageNumber >> 12
     }
 
     pub fn entry(&self, index: usize) -> Option<&PageTableEntry> {
         if index >= 512 {
             None
         } else {
-            Some(&self.0[index])
+            Some(&self.entries[index])
         }
     }
 
@@ -36,7 +48,7 @@ impl PageTable {
         if index >= 512 {
             None
         } else {
-            Some(&mut self.0[index])
+            Some(&mut self.entries[index])
         }
     }
 }
@@ -56,16 +68,15 @@ flags! {
     }
 }
 
-#[repr(C)]
 pub struct PageTableEntry(u64);
 
 impl PageTableEntry {
     pub fn read(&self) -> u64 {
-        self.0
+        unsafe{ (self as *const _ as *const u64).read() }
     }
 
     pub fn write(&mut self, val: u64) {
-        self.0 = val;
+        unsafe{ (self as *mut _ as *mut u64).write_volatile(val) }
     }
 
     pub fn write_bitor(&mut self, val: u64) {
@@ -88,11 +99,11 @@ impl PageTableEntry {
     }
 
     pub fn as_page_table(&mut self) -> &mut PageTable {
-        PageTable::new(self.physical_page_number())
+        PageTable::from_exist(self.physical_page_number())
     }
 
     pub fn physical_page_number(&self) -> PageNumber {
-        (self.read() >> 10 & 0xFFFFFFFFFFF) as usize
+        (self.read() >> 10 & 0xFFFFFFFFFFF) as PageNumber
     }
 
     pub fn is_valid(&self) -> bool {

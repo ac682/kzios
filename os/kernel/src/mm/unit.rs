@@ -15,7 +15,7 @@ pub struct MemoryUnit<'root> {
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum MemoryUnitError {
-    PageNumberOutOfBound,
+    EntryNotFound,
     RanOutOfFrames,
     EntryOverwrite,
 }
@@ -52,9 +52,8 @@ impl<'root> MemoryUnit<'root> {
             for i in index..end {
                 if let Some(entry) = root.entry_mut(i) {
                     entry.set(ppn + i - index, 0, flags);
-                    println!("{:#x} => {:#x}", vpn + i - index, ppn + i - index);
                 } else {
-                    return Err(MemoryUnitError::RanOutOfFrames);
+                    return Err(MemoryUnitError::EntryNotFound);
                 }
             }
             let mapped = end - index;
@@ -81,9 +80,11 @@ impl<'root> MemoryUnit<'root> {
                         return Err(MemoryUnitError::RanOutOfFrames);
                     }
                 };
+                // 如果跨表发生的很频繁，分配的页很多的话，会爆栈。但是未来会改成性能更好的多类型页分配的对吧
+                // 爆个屁，这是尾递归，编译器一定会优化的，一定会
                 Self::map_internal(branch, level.next_level().unwrap(), vpn, ppn, count, flags)
             } else {
-                Err(MemoryUnitError::PageNumberOutOfBound)
+                Err(MemoryUnitError::EntryNotFound)
             }
         }
     }
@@ -98,14 +99,98 @@ impl<'root> MemoryUnit<'root> {
     }
 
     // 如果对应的页面没有则创建
-    pub fn write<F: Into<FlagSet<PageTableEntryFlag>>>(
+    pub fn write<F: Into<FlagSet<PageTableEntryFlag>> + Copy>(
         &mut self,
         addr: Address,
         data: &[u8],
         count: usize,
         flags: F,
-    ) {
-        todo!()
+    ) -> Result<(), MemoryUnitError> {
+        Self::write_one_page_once_then_next(self.root, PageLevel::Giga, addr, 0, data, count, flags)
+    }
+
+    fn write_one_page_once_then_next<F: Into<FlagSet<PageTableEntryFlag>> + Copy>(
+        root: &mut PageTable,
+        level: PageLevel,
+        addr: Address,
+        offset: usize,
+        data: &[u8],
+        count: usize,
+        flags: F,
+    ) -> Result<(), MemoryUnitError> {
+        let vpn = addr >> 12;
+        let index = level.extract(vpn);
+        if PageLevel::Kilo == level {
+            if let Some(entry) = root.entry_mut(index) {
+                let ppn = if entry.is_leaf() && entry.is_valid(){
+                    // TODO： 合并 flags
+                    entry.physical_page_number()
+                }else{
+                    if let Some(frame) = frame_alloc(1){
+                        entry.set(frame, 0, flags);
+                        frame
+                    }else{
+                        return Err(MemoryUnitError::RanOutOfFrames);
+                    }
+                };
+                let paddr = (ppn << 12) + (addr & 0xfff);
+                let ptr = paddr as *mut u8;
+                let remaining_space = PageLevel::Kilo.size_of_bytes() - (addr & 0xfff);
+                let needed = if count > remaining_space {
+                    remaining_space
+                } else {
+                    count
+                };
+                unsafe {
+                    for i in 0..needed {
+                        ptr.add(i).write(if (i + offset) < data.len() {
+                            data[i + offset]
+                        } else {
+                            0
+                        });
+                    }
+                }
+                println!("{:#x}..{:#x}", addr, addr + needed);
+                if remaining_space < count {
+                    Self::write_one_page_once_then_next(
+                        root,
+                        level,
+                        (vpn + 1) << 12,
+                        needed,
+                        data,
+                        count - remaining_space,
+                        flags,
+                    )
+                } else {
+                    Ok(())
+                }
+            } else {
+                Err(MemoryUnitError::EntryNotFound)
+            }
+        } else {
+            if let Some(entry) = root.entry_mut(index) {
+                let branch = if entry.is_valid() {
+                    entry.as_page_table()
+                } else {
+                    if let Some(frame) = frame_alloc(1) {
+                        entry.set_as_page_table(frame)
+                    } else {
+                        return Err(MemoryUnitError::RanOutOfFrames);
+                    }
+                };
+                Self::write_one_page_once_then_next(
+                    branch,
+                    level.next_level().unwrap(),
+                    addr,
+                    offset,
+                    data,
+                    count,
+                    flags,
+                )
+            } else {
+                Err(MemoryUnitError::EntryNotFound)
+            }
+        }
     }
 
     pub fn lookup(&self, addr: Address) -> Result<(PageNumber, PageLevel), PageLevel> {
