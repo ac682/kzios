@@ -8,11 +8,12 @@ use flagset::FlagSet;
 
 use crate::{
     mm::{
-        page::{PageLevel, PageTableEntryFlag},
+        page::{PageTableEntryFlag},
         unit::MemoryUnit,
     },
     trap::TrapFrame,
 };
+use erhino_shared::page::PageLevel;
 
 pub struct Process<'root> {
     name: String,
@@ -41,11 +42,12 @@ impl<'root> Process<'root> {
             trap: TrapFrame::new(),
             state: ProcessState::Ready,
         };
-
+        process.memory.map(0x3ff,0x2ff,0x28, PageTableEntryFlag::Valid);
+        process.memory.fill(0x4_0000, 0x4_0000, PageTableEntryFlag::Valid);
         for ph in elf.program_header_iter() {
             if ph.ph_type() == ProgramType::LOAD {
                 process.memory.write(
-                    ph.vaddr(),
+                    ph.vaddr() as Address,
                     ph.content(),
                     ph.memsz() as usize,
                     flags_to_permission(ph.flags()),

@@ -4,13 +4,12 @@ extern crate alloc;
 extern crate erhino_kernel;
 
 use core::{
-    arch::global_asm,
     fmt::{Arguments, Result, Write},
 };
 
 use alloc::borrow::ToOwned;
 use dtb_parser::{prop::PropertyValue, traits::HasNamedProperty};
-use erhino_kernel::{board::BoardInfo, env, kernel_init, kernel_main, println, proc::Process};
+use erhino_kernel::{board::BoardInfo, env, kernel_init, kernel_main, proc::Process};
 use tar_no_std::TarArchiveRef;
 
 // 测试用，日后 initfs 应该由 board crate 提供

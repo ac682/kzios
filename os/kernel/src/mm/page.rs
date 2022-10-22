@@ -1,18 +1,8 @@
-use erhino_shared::{Address, PageNumber};
+use erhino_shared::{page::PageLevel, Address, PageNumber};
 use flagset::{flags, FlagSet};
 
-pub struct PageTable<'pt> {
-    root: PageNumber,
-    level: PageLevel,
-    held_entries: &'pt mut [PageTableEntry; 512],
-}
-
-#[derive(Clone, Copy, PartialEq)]
-pub enum PageLevel {
-    Kilo,
-    Mega,
-    Giga,
-}
+#[repr(C)]
+pub struct PageTable([PageTableEntry; 512]);
 
 #[derive(Debug)]
 pub enum PageTableError {
@@ -25,80 +15,20 @@ pub enum PageTableError {
     PhysicalPageNumberUnaligned,
 }
 
-impl PageLevel {
-    pub fn value(&self) -> u8 {
-        match self {
-            Self::Kilo => 0,
-            Self::Mega => 1,
-            Self::Giga => 2,
-        }
-    }
-
-    pub fn size(&self) -> usize {
-        match self {
-            Self::Kilo => 8 * 512,
-            Self::Mega => 8 * 512 * 512,
-            Self::Giga => 8 * 512 * 512 * 512,
-        }
-    }
-
-    pub fn next_level(&self) -> Option<PageLevel> {
-        match self {
-            PageLevel::Giga => Some(PageLevel::Mega),
-            PageLevel::Mega => Some(PageLevel::Kilo),
-            PageLevel::Kilo => None,
-        }
-    }
-
-    pub fn floor(&self, page_number: PageNumber) -> PageNumber {
-        page_number >> (9 * self.value()) << (9 * self.value())
-    }
-
-    pub fn ceil(&self, page_number: PageNumber) -> PageNumber {
-        (page_number >> (9 * self.value()) << (9 * self.value())) + self.size() as PageNumber
-    }
-
-    pub fn measure(&self, page_count: usize) -> usize {
-        page_count >> (9 * self.value())
-    }
-
-    pub fn extract(&self, page_number: PageNumber) -> usize {
-        ((page_number >> (9 * self.value())) & 0x1ff) as usize
-    }
-
-    pub fn shift(&self, index: PageNumber) -> PageNumber {
-        index << (9 * self.value())
-    }
-}
-
-impl<'pt> PageTable<'pt> {
-    pub fn new(root: PageNumber, level: PageLevel) -> Self {
-        Self {
-            root,
-            level,
-            held_entries: unsafe { &mut *((root << 12) as *mut [PageTableEntry; 512]) },
-        }
-    }
-
-    pub fn is_page_number_aligned(page_number: PageNumber, level: PageLevel) -> bool {
-        let n = level.value() as u32 * 9; // ranging in [0, 9, 18]
-        let mask = 2u64.pow(n) - 1;
-        page_number & mask == 0
+impl PageTable {
+    pub fn new<'a>(root: PageNumber) -> &'a mut Self {
+        unsafe { &mut *((root << 12) as *mut PageTable) }
     }
 
     pub fn location(&self) -> PageNumber {
-        self.root
-    }
-
-    pub fn level(&self) -> PageLevel {
-        self.level
+        self as *const PageTable as PageNumber
     }
 
     pub fn entry(&self, index: usize) -> Option<&PageTableEntry> {
         if index >= 512 {
             None
         } else {
-            Some(&self.held_entries[index])
+            Some(&self.0[index])
         }
     }
 
@@ -106,7 +36,7 @@ impl<'pt> PageTable<'pt> {
         if index >= 512 {
             None
         } else {
-            Some(&mut self.held_entries[index])
+            Some(&mut self.0[index])
         }
     }
 }
@@ -148,21 +78,21 @@ impl PageTableEntry {
         rsw: usize,
         flags: F,
     ) {
-        let val = ppn << 10 | ((rsw & 0b11) << 8) as u64 | flags.into().bits();
+        let val = (ppn << 10 | ((rsw & 0b11) << 8)) as u64 | flags.into().bits();
         self.write(val);
     }
 
-    pub fn set_as_page_table(&mut self, table_root: PageNumber, level: PageLevel) -> PageTable {
+    pub fn set_as_page_table(&mut self, table_root: PageNumber) -> &mut PageTable {
         self.set(table_root, 0, PageTableEntryFlag::Valid);
-        PageTable::new(table_root, level)
+        PageTable::new(table_root)
     }
 
-    pub fn as_page_table(&self, level: PageLevel) -> PageTable {
-        PageTable::new(self.physical_page_number(), level)
+    pub fn as_page_table(&mut self) -> &mut PageTable {
+        PageTable::new(self.physical_page_number())
     }
 
     pub fn physical_page_number(&self) -> PageNumber {
-        self.read() >> 10 & 0xFFFFFFFFFFF
+        (self.read() >> 10 & 0xFFFFFFFFFFF) as usize
     }
 
     pub fn is_valid(&self) -> bool {

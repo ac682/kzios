@@ -1,27 +1,29 @@
 use erhino_shared::{Address, PageNumber};
 use flagset::FlagSet;
 
-use crate::println;
+use crate::{mm::range::PageRange, println};
 
 use super::{
     frame::frame_alloc,
-    page::{PageLevel, PageTable, PageTableEntryFlag, PageTableError},
+    page::{PageTable, PageTableEntry, PageTableEntryFlag, PageTableError},
 };
+use erhino_shared::page::PageLevel;
 
 pub struct MemoryUnit<'root> {
-    root: PageTable<'root>,
+    root: &'root mut PageTable,
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum MemoryUnitError {
     PageNumberOutOfBound,
     RanOutOfFrames,
+    EntryOverwrite,
 }
 
 impl<'root> MemoryUnit<'root> {
     pub fn new() -> Self {
         Self {
-            root: PageTable::new(frame_alloc(1).unwrap() as u64, PageLevel::Giga),
+            root: PageTable::new(frame_alloc(1).unwrap()),
         }
     }
 
@@ -31,108 +33,62 @@ impl<'root> MemoryUnit<'root> {
         vpn: PageNumber,
         ppn: PageNumber,
         count: usize,
-        max_level: PageLevel,
         flags: F,
     ) -> Result<(), MemoryUnitError> {
-        // 写法注意 u64 溢出以及运算中不能有(小-大)
-        let start = vpn;
-        let end = vpn + count as u64;
-        if max_level == PageLevel::Kilo {
-            for i in 0u64..count as u64 {
-                self.map_one(vpn + i, ppn + i, PageLevel::Kilo, flags)?;
-            }
-        } else {
-            // 保证 end >= r; l >= start
-            let r = max_level.floor(end);
-            let l = if start == max_level.floor(start) {
-                start
-            } else {
-                max_level.ceil(start)
-            };
-            if r >= l {
-                // 保证 start <= l <= r <= end
-                // r..end 段
-                if end != r {
-                    self.map(
-                        r,
-                        r - start + ppn,
-                        (end - r) as usize,
-                        max_level.next_level().unwrap(),
-                        flags,
-                    )?;
-                }
-                if r != l {
-                    // l..r 段，这一部分是对齐的
-                    let mid_count = max_level.measure((r - l) as usize) as u64;
-                    for i in 0u64..mid_count {
-                        self.map_one(
-                            l + max_level.shift(i),
-                            l - start + ppn + max_level.shift(i),
-                            max_level,
-                            flags,
-                        )?;
-                    }
-                }
-                if l != start {
-                    self.map(
-                        start,
-                        ppn,
-                        (l - start) as usize,
-                        max_level.next_level().unwrap(),
-                        flags,
-                    )?;
-                }
-            } else {
-                self.map(vpn, ppn, count, max_level.next_level().unwrap(), flags)?;
-            }
-        }
-        Ok(())
+        Self::map_internal(self.root, PageLevel::Giga, vpn, ppn, count, flags)
     }
 
-    pub fn map_one<F: Into<FlagSet<PageTableEntryFlag>>>(
-        &mut self,
-        vpn: PageNumber,
-        ppn: PageNumber,
-        level: PageLevel,
-        flags: F,
-    ) -> Result<(), MemoryUnitError> {
-        Self::map_one_internal(vpn, ppn, level, flags, PageLevel::Giga, &mut self.root)
-    }
-
-    fn map_one_internal<F: Into<FlagSet<PageTableEntryFlag>>>(
-        vpn: PageNumber,
-        ppn: PageNumber,
-        target_level: PageLevel,
-        flags: F,
-        current_level: PageLevel,
+    fn map_internal<F: Into<FlagSet<PageTableEntryFlag>> + Copy>(
         root: &mut PageTable,
+        level: PageLevel,
+        vpn: PageNumber,
+        ppn: PageNumber,
+        count: usize,
+        flags: F,
     ) -> Result<(), MemoryUnitError> {
-        let index = current_level.extract(vpn);
-        if let Some(entry) = root.entry_mut(index) {
-            if target_level == current_level {
-                entry.set(ppn, 0, flags);
-                Ok(())
-            } else {
-                if let Some(frame) = frame_alloc(1) {
-                    let mut table = entry.set_as_page_table(frame, current_level);
-                    Self::map_one_internal(
-                        vpn,
-                        ppn,
-                        target_level,
-                        flags,
-                        current_level.next_level().unwrap(),
-                        &mut table,
-                    )
+        let index = level.extract(vpn);
+        if PageLevel::Kilo == level {
+            let end = if index + count < 512 { count } else { 512 };
+            for i in index..end {
+                if let Some(entry) = root.entry_mut(i) {
+                    entry.set(ppn + i - index, 0, flags);
+                    println!("{:#x} => {:#x}", vpn + i - index, ppn + i - index);
                 } else {
-                    Err(MemoryUnitError::RanOutOfFrames)
+                    return Err(MemoryUnitError::RanOutOfFrames);
                 }
             }
+            let mapped = end - index;
+            if count > 512 - index {
+                Self::map_internal(
+                    root,
+                    level,
+                    vpn + mapped,
+                    ppn + mapped,
+                    count - mapped,
+                    flags,
+                )
+            } else {
+                Ok(())
+            }
         } else {
-            Err(MemoryUnitError::PageNumberOutOfBound)
+            if let Some(entry) = root.entry_mut(index) {
+                let branch = if entry.is_valid() {
+                    entry.as_page_table()
+                } else {
+                    if let Some(frame) = frame_alloc(1) {
+                        entry.set_as_page_table(frame)
+                    } else {
+                        return Err(MemoryUnitError::RanOutOfFrames);
+                    }
+                };
+                Self::map_internal(branch, level.next_level().unwrap(), vpn, ppn, count, flags)
+            } else {
+                Err(MemoryUnitError::PageNumberOutOfBound)
+            }
         }
     }
 
-    pub fn fill<F: Into<FlagSet<PageTableEntryFlag>>>(
+    pub fn fill<F: Into<FlagSet<PageTableEntryFlag>> + Copy>(
         &mut self,
         vpn: PageNumber,
         count: usize,
@@ -152,32 +108,8 @@ impl<'root> MemoryUnit<'root> {
         todo!()
     }
 
-    pub fn lookup(&self, addr: Address) -> Option<(PageNumber, PageLevel)> {
-        // 递归查找直到遇到一个 leaf
-        Self::lookup_internal(addr, PageLevel::Giga, &self.root)
-    }
-
-    fn lookup_internal(
-        addr: Address,
-        current_level: PageLevel,
-        root: &PageTable,
-    ) -> Option<(PageNumber, PageLevel)> {
-        let vpn = addr >> 12;
-        let index = current_level.extract(vpn);
-        if let Some(entry) = root.entry(index) {
-            if entry.is_leaf() {
-                Some((entry.physical_page_number(), current_level))
-            } else {
-                if current_level != PageLevel::Kilo {
-                    let next_level = current_level.next_level().unwrap();
-                    Self::lookup_internal(addr, next_level, &entry.as_page_table(next_level))
-                } else {
-                    None
-                }
-            }
-        } else {
-            None
-        }
+    pub fn lookup(&self, addr: Address) -> Result<(PageNumber, PageLevel), PageLevel> {
+        todo!()
     }
 
     pub fn unmap(&'root mut self, vpn: PageNumber) -> Result<(), MemoryUnitError> {

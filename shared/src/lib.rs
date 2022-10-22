@@ -9,6 +9,8 @@
 pub mod call;
 /// Process types
 pub mod process;
+/// Memory paging stuff
+pub mod page;
 
 /// ExitCode(i64) type for process
 pub type ExitCode = i64;
@@ -18,9 +20,9 @@ pub type Pid = u32;
 /// If uniform thread-id required, It is uni_tid = ((pid << 32) + tid)
 pub type Tid = u32;
 /// Address(u64) type for process
-pub type Address = u64;
+pub type Address = usize;
 /// PageNumber(u64) for process
-pub type PageNumber = u64;
+pub type PageNumber = usize;
 /// SignalNumber(u64) for process
 pub type SignalNo = u64;
 
