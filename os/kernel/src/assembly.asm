@@ -19,9 +19,10 @@
 .macro locate_sp out=sp, tmp=t1 
     csrr    \tmp, mhartid
     la      \out, _stack_size
-    mul    \tmp, \tmp, \out
+    mul     \tmp, \tmp, \out
     la      \out, _kernel_end
-    sub    \out, \out, \tmp
+    sub     \out, \out, \tmp
+    #addi    \out, \out, -1
 .endm
 
 .section .text.init

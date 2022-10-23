@@ -42,8 +42,6 @@ impl<'root> Process<'root> {
             trap: TrapFrame::new(),
             state: ProcessState::Ready,
         };
-        process.memory.write(0x1ff, &[0;0], 0x3ff, PageTableEntryFlag::Valid);
-        todo!("UNIMP");
         for ph in elf.program_header_iter() {
             if ph.ph_type() == ProgramType::LOAD {
                 process.memory.write(

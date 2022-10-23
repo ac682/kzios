@@ -40,7 +40,7 @@ SECTIONS
     } > RAM
 
 
-    . = ALIGN(4k) - 1; # make kernel 4k aligned
+    . = ALIGN(4k); # make kernel 4k aligned
     PROVIDE(_kernel_end = .);
 
 

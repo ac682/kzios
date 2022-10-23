@@ -123,7 +123,10 @@ impl<'root> MemoryUnit<'root> {
         if PageLevel::Kilo == level {
             if let Some(entry) = root.entry_mut(index) {
                 let ppn = if entry.is_leaf() && entry.is_valid(){
-                    // TODO： 合并 flags
+                    let f = flags.into();
+                    if entry.flags().bits() != f.bits(){
+                        entry.write_bitor(f.bits());
+                    }
                     entry.physical_page_number()
                 }else{
                     if let Some(frame) = frame_alloc(1){
@@ -150,7 +153,6 @@ impl<'root> MemoryUnit<'root> {
                         });
                     }
                 }
-                println!("{:#x}..{:#x}", addr, addr + needed);
                 if remaining_space < count {
                     Self::write_one_page_once_then_next(
                         root,

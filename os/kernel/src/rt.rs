@@ -3,7 +3,13 @@ use core::{arch::asm, panic::PanicInfo};
 use erhino_shared::process::Termination;
 use riscv::register::misa;
 
-use crate::{mm, peripheral, pmp, print, println, proc::pm};
+use crate::{
+    external::{
+        _bss_end, _bss_start, _hart_num, _kernel_end, _memory_end, _memory_start, _stack_start,
+    },
+    mm, peripheral, pmp, print, println,
+    proc::pm,
+};
 
 const LOGO: &str = include_str!("../logo.txt");
 
@@ -21,6 +27,7 @@ fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize) -> isize
     mm::init();
     pm::init();
     println!("{}\nis still booting", LOGO);
+    print_segments();
     print_isa();
     main();
     panic!("unreachable here");
@@ -46,6 +53,30 @@ fn print_isa() {
         }
     }
     println!("ISA: {}", isa_str);
+}
+
+fn print_segments() {
+    let stack_per_hart = (_kernel_end as usize - _stack_start as usize) / _hart_num as usize;
+    println!(
+        "memory@{:#x}:{:#x} {{",
+        _memory_start as usize, _memory_end as usize
+    );
+    println!(
+        "\tkernel@{:#x}:{:#x} {{",
+        _memory_start as usize, _kernel_end as usize
+    );
+    println!(
+        "\t\tbss@{:#x}:{:#x}",
+        _bss_start as usize, _bss_end as usize
+    );
+    for i in 0..(_hart_num as usize) {
+        println!(
+            "\t\tstack{}@{:#x}:{:#x}",
+            i, _kernel_end as usize - stack_per_hart * (i + 1), _kernel_end as usize - stack_per_hart * i
+        );
+    }
+    println!("\t}}");
+    println!("}}");
 }
 
 #[panic_handler]

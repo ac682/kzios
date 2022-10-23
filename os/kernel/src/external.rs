@@ -1,4 +1,5 @@
 extern "C" {
+    pub fn _hart_num();
     pub fn _memory_start();
     pub fn _bss_start();
     pub fn _bss_end();
