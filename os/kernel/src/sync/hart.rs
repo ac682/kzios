@@ -35,7 +35,7 @@ impl<T> HartLock<T> {
     }
 }
 
-unsafe impl<T> Sync for HartLock<T>{}
+unsafe impl<T> Sync for HartLock<T> {}
 
 impl<'a, T> Lock<'a, T, HartLockGuard<'a, T>> for HartLock<T> {
     fn lock(&'a mut self) -> HartLockGuard<'a, T> {
@@ -43,7 +43,7 @@ impl<'a, T> Lock<'a, T, HartLockGuard<'a, T>> for HartLock<T> {
         while self
             .locked
             .compare_exchange(u64::MAX, hartid, Ordering::Acquire, Ordering::Relaxed)
-            .is_err()
+            .is_err_and(|current| current != hartid)
         {
             // spin
             unsafe { nop() }
@@ -61,7 +61,7 @@ impl<'a, T> Drop for HartLockGuard<'a, T> {
         while self
             .locked
             .compare_exchange(hartid, u64::MAX, Ordering::Release, Ordering::Relaxed)
-            .is_err()
+            .is_err_and(|current| current != u64::MAX)
         {
             // 在这里自旋是没有意义的，其他 hart 必定会卡在获得锁的自旋处而无法到达此处
             unsafe { nop() }
@@ -83,27 +83,101 @@ impl<'a, T> DerefMut for HartLockGuard<'a, T> {
     }
 }
 
-
-pub struct HartReadWriteLock{
-    
+pub struct HartReadWriteLock<T: Sized> {
+    data: Once<T>,
+    locked: AtomicU64,
 }
 
-pub struct HartReadLockGuard{
+unsafe impl<T> Sync for HartReadWriteLock<T> {}
 
+pub struct HartReadLockGuard<T: Sized> {
+    data: *const T,
 }
 
-pub struct HartWriteLockGuard{
-
+pub struct HartWriteLockGuard<'a, T: Sized + 'a> {
+    data: *mut T,
+    locked: &'a AtomicU64,
 }
 
-impl<'a, T> ReadWriteLock<'a, T, HartReadLockGuard, HartWriteLockGuard> for HartReadWriteLock{
-    fn lock_mut(&'a mut self) -> HartWriteLockGuard {
-        todo!()
+impl<T> HartReadWriteLock<T> {
+    pub const fn empty() -> Self {
+        Self {
+            data: Once::new(),
+            locked: AtomicU64::new(u64::MAX),
+        }
+    }
+
+    pub fn put(&mut self, data: T) {
+        self.data.call_once(|| data);
     }
 }
 
-impl<'a, T> Lock<'a, T, HartReadLockGuard> for HartReadWriteLock{
-    fn lock(&'a mut self) -> HartReadLockGuard{
-        todo!()
+impl<'a, T> Drop for HartWriteLockGuard<'a, T> {
+    fn drop(&mut self) {
+        let hartid = mhartid::read() as u64;
+        while self
+            .locked
+            .compare_exchange(hartid, u64::MAX, Ordering::Release, Ordering::Relaxed)
+            .is_err_and(|current| current != u64::MAX)
+        {
+            // 在这里自旋是没有意义的，其他 hart 必定会卡在获得锁的自旋处而无法到达此处
+            unsafe { nop() }
+        }
+    }
+}
+
+impl<T> Deref for HartReadLockGuard<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*self.data }
+    }
+}
+
+impl<'a, T> Deref for HartWriteLockGuard<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*self.data }
+    }
+}
+
+impl<'a, T> DerefMut for HartWriteLockGuard<'a, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { &mut *self.data }
+    }
+}
+
+impl<'a, T> ReadWriteLock<'a, T, HartReadLockGuard<T>, HartWriteLockGuard<'a, T>>
+    for HartReadWriteLock<T>
+{
+    fn lock_mut(&'a mut self) -> HartWriteLockGuard<'a, T> {
+        let hartid = mhartid::read() as u64;
+        while self
+            .locked
+            .compare_exchange(u64::MAX, hartid, Ordering::Acquire, Ordering::Relaxed)
+            .is_err_and(|current| current != hartid)
+        {
+            unsafe { nop() }
+        }
+        HartWriteLockGuard {
+            data: self.data.as_mut_ptr(),
+            locked: &mut self.locked,
+        }
+    }
+}
+
+impl<'a, T> Lock<'a, T, HartReadLockGuard<T>> for HartReadWriteLock<T> {
+    fn lock(&'a mut self) -> HartReadLockGuard<T> {
+        let hartid = mhartid::read() as u64;
+        while {
+            let current = self.locked.load(Ordering::Acquire);
+            !(current == hartid || current == u64::MAX)
+        } {
+            unsafe { nop() }
+        }
+        HartReadLockGuard {
+            data: self.data.as_mut_ptr(),
+        }
     }
 }

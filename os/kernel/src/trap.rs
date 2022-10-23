@@ -1,5 +1,7 @@
 use core::fmt::Display;
 
+use erhino_shared::call::{KernelCall, SystemCall};
+use num_traits::FromPrimitive;
 use riscv::register::{
     mcause::{Exception, Interrupt, Mcause, Trap},
     mhartid,
@@ -17,7 +19,7 @@ use crate::{
 static KERNEL_TRAP: TrapFrame = TrapFrame::new();
 
 #[no_mangle]
-unsafe fn handle_trap(hartid: usize, cause: Mcause, frame: &mut TrapFrame) {
+unsafe fn handle_trap(hartid: usize, cause: Mcause, frame: &TrapFrame) {
     match cause.cause() {
         Trap::Interrupt(Interrupt::MachineSoft) => {
             panic!("Machine Soft Interrupt at hart#{}", hartid);
@@ -25,6 +27,31 @@ unsafe fn handle_trap(hartid: usize, cause: Mcause, frame: &mut TrapFrame) {
         }
         Trap::Exception(Exception::StoreFault) => {
             panic!("Store/AMO access fault hart#{}: frame=\n{}", hartid, frame);
+        }
+        Trap::Exception(Exception::MachineEnvCall) => {
+            let call_id = frame.x[17];
+            if let Some(call) = KernelCall::from_u64(call_id){
+                match call{
+                    KernelCall::EnterUserSpace => {
+                        todo!("enter user mode");
+                    }
+                }
+            }else{
+                panic!("unsupported kernel call: {}", call_id);
+            }
+        }
+        Trap::Exception(Exception::UserEnvCall) => {
+            let call_id = frame.x[17];
+            if let Some(call) = SystemCall::from_u64(call_id){
+                match call{
+                    _ => {
+                        todo!("handle something")
+                    }
+                }
+            }else{
+                println!("unsupported system call {}", call_id);
+                // kill the process or do something
+            }
         }
         _ => panic!(
             "unknown trap cause at hart#{}: cause={:#x}, frame={}",

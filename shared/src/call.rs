@@ -1,8 +1,11 @@
+use num_derive::{ToPrimitive, FromPrimitive};
+
 /// Predefined system calls
 ///
-/// Not available for userspace
-/// Using service call instead
-#[repr(u64)]
+/// Only accessible in userspace
+/// ipc_call is done through SystemCall::IPC part
+#[repr(usize)]
+#[derive(FromPrimitive, ToPrimitive)]
 pub enum SystemCall {
     // System reserved
     /// Write to board defined output stream
@@ -42,7 +45,8 @@ pub enum SystemCall {
 ///
 /// Not available for userspace
 /// Using service call instead
-#[repr(u64)]
+#[repr(usize)]
+#[derive(FromPrimitive, ToPrimitive)]
 pub enum KernelCall {
     /// Enter user mode and begin scheduling
     EnterUserSpace = 0x0,

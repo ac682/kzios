@@ -27,8 +27,8 @@ fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize) -> isize
     mm::init();
     pm::init();
     println!("{}\nis still booting", LOGO);
-    print_segments();
     print_isa();
+    print_segments();
     main();
     panic!("unreachable here");
     // do board clean
@@ -58,23 +58,25 @@ fn print_isa() {
 fn print_segments() {
     let stack_per_hart = (_kernel_end as usize - _stack_start as usize) / _hart_num as usize;
     println!(
-        "memory@{:#x}:{:#x} {{",
+        "memory@{:#x}..{:#x} {{",
         _memory_start as usize, _memory_end as usize
     );
     println!(
-        "\tkernel@{:#x}:{:#x} {{",
+        "\tkernel@{:#x}..{:#x} {{",
         _memory_start as usize, _kernel_end as usize
     );
     println!(
-        "\t\tbss@{:#x}:{:#x}",
+        "\t\tbss@{:#x}..{:#x};",
         _bss_start as usize, _bss_end as usize
     );
+    println!("\t\tstack@{:#x}..{:#x} {{", _stack_start as usize, _kernel_end as usize);
     for i in 0..(_hart_num as usize) {
         println!(
-            "\t\tstack{}@{:#x}:{:#x}",
+            "\t\t\thart{}@{:#x}..{:#x};",
             i, _kernel_end as usize - stack_per_hart * (i + 1), _kernel_end as usize - stack_per_hart * i
         );
     }
+    println!("\t\t}}");
     println!("\t}}");
     println!("}}");
 }

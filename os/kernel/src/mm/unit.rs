@@ -27,6 +27,10 @@ impl<'root> MemoryUnit<'root> {
         }
     }
 
+    pub fn root(&self) -> PageNumber{
+        self.root.location()
+    }
+
     // vpn 和 ppn 都得是连续的
     pub fn map<F: Into<FlagSet<PageTableEntryFlag>> + Copy>(
         &mut self,
@@ -69,23 +73,19 @@ impl<'root> MemoryUnit<'root> {
             } else {
                 Ok(())
             }
-        } else {
-            if let Some(entry) = root.entry_mut(index) {
-                let branch = if entry.is_valid() {
-                    entry.as_page_table()
-                } else {
-                    if let Some(frame) = frame_alloc(1) {
-                        entry.set_as_page_table(frame)
-                    } else {
-                        return Err(MemoryUnitError::RanOutOfFrames);
-                    }
-                };
-                // 如果跨表发生的很频繁，分配的页很多的话，会爆栈。但是未来会改成性能更好的多类型页分配的对吧
-                // 爆个屁，这是尾递归，编译器一定会优化的，一定会
-                Self::map_internal(branch, level.next_level().unwrap(), vpn, ppn, count, flags)
+        } else if let Some(entry) = root.entry_mut(index) {
+            let branch = if entry.is_valid() {
+                entry.as_page_table()
+            } else if let Some(frame) = frame_alloc(1) {
+                entry.set_as_page_table(frame)
             } else {
-                Err(MemoryUnitError::EntryNotFound)
-            }
+                return Err(MemoryUnitError::RanOutOfFrames);
+            };
+            // 如果跨表发生的很频繁，分配的页很多的话，会爆栈。但是未来会改成性能更好的多类型页分配的对吧
+            // 爆个屁，这是尾递归，编译器一定会优化的，一定会
+            Self::map_internal(branch, level.next_level().unwrap(), vpn, ppn, count, flags)
+        } else {
+            Err(MemoryUnitError::EntryNotFound)
         }
     }
 
@@ -122,19 +122,17 @@ impl<'root> MemoryUnit<'root> {
         let index = level.extract(vpn);
         if PageLevel::Kilo == level {
             if let Some(entry) = root.entry_mut(index) {
-                let ppn = if entry.is_leaf() && entry.is_valid(){
+                let ppn = if entry.is_leaf() && entry.is_valid() {
                     let f = flags.into();
-                    if entry.flags().bits() != f.bits(){
+                    if entry.flags().bits() != f.bits() {
                         entry.write_bitor(f.bits());
                     }
                     entry.physical_page_number()
-                }else{
-                    if let Some(frame) = frame_alloc(1){
-                        entry.set(frame, 0, flags);
-                        frame
-                    }else{
-                        return Err(MemoryUnitError::RanOutOfFrames);
-                    }
+                } else if let Some(frame) = frame_alloc(1) {
+                    entry.set(frame, 0, flags);
+                    frame
+                } else {
+                    return Err(MemoryUnitError::RanOutOfFrames);
                 };
                 let paddr = (ppn << 12) + (addr & 0xfff);
                 let ptr = paddr as *mut u8;
@@ -169,29 +167,25 @@ impl<'root> MemoryUnit<'root> {
             } else {
                 Err(MemoryUnitError::EntryNotFound)
             }
-        } else {
-            if let Some(entry) = root.entry_mut(index) {
-                let branch = if entry.is_valid() {
-                    entry.as_page_table()
-                } else {
-                    if let Some(frame) = frame_alloc(1) {
-                        entry.set_as_page_table(frame)
-                    } else {
-                        return Err(MemoryUnitError::RanOutOfFrames);
-                    }
-                };
-                Self::write_one_page_once_then_next(
-                    branch,
-                    level.next_level().unwrap(),
-                    addr,
-                    offset,
-                    data,
-                    count,
-                    flags,
-                )
+        } else if let Some(entry) = root.entry_mut(index) {
+            let branch = if entry.is_valid() {
+                entry.as_page_table()
+            } else if let Some(frame) = frame_alloc(1) {
+                entry.set_as_page_table(frame)
             } else {
-                Err(MemoryUnitError::EntryNotFound)
-            }
+                return Err(MemoryUnitError::RanOutOfFrames);
+            };
+            Self::write_one_page_once_then_next(
+                branch,
+                level.next_level().unwrap(),
+                addr,
+                offset,
+                data,
+                count,
+                flags,
+            )
+        } else {
+            Err(MemoryUnitError::EntryNotFound)
         }
     }
 

@@ -1,4 +1,4 @@
-#![feature(lang_items, alloc_error_handler, panic_info_message, linkage)]
+#![feature(lang_items, alloc_error_handler, panic_info_message, linkage, is_some_and)]
 #![no_std]
 #![allow(dead_code)]
 #![allow(unused)]
@@ -7,6 +7,8 @@ use core::arch::global_asm;
 
 use board::BoardInfo;
 pub use erhino_shared::*;
+
+use crate::krn_call::krn_enter_user_space;
 
 extern crate alloc;
 
@@ -20,7 +22,7 @@ mod peripheral;
 mod pmp;
 pub mod proc;
 mod rt;
-mod schedule;
+mod krn_call;
 pub mod sync;
 mod trap;
 
@@ -38,4 +40,5 @@ pub fn kernel_init(info: BoardInfo) {
 
 pub fn kernel_main() {
     println!("boot completed, enter user mode");
+    krn_enter_user_space();
 }

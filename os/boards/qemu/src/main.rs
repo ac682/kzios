@@ -9,7 +9,7 @@ use core::{
 
 use alloc::borrow::ToOwned;
 use dtb_parser::{prop::PropertyValue, traits::HasNamedProperty};
-use erhino_kernel::{board::BoardInfo, env, kernel_init, kernel_main, proc::Process};
+use erhino_kernel::{board::BoardInfo, env, kernel_init, kernel_main, proc::Process, println};
 use tar_no_std::TarArchiveRef;
 
 // 测试用，日后 initfs 应该由 board crate 提供
@@ -20,7 +20,6 @@ fn main() {
     // prepare BoardInfo
     let dtb_addr = env::args()[1] as usize;
     let tree = dtb_parser::device_tree::DeviceTree::from_address(dtb_addr).unwrap();
-    //println!("{}", tree);
     let mut clint_base = 0usize;
     for node in tree.into_iter() {
         if node.name().starts_with("clint") {
@@ -43,7 +42,7 @@ fn main() {
         .entries()
         .find(|f| f.filename().as_str() == "user_init")
         .unwrap();
-    let process = Process::from_bytes(user_init.data());
+    let process = Process::from_elf(user_init.data());
     kernel_main();
 }
 
