@@ -6,6 +6,6 @@ pub trait Lock<'a, Data: Sized, Guard> {
     fn lock(&'a mut self) -> Guard;
 }
 
-pub trait ReadWriteLock<'a, Data: Sized, Guard, MutGuard>: Lock<'a, Data, Guard>{
+pub trait ReadWriteLock<'a, Data: Sized, Guard, MutGuard>: Lock<'a, Data, Guard> {
     fn lock_mut(&'a mut self) -> MutGuard;
 }

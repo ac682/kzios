@@ -9,8 +9,9 @@ use super::{
 };
 use erhino_shared::page::PageLevel;
 
-pub struct MemoryUnit<'root> {
-    root: &'root mut PageTable,
+#[derive(Debug)]
+pub struct MemoryUnit {
+    root: &'static mut PageTable,
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -20,14 +21,14 @@ pub enum MemoryUnitError {
     EntryOverwrite,
 }
 
-impl<'root> MemoryUnit<'root> {
+impl MemoryUnit {
     pub fn new() -> Self {
         Self {
             root: PageTable::new(frame_alloc(1).unwrap()),
         }
     }
 
-    pub fn root(&self) -> PageNumber{
+    pub fn root(&self) -> PageNumber {
         self.root.location()
     }
 
@@ -193,7 +194,7 @@ impl<'root> MemoryUnit<'root> {
         todo!()
     }
 
-    pub fn unmap(&'root mut self, vpn: PageNumber) -> Result<(), MemoryUnitError> {
+    pub fn unmap(&mut self, vpn: PageNumber) -> Result<(), MemoryUnitError> {
         todo!();
     }
 }

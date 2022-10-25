@@ -1,4 +1,4 @@
-pub(crate) mod pm;
+pub mod pm;
 pub(crate) mod sch;
 
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
@@ -13,27 +13,25 @@ use crate::{
 };
 use erhino_shared::page::PageLevel;
 
+#[derive(Debug)]
 pub enum ProcessSpawnError {
     BrokenBinary,
     WrongTarget,
 }
 
-pub struct Process<'root> {
+#[derive(Debug)]
+pub struct Process {
     name: String,
     pid: Pid,
     parent: Pid,
-    memory: MemoryUnit<'root>,
+    memory: MemoryUnit,
     trap: TrapFrame,
     state: ProcessState,
 }
 
 // 特点：循环队列，以pid为索引，由于pid不可变意味着元素不可以移动
-pub struct ProcessTable<'root> {
-    inner: Vec<Process<'root>>,
-    current: usize,
-}
 
-impl<'root> Process<'root> {
+impl Process {
     pub fn from_elf(data: &[u8]) -> Result<Self, ProcessSpawnError> {
         if let Ok(elf) = Elf::from_bytes(data) {
             let mut process = Self {
@@ -82,13 +80,4 @@ fn flags_to_permission(flags: ProgramHeaderFlags) -> impl Into<FlagSet<PageTable
         perm |= PageTableEntryFlag::Readable;
     }
     perm
-}
-
-impl<'root> ProcessTable<'root> {
-    pub const fn new() -> Self {
-        Self {
-            inner: Vec::new(),
-            current: 0,
-        }
-    }
 }

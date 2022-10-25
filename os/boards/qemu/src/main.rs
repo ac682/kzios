@@ -3,13 +3,11 @@
 extern crate alloc;
 extern crate erhino_kernel;
 
-use core::{
-    fmt::{Arguments, Result, Write},
-};
+use core::fmt::{Arguments, Result, Write};
 
 use alloc::borrow::ToOwned;
 use dtb_parser::{prop::PropertyValue, traits::HasNamedProperty};
-use erhino_kernel::{board::BoardInfo, env, kernel_init, kernel_main, proc::Process, println};
+use erhino_kernel::{board::BoardInfo, env, kernel_init, kernel_main, proc::{Process, pm::add_process}};
 use tar_no_std::TarArchiveRef;
 
 // 测试用，日后 initfs 应该由 board crate 提供
@@ -42,7 +40,8 @@ fn main() {
         .entries()
         .find(|f| f.filename().as_str() == "user_init")
         .unwrap();
-    let process = Process::from_elf(user_init.data());
+    let process = Process::from_elf(user_init.data()).unwrap();
+    add_process(process);
     kernel_main();
 }
 

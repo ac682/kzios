@@ -1,5 +1,6 @@
 use crate::ExitCode;
 
+#[derive(Debug)]
 /// States of process
 pub enum ProcessState {
     /// Can be picked as running process

@@ -1,4 +1,10 @@
-#![feature(lang_items, alloc_error_handler, panic_info_message, linkage, is_some_and)]
+#![feature(
+    lang_items,
+    alloc_error_handler,
+    panic_info_message,
+    linkage,
+    is_some_and
+)]
 #![no_std]
 #![allow(dead_code)]
 #![allow(unused)]
@@ -17,12 +23,12 @@ pub mod board;
 pub mod console;
 pub mod env;
 mod external;
+mod krn_call;
 mod mm;
 mod peripheral;
 mod pmp;
 pub mod proc;
 mod rt;
-mod krn_call;
 pub mod sync;
 mod trap;
 

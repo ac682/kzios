@@ -1,24 +1,19 @@
-use erhino_shared::Pid;
+use alloc::vec::Vec;
 
-use crate::sync::{
-    hart::{HartLock, HartReadLockGuard, HartReadWriteLock, HartWriteLockGuard},
-    optimistic::OptimisticLock,
-    Lock, ReadWriteLock,
-};
+use crate::sync::{hart::HartReadWriteLock, Lock, ReadWriteLock};
 
-use super::ProcessTable;
-static mut PROC_TABLE: HartReadWriteLock<ProcessTable> = HartReadWriteLock::empty();
+use super::Process;
 
-pub fn init() {
-    unsafe {
-        PROC_TABLE.put(ProcessTable::new());
+static mut PROC_TABLE: HartReadWriteLock<Vec<Process>> = HartReadWriteLock::empty();
+
+pub fn init(){
+    unsafe{
+        PROC_TABLE.put(Vec::new());
     }
 }
 
-pub fn table<'table>() -> HartReadLockGuard<ProcessTable<'table>> {
-    unsafe { PROC_TABLE.lock() }
-}
-
-pub fn table_mut<'a, 'table: 'static>() -> HartWriteLockGuard<'a, ProcessTable<'table>>{
-    unsafe{ PROC_TABLE.lock_mut()}
+pub fn add_process(proc: Process){
+    unsafe{
+        PROC_TABLE.lock_mut().push(proc);
+    }
 }

@@ -30,25 +30,25 @@ unsafe fn handle_trap(hartid: usize, cause: Mcause, frame: &TrapFrame) {
         }
         Trap::Exception(Exception::MachineEnvCall) => {
             let call_id = frame.x[17];
-            if let Some(call) = KernelCall::from_u64(call_id){
-                match call{
+            if let Some(call) = KernelCall::from_u64(call_id) {
+                match call {
                     KernelCall::EnterUserSpace => {
                         todo!("enter user mode");
                     }
                 }
-            }else{
+            } else {
                 panic!("unsupported kernel call: {}", call_id);
             }
         }
         Trap::Exception(Exception::UserEnvCall) => {
             let call_id = frame.x[17];
-            if let Some(call) = SystemCall::from_u64(call_id){
-                match call{
+            if let Some(call) = SystemCall::from_u64(call_id) {
+                match call {
                     _ => {
                         todo!("handle something")
                     }
                 }
-            }else{
+            } else {
                 println!("unsupported system call {}", call_id);
                 // kill the process or do something
             }

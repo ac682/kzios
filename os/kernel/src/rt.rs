@@ -7,8 +7,8 @@ use crate::{
     external::{
         _bss_end, _bss_start, _hart_num, _kernel_end, _memory_end, _memory_start, _stack_start,
     },
-    mm, peripheral, pmp, print, println,
-    proc::pm,
+    mm::{self, heap, frame}, peripheral, pmp, print, println,
+    proc::{pm, sch},
 };
 
 const LOGO: &str = include_str!("../logo.txt");
@@ -24,8 +24,10 @@ fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize) -> isize
         board_init();
     }
     pmp::init();
-    mm::init();
+    heap::init();
+    frame::init();
     pm::init();
+    sch::init();
     println!("{}\nis still booting", LOGO);
     print_isa();
     print_segments();
@@ -69,11 +71,16 @@ fn print_segments() {
         "\t\tbss@{:#x}..{:#x};",
         _bss_start as usize, _bss_end as usize
     );
-    println!("\t\tstack@{:#x}..{:#x} {{", _stack_start as usize, _kernel_end as usize);
+    println!(
+        "\t\tstack@{:#x}..{:#x} {{",
+        _stack_start as usize, _kernel_end as usize
+    );
     for i in 0..(_hart_num as usize) {
         println!(
             "\t\t\thart{}@{:#x}..{:#x};",
-            i, _kernel_end as usize - stack_per_hart * (i + 1), _kernel_end as usize - stack_per_hart * i
+            i,
+            _kernel_end as usize - stack_per_hart * (i + 1),
+            _kernel_end as usize - stack_per_hart * i
         );
     }
     println!("\t\t}}");

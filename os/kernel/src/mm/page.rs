@@ -3,6 +3,7 @@ use flagset::{flags, FlagSet};
 
 use crate::println;
 
+#[derive(Debug)]
 pub struct PageTable {
     entries: [PageTableEntry; 512],
 }
@@ -68,15 +69,16 @@ flags! {
     }
 }
 
+#[derive(Debug)]
 pub struct PageTableEntry(u64);
 
 impl PageTableEntry {
     pub fn read(&self) -> u64 {
-        unsafe{ (self as *const _ as *const u64).read() }
+        unsafe { (self as *const _ as *const u64).read() }
     }
 
     pub fn write(&mut self, val: u64) {
-        unsafe{ (self as *mut _ as *mut u64).write_volatile(val) }
+        unsafe { (self as *mut _ as *mut u64).write_volatile(val) }
     }
 
     pub fn write_bitor(&mut self, val: u64) {
