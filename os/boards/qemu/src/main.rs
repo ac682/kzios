@@ -7,7 +7,7 @@ use core::fmt::{Arguments, Result, Write};
 
 use alloc::borrow::ToOwned;
 use dtb_parser::{prop::PropertyValue, traits::HasNamedProperty};
-use erhino_kernel::{board::BoardInfo, env, kernel_init, kernel_main, proc::{Process, pm::add_process}};
+use erhino_kernel::{board::BoardInfo, env, kernel_init, kernel_main, proc::{Process, sch::add_process}, println};
 use tar_no_std::TarArchiveRef;
 
 // 测试用，日后 initfs 应该由 board crate 提供
@@ -18,7 +18,9 @@ fn main() {
     // prepare BoardInfo
     let dtb_addr = env::args()[1] as usize;
     let tree = dtb_parser::device_tree::DeviceTree::from_address(dtb_addr).unwrap();
+    // println!("{}", tree);
     let mut clint_base = 0usize;
+    let mut timebase_frequency = 0usize;
     for node in tree.into_iter() {
         if node.name().starts_with("clint") {
             if let Some(prop) = node.find_prop("reg") {
@@ -26,12 +28,20 @@ fn main() {
                     clint_base = *address as usize;
                 }
             }
+        }else if node.name() == "cpus"{
+            if let Some(prop) = node.find_prop("timebase-frequency"){
+                if let PropertyValue::Integer(frequency) = prop.value(){
+                    timebase_frequency = *frequency as usize;
+                }
+            }
         }
     }
     let info = BoardInfo {
         name: "qemu".to_owned(),
+        base_frequency: timebase_frequency,
         mswi_address: clint_base,
-        mtimer_address: clint_base + 0x0000_4000,
+        mtimer_address: clint_base + 0x4000,
+        mtime_address: clint_base + 0xbff8,
     };
     kernel_init(info);
     // add processes to scheduler

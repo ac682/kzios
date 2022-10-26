@@ -36,9 +36,11 @@ pub enum SystemCall {
     Notify = 0x22,
     // Process memory
     /// Map a range of virtual addresses for the process with kernel served pages
-    Map = 0x30,
-    /// discard and tell kernel to reuse a range of virtual addresses mapped before
-    Free = 0x31,
+    Extend = 0x30,
+    /// Map a range of virtual addresses for the process with specific range of physical addresses
+    Map = 0x31,
+    /// Discard and tell kernel to reuse a range of virtual addresses mapped before
+    Free = 0x32,
 }
 
 /// Predefined kernel calls (aka trap calls)

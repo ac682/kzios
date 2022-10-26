@@ -38,6 +38,11 @@ impl<T> HartLock<T> {
 unsafe impl<T> Sync for HartLock<T> {}
 
 impl<'a, T> Lock<'a, T, HartLockGuard<'a, T>> for HartLock<T> {
+    fn is_locked(&self) -> bool{
+        let locked = self.locked.load(Ordering::Relaxed);
+        locked != u64::MAX && locked != mhartid::read() as u64
+    }
+
     fn lock(&'a mut self) -> HartLockGuard<'a, T> {
         let hartid = mhartid::read() as u64;
         while self
@@ -52,6 +57,14 @@ impl<'a, T> Lock<'a, T, HartLockGuard<'a, T>> for HartLock<T> {
             data: self.data.as_mut_ptr(),
             locked: &mut self.locked,
         }
+    }
+
+    unsafe fn access(&self) -> *const T{
+        self.data.get_unchecked()
+    }
+
+    unsafe fn access_mut(&mut self) -> *mut T{
+        self.data.as_mut_ptr()
     }
 }
 
@@ -84,7 +97,7 @@ impl<'a, T> DerefMut for HartLockGuard<'a, T> {
 }
 
 pub struct HartReadWriteLock<T: Sized> {
-    data: Once<T>,
+    data: Option<T>,
     locked: AtomicU64,
 }
 
@@ -100,15 +113,22 @@ pub struct HartWriteLockGuard<'a, T: Sized + 'a> {
 }
 
 impl<T> HartReadWriteLock<T> {
+    pub const fn new(data: T) -> Self{
+        Self{
+            data: Some(data),
+            locked: AtomicU64::new(u64::MAX)
+        }
+    }
+
     pub const fn empty() -> Self {
         Self {
-            data: Once::new(),
+            data: None,
             locked: AtomicU64::new(u64::MAX),
         }
     }
 
     pub fn put(&mut self, data: T) {
-        self.data.call_once(|| data);
+        self.data = Some(data);
     }
 }
 
@@ -161,13 +181,18 @@ impl<'a, T> ReadWriteLock<'a, T, HartReadLockGuard<T>, HartWriteLockGuard<'a, T>
             unsafe { nop() }
         }
         HartWriteLockGuard {
-            data: self.data.as_mut_ptr(),
+            data: self.data.as_mut().unwrap(),
             locked: &mut self.locked,
         }
     }
 }
 
 impl<'a, T> Lock<'a, T, HartReadLockGuard<T>> for HartReadWriteLock<T> {
+    fn is_locked(&self) -> bool{
+        let locked = self.locked.load(Ordering::Relaxed);
+        locked != u64::MAX && locked != mhartid::read() as u64
+    }
+
     fn lock(&'a mut self) -> HartReadLockGuard<T> {
         let hartid = mhartid::read() as u64;
         while {
@@ -177,7 +202,15 @@ impl<'a, T> Lock<'a, T, HartReadLockGuard<T>> for HartReadWriteLock<T> {
             unsafe { nop() }
         }
         HartReadLockGuard {
-            data: self.data.as_mut_ptr(),
+            data: self.data.as_mut().unwrap(),
         }
+    }
+
+    unsafe fn access(&self) -> *const T {
+        self.data.as_ref().unwrap()
+    }
+
+    unsafe fn access_mut(&mut self) -> *mut T{
+        self.data.as_mut().unwrap()
     }
 }

@@ -10,24 +10,30 @@
 
 从内核第一行代码开始到用户程序被执行
 
-#### boot stage#0
+#### boot stage #0: _start@assembly.asm
 
 为进入裸 Rust 环境做准备，此时会挂起其他 hart，由 hart#0 进行初始化工作。
 
-#### boot stage#1
+#### boot stage #1: rust_start@rt.rs
 
-初始化内存管理（包括内核自己的 Rust 堆管理），设定陷入模式，建立内存保护。
+初始化内存管理（包括内核自己的 Rust 堆管理）
 转移控制权到 board crate。
 
-#### boot stage#2
+#### boot stage #2: main@board_crate->kernel_init@lib,rs->kernel_main@lib,rs
 
 board crate 准备板子的信息，传递给内核，内核利用这些信息获取硬件控制权。
-此时应用程序执行环境被建立。
+设定陷入模式，建立内存保护。此时应用程序执行环境被建立。
 转移控制权给内核。
 
-#### boot stage#3
+#### boot stage #3: in kernel call
 
 内核做一些收尾工作，之后开始进程调度，内核通过系统调用服务进程。
+
+### 进程调度
+
+RR且动态时间片。每个 hart 使用一个调度器实例，但该调度器共享一个进程列表。
+进程同一时间只能被一个 hart 占有，如果其他 hart 上运行的进程向该进程发送信息或者其他通过本地系统调用的跨进程请求会使其立即交出执行权并向目标进程添加待处理请求。
+目标进程无论是否在执行都会在下次执行时优先处理待处理请求。
 
 ## 进度
 

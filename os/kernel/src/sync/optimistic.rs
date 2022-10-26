@@ -8,7 +8,7 @@ use super::Lock;
 ///
 /// Suitable for multi-core and single thread (in single-threaded kernel)
 pub struct OptimisticLock<T: Sized> {
-    data: Once<T>,
+    data: Option<T>,
 }
 
 pub struct OptimisticLockGuard<T: Sized> {
@@ -16,28 +16,37 @@ pub struct OptimisticLockGuard<T: Sized> {
 }
 
 impl<T> OptimisticLock<T> {
-    pub fn new(data: T) -> Self {
-        let cell: Once<T> = Once::new();
-        cell.call_once(|| data);
-        Self { data: cell }
+    pub const  fn new(data: T) -> Self {
+        Self { data: Some(data) }
     }
 
     pub const fn empty() -> Self {
-        Self { data: Once::new() }
+        Self { data: None }
     }
 
-    pub fn put(&self, data: T) {
-        self.data.call_once(|| data);
+    pub fn put(&mut self, data: T) {
+        self.data = Some(data);
     }
 }
 
 unsafe impl<T> Sync for OptimisticLock<T> {}
 
 impl<'a, T> Lock<'a, T, OptimisticLockGuard<T>> for OptimisticLock<T> {
+    fn is_locked(&self) -> bool{
+        false
+    }
     fn lock(&mut self) -> OptimisticLockGuard<T> {
         OptimisticLockGuard {
-            data: self.data.as_mut_ptr(),
+            data: self.data.as_mut().unwrap(),
         }
+    }
+
+    unsafe fn access(&self) -> *const T{
+        self.data.as_ref().unwrap()
+    }
+
+    unsafe fn access_mut(&mut self) -> *mut T {
+        self.data.as_mut().unwrap()
     }
 }
 

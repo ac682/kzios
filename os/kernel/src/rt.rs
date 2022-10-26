@@ -8,12 +8,12 @@ use crate::{
         _bss_end, _bss_start, _hart_num, _kernel_end, _memory_end, _memory_start, _stack_start,
     },
     mm::{self, heap, frame}, peripheral, pmp, print, println,
-    proc::{pm, sch},
+    proc::{sch}, timer,
 };
 
 const LOGO: &str = include_str!("../logo.txt");
 
-// only #0 goes here, others only called in trap context
+// only #0 goes here, others called in trap context
 #[lang = "start"]
 fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize) -> isize {
     // boot stage #0: enter rust environment
@@ -23,14 +23,11 @@ fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize) -> isize
     unsafe {
         board_init();
     }
-    pmp::init();
     heap::init();
-    frame::init();
-    pm::init();
-    sch::init();
     println!("{}\nis still booting", LOGO);
     print_isa();
     print_segments();
+    // main() -> kernel_init() to setup peripheral -> kernel_main() to enter boot stage #3
     main();
     panic!("unreachable here");
     // do board clean

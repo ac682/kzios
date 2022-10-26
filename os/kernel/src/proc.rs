@@ -1,10 +1,9 @@
-pub mod pm;
-pub(crate) mod sch;
+pub mod sch;
 
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use elf_rs::{Elf, ElfFile, ElfMachine, ElfType, ProgramHeaderFlags, ProgramType};
 use erhino_shared::{process::ProcessState, Address, Pid};
-use flagset::FlagSet;
+use flagset::{FlagSet, flags};
 
 use crate::{
     mm::{frame::frame_alloc, page::PageTableEntryFlag, unit::MemoryUnit},
@@ -24,9 +23,23 @@ pub struct Process {
     name: String,
     pid: Pid,
     parent: Pid,
+    perm: FlagSet<ProcessPermission>,
     memory: MemoryUnit,
     trap: TrapFrame,
     state: ProcessState,
+}
+
+flags!{
+    pub enum ProcessPermission: u8{
+        Valid = 0b1,
+        // 创建和访问其他进程的能力
+        Process = 0b10,
+        // 使用 Map 的能力
+        Memory = 0b100,
+        // 待定
+        Net = 0b1000,
+        All = (ProcessPermission::Valid | ProcessPermission::Process | ProcessPermission::Memory | ProcessPermission::Net).bits()
+    }
 }
 
 // 特点：循环队列，以pid为索引，由于pid不可变意味着元素不可以移动
@@ -38,6 +51,7 @@ impl Process {
                 name: "adam".to_owned(),
                 pid: 0,
                 parent: 0,
+                perm: ProcessPermission::All.into(),
                 memory: MemoryUnit::new(),
                 trap: TrapFrame::new(),
                 state: ProcessState::Ready,

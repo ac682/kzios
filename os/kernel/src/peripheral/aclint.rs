@@ -1,20 +1,19 @@
 pub struct Aclint {
     mswi_address: usize,
     mtimer_address: usize,
+    mtime_address: usize,
 }
 
 impl Aclint {
-    pub fn new(mswi_addr: usize, mtimer_addr: usize) -> Self {
+    pub fn new(mswi_address: usize, mtimer_address: usize, mtime_address: usize) -> Self {
         Self {
-            mswi_address: mswi_addr,
-            mtimer_address: mtimer_addr,
+            mswi_address,
+            mtimer_address,
+            mtime_address,
         }
     }
 
     pub fn set_msip(&self, hartid: usize) {
-        if hartid > 4094 {
-            panic!("hartid cannot be greater than 4094");
-        }
         unsafe {
             (self.mswi_address as *mut u32)
                 .add(hartid)
@@ -23,13 +22,31 @@ impl Aclint {
     }
 
     pub fn clear_msip(&self, hartid: usize) {
-        if hartid > 4094 {
-            panic!("hartid cannot be greater than 4094");
-        }
         unsafe {
             (self.mswi_address as *mut u32)
                 .add(hartid)
                 .write_volatile(0)
+        }
+    }
+
+    pub fn get_time(&self) -> u64 {
+        unsafe { (self.mtime_address as *const u64).read_volatile() }
+    }
+
+    pub fn set_timer(&self, hartid: usize, cycles: usize) {
+        unsafe {
+            let time = self.get_time();
+            (self.mtimer_address as *mut u64)
+                .add(hartid)
+                .write_volatile(self.get_time() + cycles as u64);
+        }
+    }
+
+    pub fn cancel_timer(&self, hartid: usize){
+        unsafe {
+            (self.mtimer_address as *mut u64)
+            .add(hartid)
+            .write_volatile(u64::MAX);
         }
     }
 }

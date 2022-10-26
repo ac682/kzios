@@ -13,7 +13,7 @@ pub mod plic;
 static mut ACLINT: OptimisticLock<Aclint> = OptimisticLock::empty();
 
 pub fn init(info: &BoardInfo) {
-    unsafe { ACLINT.put(Aclint::new(info.mswi_address, info.mtimer_address)) }
+    unsafe { ACLINT.put(Aclint::new(info.mswi_address, info.mtimer_address, info.mtime_address)) }
 }
 
 pub fn aclint() -> OptimisticLockGuard<Aclint> {

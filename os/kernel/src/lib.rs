@@ -14,7 +14,7 @@ use core::arch::global_asm;
 use board::BoardInfo;
 pub use erhino_shared::*;
 
-use crate::krn_call::krn_enter_user_space;
+use crate::{krn_call::krn_enter_user_space, mm::frame, proc::{sch}};
 
 extern crate alloc;
 
@@ -31,6 +31,7 @@ pub mod proc;
 mod rt;
 pub mod sync;
 mod trap;
+mod timer;
 
 global_asm!(include_str!("assembly.asm"));
 
@@ -38,6 +39,10 @@ pub fn kernel_init(info: BoardInfo) {
     println!("boot stage #3: kernel initialization");
     println!("{}", info);
     peripheral::init(&info);
+    frame::init();
+    pmp::init();
+    timer::init(&info);
+    sch::init();
     println!("boot stage #4: prepare user environment");
 
     // 内核任务完成了， 回收免得 board 占用 uart 设备
@@ -47,4 +52,7 @@ pub fn kernel_init(info: BoardInfo) {
 pub fn kernel_main() {
     println!("boot completed, enter user mode");
     krn_enter_user_space();
+    loop{
+
+    }
 }

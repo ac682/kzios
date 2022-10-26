@@ -4,12 +4,12 @@ use erhino_shared::call::{KernelCall, SystemCall};
 use num_traits::FromPrimitive;
 use riscv::register::{
     mcause::{Exception, Interrupt, Mcause, Trap},
-    mhartid,
+    mhartid, mepc,
 };
 
 use crate::{
     println,
-    sync::{hart::HartLock, Lock},
+    sync::{hart::HartLock, Lock}, timer, proc::sch::enter_user_mode,
 };
 
 // 内核陷入帧只会在第一个陷入时用到，之后大概率用不到，所以第一个陷入帧应该分配在一个垃圾堆(_memory_end - 4096)或者栈上
@@ -19,11 +19,17 @@ use crate::{
 static KERNEL_TRAP: TrapFrame = TrapFrame::new();
 
 #[no_mangle]
-unsafe fn handle_trap(hartid: usize, cause: Mcause, frame: &TrapFrame) {
+unsafe fn handle_trap(hartid: usize, cause: Mcause, frame: &mut TrapFrame) {
     match cause.cause() {
+        Trap::Interrupt(Interrupt::MachineTimer) => {
+            timer::tick(hartid);
+        }
         Trap::Interrupt(Interrupt::MachineSoft) => {
             panic!("Machine Soft Interrupt at hart#{}", hartid);
             // its time to schedule process!
+        }
+        Trap::Exception(Exception::Breakpoint) => {
+            panic!("user breakpoint at hart#{}: frame={}", hartid, frame);
         }
         Trap::Exception(Exception::StoreFault) => {
             panic!("Store/AMO access fault hart#{}: frame=\n{}", hartid, frame);
@@ -33,7 +39,8 @@ unsafe fn handle_trap(hartid: usize, cause: Mcause, frame: &TrapFrame) {
             if let Some(call) = KernelCall::from_u64(call_id) {
                 match call {
                     KernelCall::EnterUserSpace => {
-                        todo!("enter user mode");
+                        enter_user_mode();
+                        frame.pc += 4
                     }
                 }
             } else {
