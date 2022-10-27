@@ -95,12 +95,16 @@ impl PageTableEntry {
         self.write(val);
     }
 
-    pub fn set_as_page_table(&mut self, table_root: PageNumber) -> &mut PageTable {
+    pub fn set_as_page_table_mut(&mut self, table_root: PageNumber) -> &mut PageTable {
         self.set(table_root, 0, PageTableEntryFlag::Valid);
         PageTable::new(table_root)
     }
 
-    pub fn as_page_table(&mut self) -> &mut PageTable {
+    pub fn as_page_table(&self) -> &PageTable{
+        PageTable::from_exist(self.physical_page_number())
+    }
+
+    pub fn as_page_table_mut(&mut self) -> &mut PageTable {
         PageTable::from_exist(self.physical_page_number())
     }
 

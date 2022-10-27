@@ -19,6 +19,7 @@ pub trait Scheduler {
     fn add(proc: Process);
     fn tick(&mut self);
     fn begin(&mut self);
+    fn current(&mut self) -> Option<&mut Process>;
 }
 
 pub fn init() {
@@ -33,16 +34,21 @@ pub fn add_process(proc: Process){
     SchedulerImpl::add(proc);
 }
 
-pub fn enter_user_mode(){
-    let hartid = mhartid::read();
+pub fn enter_user_mode(hartid: usize){
     unsafe{
         SCHEDULERS[hartid].begin();
     }
 }
 
-pub fn forawrd_tick(){
+pub fn forward_tick(){
     let hartid = mhartid::read();
     unsafe{
         SCHEDULERS[hartid].tick();
+    }
+}
+
+pub fn current_process(hartid: usize) -> Option<&'static mut Process>{
+    unsafe{
+        SCHEDULERS[hartid].current()
     }
 }

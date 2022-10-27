@@ -20,7 +20,7 @@ pub fn init() {
 pub fn frame_alloc(count: usize) -> Option<PageNumber> {
     unsafe {
         let mut allocator = FRAME_ALLOCATOR.lock();
-        allocator.alloc(count).map(|x| (x))
+        allocator.alloc(count)
     }
 }
 

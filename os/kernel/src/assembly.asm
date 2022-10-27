@@ -52,8 +52,8 @@ _start:
     sd      a7, 56(t1)
 3:
     # do hart preinitialization & setup trap context
-    # enable interrupt
-    li		t0, (0b11 << 11) | (1 << 7) | (1 << 3)
+    # enable interrupt and floating point support
+    li		t0, (0b1 << 13) | (0b11 << 11) | (1 << 7) | (1 << 3)
     csrw	mstatus, t0
     li      t0, (1 << 3)
     csrw    mie, t0

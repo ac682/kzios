@@ -1,15 +1,22 @@
 use core::fmt::Display;
 
-use erhino_shared::call::{KernelCall, SystemCall};
+use erhino_shared::{
+    call::{KernelCall, SystemCall},
+    PageNumber,
+};
+use flagset::FlagSet;
 use num_traits::FromPrimitive;
 use riscv::register::{
     mcause::{Exception, Interrupt, Mcause, Trap},
-    mhartid, mepc,
+    mepc, mhartid,
 };
 
 use crate::{
+    mm::page::PageTableEntryFlag,
     println,
-    sync::{hart::HartLock, Lock}, timer, proc::sch::enter_user_mode,
+    proc::sch::{self, enter_user_mode},
+    sync::{hart::HartLock, Lock},
+    timer,
 };
 
 // 内核陷入帧只会在第一个陷入时用到，之后大概率用不到，所以第一个陷入帧应该分配在一个垃圾堆(_memory_end - 4096)或者栈上
@@ -39,7 +46,7 @@ unsafe fn handle_trap(hartid: usize, cause: Mcause, frame: &mut TrapFrame) {
             if let Some(call) = KernelCall::from_u64(call_id) {
                 match call {
                     KernelCall::EnterUserSpace => {
-                        enter_user_mode();
+                        enter_user_mode(hartid);
                         frame.pc += 4
                     }
                 }
@@ -51,10 +58,34 @@ unsafe fn handle_trap(hartid: usize, cause: Mcause, frame: &mut TrapFrame) {
             let call_id = frame.x[17];
             if let Some(call) = SystemCall::from_u64(call_id) {
                 match call {
-                    _ => {
-                        todo!("handle something")
-                    }
+                    SystemCall::Extend => unsafe {
+                        if let Some(process) = sch::current_process(hartid) {
+                            let start = frame.x[10];
+                            let end = start + frame.x[11];
+                            let bits = frame.x[12] & 0b111;
+                            let flags = if bits & 0b100 == 0b100 {
+                                PageTableEntryFlag::Executable
+                            } else {
+                                PageTableEntryFlag::Valid
+                            } | if bits & 0b010 == 0b010 {
+                                PageTableEntryFlag::Writeable
+                            } else {
+                                PageTableEntryFlag::Valid
+                            } | if bits & 0b001 == 0b001 {
+                                PageTableEntryFlag::Readable
+                            } else {
+                                PageTableEntryFlag::Valid
+                            };
+                            process.memory.fill(
+                                (start >> 12) as PageNumber,
+                                ((end - start) >> 12) as PageNumber,
+                                PageTableEntryFlag::Valid | PageTableEntryFlag::User | flags,
+                            );
+                        }
+                    },
+                    _ => todo!("handle something"),
                 }
+                frame.pc += 4;
             } else {
                 println!("unsupported system call {}", call_id);
                 // kill the process or do something

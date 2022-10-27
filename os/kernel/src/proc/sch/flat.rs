@@ -30,7 +30,9 @@ impl ProcessTable {
         }
     }
 
-    pub fn add(&mut self, proc: Process) {
+    pub fn add(&mut self, mut proc: Process) {
+        let pid = self.inner.len();
+        proc.pid = pid as Pid;
         self.inner
             .push(HartReadWriteLock::new(ProcessCell::new(proc)));
     }
@@ -39,7 +41,7 @@ impl ProcessTable {
         self.inner.len()
     }
 
-    pub fn next_availiable(&mut self) -> HartWriteLockGuard<ProcessCell> {
+    pub fn next_available(&mut self) -> HartWriteLockGuard<ProcessCell> {
         loop {
             let current = self.current;
             self.current = (self.current + 1) % self.inner.len();
@@ -107,13 +109,20 @@ impl Scheduler for FlatScheduler {
         table.add(proc);
     }
     fn tick(&mut self) {
-        todo!("begin the first process");
+        self.switch_next();
     }
     fn begin(&mut self) {
         if unsafe { (*PROC_TABLE.access()).len() } > 0 {
             self.switch_next();
         } else {
-            panic!("no process availiable");
+            panic!("no process available");
+        }
+    }
+    fn current(&mut self) -> Option<&mut Process> {
+        if let Some(guard) = &mut self.current{
+            Some(&mut guard.inner)
+        }else{
+            None
         }
     }
 }
@@ -122,21 +131,26 @@ impl FlatScheduler {
     fn switch_next(&mut self) -> Pid {
         unsafe {
             let mut table = PROC_TABLE.lock_mut();
-            let mut process = unsafe {(*PROC_TABLE.access_mut()).next_availiable()};
-            let next_pid = process.inner.pid;
             let time = timer::get_time();
             if let Some(current) = &mut self.current {
                 if current.inner.state == ProcessState::Running {
                     current.inner.state = ProcessState::Ready;
                     current.out_time = time;
                 }
+                self.current = None;
             }
+
+            // 👆 换出之前的
+            // 👇 换入新的
+
+            let mut process = unsafe {(*PROC_TABLE.access_mut()).next_available()};
+            let next_pid = process.inner.pid;
             mscratch::write(&process.inner.trap as *const TrapFrame as usize);
             process.inner.state = ProcessState::Running;
             process.in_time = time;
             let quantum = process.next_quantum();
             process.last_quantum = quantum;
-            timer::set_timer(self.hartid, quantum, super::forawrd_tick);
+            timer::set_timer(self.hartid, quantum, super::forward_tick);
             self.current = Some(process);
             next_pid
         }
