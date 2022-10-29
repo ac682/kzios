@@ -7,7 +7,7 @@ use core::fmt::{Arguments, Result, Write};
 
 use alloc::borrow::ToOwned;
 use dtb_parser::{prop::PropertyValue, traits::HasNamedProperty};
-use erhino_kernel::{board::BoardInfo, env, kernel_init, kernel_main, proc::{Process, sch::add_process}, println};
+use erhino_kernel::{board::BoardInfo, env, kernel_init, kernel_main, proc::{Process, sch::add_process}};
 use tar_no_std::TarArchiveRef;
 
 // 测试用，日后 initfs 应该由 board crate 提供
@@ -50,8 +50,13 @@ fn main() {
         .entries()
         .find(|f| f.filename().as_str() == "user_init")
         .unwrap();
-    let process = Process::from_elf(user_init.data()).unwrap();
-    add_process(process);
+    let systems = archive.entries().filter(|f| f.filename().starts_with("system"));
+    for system in systems{
+        let process = Process::from_elf(system.data()).unwrap();
+        add_process(process);
+    }
+    let user_init_proc = Process::from_elf(user_init.data()).unwrap();
+    add_process(user_init_proc);
     kernel_main();
 }
 

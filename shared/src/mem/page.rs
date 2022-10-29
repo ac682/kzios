@@ -1,4 +1,4 @@
-use crate::PageNumber;
+use crate::mem::PageNumber;
 
 /// Three page level for memory paging
 #[derive(Clone, Copy, PartialEq)]

@@ -1,5 +1,5 @@
 use alloc::vec::Vec;
-use erhino_shared::{process::ProcessState, Pid};
+use erhino_shared::process::{ProcessState, Pid};
 use riscv::register::{mhartid, mscratch};
 
 use crate::{

@@ -36,21 +36,21 @@ mod timer;
 global_asm!(include_str!("assembly.asm"));
 
 pub fn kernel_init(info: BoardInfo) {
-    println!("boot stage #3: kernel initialization");
+    println!("\x1b[0;34mboot stage #3: kernel initialization\x1b[0m");
     println!("{}", info);
     peripheral::init(&info);
     frame::init();
     pmp::init();
     timer::init(&info);
     sch::init();
-    println!("boot stage #4: prepare user environment");
+    println!("\x1b[0;34mboot stage #4: prepare user environment\x1b[0m");
 
     // 内核任务完成了， 回收免得 board 占用 uart 设备
     // 把任务转到 console 设备上
 }
 
 pub fn kernel_main() {
-    println!("boot completed, enter user mode");
+    println!("\x1b[0;34mboot completed, enter user mode\x1b[0m");
     krn_enter_user_space();
     loop{
 

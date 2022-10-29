@@ -1,4 +1,4 @@
-use erhino_shared::{page::PageLevel, Address, PageNumber};
+use erhino_shared::mem::{Address, PageNumber, page::PageLevel};
 use flagset::{flags, FlagSet};
 
 use crate::println;

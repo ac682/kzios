@@ -2,7 +2,7 @@ use core::fmt::Display;
 
 use erhino_shared::{
     call::{KernelCall, SystemCall},
-    PageNumber,
+    mem::PageNumber,
 };
 use flagset::FlagSet;
 use num_traits::FromPrimitive;
@@ -36,7 +36,7 @@ unsafe fn handle_trap(hartid: usize, cause: Mcause, frame: &mut TrapFrame) {
             // its time to schedule process!
         }
         Trap::Exception(Exception::Breakpoint) => {
-            panic!("user breakpoint at hart#{}: frame={}", hartid, frame);
+            panic!("user breakpoint at hart#{}: frame=\n{}", hartid, frame);
         }
         Trap::Exception(Exception::StoreFault) => {
             panic!("Store/AMO access fault hart#{}: frame=\n{}", hartid, frame);
@@ -92,7 +92,7 @@ unsafe fn handle_trap(hartid: usize, cause: Mcause, frame: &mut TrapFrame) {
             }
         }
         _ => panic!(
-            "unknown trap cause at hart#{}: cause={:#x}, frame={}",
+            "unknown trap cause at hart#{}: cause={:#x}, frame=\n{}",
             hartid,
             cause.bits(),
             frame

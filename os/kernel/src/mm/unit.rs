@@ -1,6 +1,6 @@
 use core::{f32::consts::E, fmt::Display};
 
-use erhino_shared::{Address, PageNumber};
+use erhino_shared::mem::{Address, PageNumber, page::PageLevel};
 use flagset::FlagSet;
 
 use crate::{mm::range::PageRange, println};
@@ -9,7 +9,6 @@ use super::{
     frame::frame_alloc,
     page::{PageTable, PageTableEntry, PageTableEntryFlag, PageTableError},
 };
-use erhino_shared::page::PageLevel;
 
 // 以后 MemoryUnit 可以有多种实现，例如 Sv39 可换成 Sv48
 #[derive(Debug)]

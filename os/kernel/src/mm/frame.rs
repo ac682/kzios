@@ -1,5 +1,5 @@
 use buddy_system_allocator::{FrameAllocator, LockedFrameAllocator};
-use erhino_shared::PageNumber;
+use erhino_shared::mem::PageNumber;
 
 use crate::{
     external::{_kernel_end, _memory_end},

@@ -2,4 +2,6 @@
 
 extern crate rinlib;
 
-fn main() {}
+fn main() {
+    
+}

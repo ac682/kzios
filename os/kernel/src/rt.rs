@@ -24,7 +24,7 @@ fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize) -> isize
         board_init();
     }
     heap::init();
-    println!("{}\nis still booting", LOGO);
+    println!("{}\n\x1b[0;34mis still booting\x1b[0m", LOGO);
     print_isa();
     print_segments();
     // main() -> kernel_init() to setup peripheral -> kernel_main() to enter boot stage #3
@@ -87,7 +87,7 @@ fn print_segments() {
 
 #[panic_handler]
 fn handle_panic(info: &PanicInfo) -> ! {
-    print!("Kernel panicking: ");
+    print!("\x1b[0;31mKernel panicking: \x1b[0m");
     if let Some(location) = info.location() {
         println!(
             "file {}, {}: {}",

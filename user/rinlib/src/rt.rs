@@ -1,6 +1,7 @@
 use core::{alloc::Layout, panic::PanicInfo};
 
 use buddy_system_allocator::{Heap, LockedHeapWithRescue};
+use erhino_shared::process::Termination;
 
 use crate::call::sys_extend;
 
@@ -16,13 +17,12 @@ extern "C"{
 static HEAP_ALLOCATOR: LockedHeapWithRescue<HEAP_ORDER> = LockedHeapWithRescue::new(heap_rescue);
 
 #[lang = "start"]
-fn lang_start<T: 'static>(main: fn() -> T, _argc: isize, _argv: *const *const u8) -> isize {
+fn lang_start<T: Termination + 'static>(main: fn() -> T, _argc: isize, _argv: *const *const u8) -> isize {
     unsafe{
         sys_extend(_segment_break as usize, 4096, 0b011);
         HEAP_ALLOCATOR.lock().init(_segment_break as usize, 4096);
     }
-    main();
-    0
+    main().to_exit_code()
 }
 
 #[panic_handler]

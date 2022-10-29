@@ -2,7 +2,7 @@ pub mod sch;
 
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use elf_rs::{Elf, ElfFile, ElfMachine, ElfType, ProgramHeaderFlags, ProgramType};
-use erhino_shared::{process::ProcessState, Address, Pid};
+use erhino_shared::{process::{ProcessState, Pid}, mem::{Address, page::PageLevel}};
 use flagset::FlagSet;
 
 use crate::{
@@ -10,7 +10,6 @@ use crate::{
     println,
     trap::TrapFrame,
 };
-use erhino_shared::page::PageLevel;
 
 #[derive(Debug)]
 pub enum ProcessSpawnError {
