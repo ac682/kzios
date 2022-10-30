@@ -4,5 +4,5 @@
 
 pub use erhino_shared::*;
 
+pub mod call;
 mod rt;
-mod call;

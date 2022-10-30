@@ -15,14 +15,16 @@ pub enum SystemCall {
     // Process control
     /// Finalized process notifies kernel to cleanup
     Exit = 0x10,
+    /// Yield return
+    Yield = 0x11,
     /// Send a signal to the other processes
-    Signal = 0x11,
+    Signal = 0x12,
     /// Fork process itself
-    Fork = 0x12,
+    Fork = 0x13,
     /// Wait for all child processes to exit
-    Wait = 0x13,
+    Wait = 0x14,
     /// Wait for a certain process to exit
-    WaitFor = 0x14,
+    WaitFor = 0x15,
     /// Replace the process's execution image with the new one from the bytes
     ExecuteBytes = 0x1A,
     /// Replace the process's execution image with the new one from the file

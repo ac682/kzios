@@ -1,6 +1,6 @@
-use core::{ptr::null_mut, cell::UnsafeCell};
+use core::{cell::UnsafeCell, ptr::null_mut};
 
-use alloc::{boxed::Box, vec::Vec, sync::Arc};
+use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use erhino_shared::{
     call::{KernelCall, SystemCall},
     mem::PageNumber,
@@ -21,8 +21,9 @@ use crate::{
         sch::{self, flat::FlatScheduler, Scheduler},
         Process,
     },
+    sync::{cell::UniProcessCell, optimistic::OptimisticLock, Lock},
     timer::hart::HartTimer,
-    trap::TrapFrame, sync::{optimistic::OptimisticLock, Lock, cell::UniProcessCell},
+    trap::TrapFrame,
 };
 
 // 内核陷入帧只会在第一个陷入时用到，之后大概率用不到，所以第一个陷入帧应该分配在一个垃圾堆(_memory_end - 4096)或者栈上
@@ -74,7 +75,9 @@ impl Hart {
                 // its time to schedule process!
             }
             Trap::Exception(Exception::Breakpoint) => {
-                panic!("user breakpoint at hart#{}: frame=\n{}", self.id, frame);
+                // panic!("user breakpoint at hart#{}: frame=\n{}", self.id, frame);
+                println!("{}", frame.x[10]);
+                frame.pc += 4;
             }
             Trap::Exception(Exception::StoreFault) => {
                 panic!("Store/AMO access fault hart#{}: frame=\n{}", self.id, frame);
@@ -96,7 +99,7 @@ impl Hart {
                 let call_id = frame.x[17];
                 if let Some(call) = SystemCall::from_u64(call_id) {
                     match call {
-                        SystemCall::Extend => unsafe {
+                        SystemCall::Extend => {
                             if let Some(process) = self.scheduler.current() {
                                 let start = frame.x[10];
                                 let end = start + frame.x[11];
@@ -121,6 +124,12 @@ impl Hart {
                                 );
                             }
                         },
+                        SystemCall::Exit => {
+                            self.scheduler.finish();
+                        }
+                        SystemCall::Yield => {
+                            self.scheduler.tick();
+                        }
                         _ => todo!("handle something"),
                     }
                     frame.pc += 4;
@@ -162,6 +171,6 @@ pub fn of_hart(hartid: usize) -> &'static mut Hart {
     unsafe { &mut HARTS[hartid] }
 }
 
-pub fn add_flat_process(proc: Process){
+pub fn add_flat_process(proc: Process) {
     SchedulerImpl::add(proc);
 }

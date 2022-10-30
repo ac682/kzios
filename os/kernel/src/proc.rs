@@ -28,10 +28,10 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn from_elf(data: &[u8]) -> Result<Self, ProcessSpawnError> {
+    pub fn from_elf(data: &[u8], name: &str) -> Result<Self, ProcessSpawnError> {
         if let Ok(elf) = Elf::from_bytes(data) {
             let mut process = Self {
-                name: "adam".to_owned(),
+                name: name.to_owned(),
                 pid: 0,
                 parent: 0,
                 memory: MemoryUnit::new(),
@@ -39,7 +39,7 @@ impl Process {
                 state: ProcessState::Ready,
             };
             process.trap.pc = elf.entry_point();
-            process.trap.x[2] = 0x40_0000_0000;
+            process.trap.x[2] = 0x3f_ffff_f000;
             process.trap.satp = (8 << 60) | process.memory.root() as u64;
             process.trap.status = 1 << 13 | 1 << 7 | 1 << 5 | 1 << 4;
             let header = elf.elf_header();
@@ -47,7 +47,7 @@ impl Process {
             if header.machine() != ElfMachine::RISC_V || header.elftype() != ElfType::ET_EXEC {
                 return Err(ProcessSpawnError::WrongTarget);
             }
-            process.memory.fill(0x3f_ffff_f, 1, PageTableEntryFlag::UserReadWrite | PageTableEntryFlag::Valid).unwrap();
+            process.memory.fill(0x3f_ffff_e, 1, PageTableEntryFlag::UserReadWrite | PageTableEntryFlag::Valid).unwrap();
             for ph in elf.program_header_iter() {
                 if ph.ph_type() == ProgramType::LOAD {
                     process.memory.write(
@@ -78,4 +78,12 @@ fn flags_to_permission(flags: ProgramHeaderFlags) -> impl Into<FlagSet<PageTable
         perm |= PageTableEntryFlag::Readable;
     }
     perm
+}
+
+
+// 4096 大小，
+// 依次保存 TrapFrame 和一些用于内核数据交换的内容。由于没有监管者态，内核跑在机器态，所以不需要页表切换，也就不需要跳板页。
+#[repr(C)]
+pub struct KernelPage{
+    trap: TrapFrame
 }

@@ -103,6 +103,26 @@ impl<T: Timer + Sized> Scheduler for FlatScheduler<T> {
             None
         }
     }
+
+    fn finish(&mut self) {
+        if let Some(process) = self.current(){
+            if process.state == ProcessState::Running{
+                // 进程调用 exit 之前会自己调用 wait 来等待子进程退出
+                // TODO: 查找所有子进程，然后直接 kill with no mercy
+                process.state = ProcessState::Dead;
+                // TODO: do process clean
+            }else{
+                // ??? 这个 finish 只能是运行中的程序转发，程序不在运行但是被调用，那就是出现了调度错误！
+                panic!("mistakes must have be made before finish invoked");
+            }
+        }
+        self.switch_next();
+    }
+
+    // 深度优先递归击杀子进程然后击杀自己
+    fn kill(&mut self, pid: Pid) {
+        todo!()
+    }
 }
 
 impl<T: Timer + Sized> FlatScheduler<T> {

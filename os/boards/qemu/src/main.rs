@@ -54,10 +54,10 @@ fn main() {
         .unwrap();
     let systems = archive.entries().filter(|f| f.filename().starts_with("system"));
     for system in systems{
-        let process = Process::from_elf(system.data()).unwrap();
+        let process = Process::from_elf(system.data(), system.filename().as_str()).unwrap();
         add_flat_process(process);
     }
-    let user_init_proc = Process::from_elf(user_init.data()).unwrap();
+    let user_init_proc = Process::from_elf(user_init.data(), user_init.filename().as_str()).unwrap();
     add_flat_process(user_init_proc);
     kernel_main();
 }
