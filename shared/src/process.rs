@@ -20,7 +20,7 @@ pub enum Signal {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 /// States of process
 pub enum ProcessState {
     /// Can be picked as running process
