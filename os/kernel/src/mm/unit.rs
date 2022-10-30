@@ -77,7 +77,7 @@ impl MemoryUnit {
                 let ppn = self.ensure_created(
                     (addr >> 12) + page_count,
                     || frame_alloc(1),
-                    flags.clone(),
+                    flags,
                 )?;
                 let start = (ppn << 12) + offset;
                 let end = if (real_length - copied) > (0x1000 - offset as usize) {
@@ -119,12 +119,10 @@ impl MemoryUnit {
                 } else {
                     return Err(MemoryUnitError::EntryOverwrite);
                 }
+            } else if let Some(frame) = frame_alloc(1) {
+                entry2.set_as_page_table_mut(frame)
             } else {
-                if let Some(frame) = frame_alloc(1) {
-                    entry2.set_as_page_table_mut(frame)
-                } else {
-                    return Err(MemoryUnitError::RanOutOfFrames);
-                }
+                return Err(MemoryUnitError::RanOutOfFrames);
             };
             let vpn1 = PageLevel::Mega.extract(vpn);
             if let Some(entry1) = table1.entry_mut(vpn1) {
@@ -134,12 +132,10 @@ impl MemoryUnit {
                     } else {
                         return Err(MemoryUnitError::EntryOverwrite);
                     }
+                } else if let Some(frame) = frame_alloc(1) {
+                    entry1.set_as_page_table_mut(frame)
                 } else {
-                    if let Some(frame) = frame_alloc(1) {
-                        entry1.set_as_page_table_mut(frame)
-                    } else {
-                        return Err(MemoryUnitError::RanOutOfFrames);
-                    }
+                    return Err(MemoryUnitError::RanOutOfFrames);
                 };
                 let vpn0 = PageLevel::Kilo.extract(vpn);
                 if let Some(entry0) = table0.entry_mut(vpn0) {
@@ -154,13 +150,11 @@ impl MemoryUnit {
                         } else {
                             Err(MemoryUnitError::EntryOverwrite)
                         }
+                    } else if let Some(ppn) = ppn_factory() {
+                        entry0.set(ppn, 0, flags);
+                        Ok(ppn)
                     } else {
-                        if let Some(ppn) = ppn_factory() {
-                            entry0.set(ppn, 0, flags);
-                            Ok(ppn)
-                        } else {
-                            Err(MemoryUnitError::RanOutOfFrames)
-                        }
+                        Err(MemoryUnitError::RanOutOfFrames)
                     }
                 } else {
                     Err(MemoryUnitError::EntryNotFound)

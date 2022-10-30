@@ -47,7 +47,7 @@ impl Process {
             if header.machine() != ElfMachine::RISC_V || header.elftype() != ElfType::ET_EXEC {
                 return Err(ProcessSpawnError::WrongTarget);
             }
-            process.memory.fill(0x3f_ffff_e, 1, PageTableEntryFlag::UserReadWrite | PageTableEntryFlag::Valid).unwrap();
+            process.memory.fill(0x03ff_fffe, 1, PageTableEntryFlag::UserReadWrite | PageTableEntryFlag::Valid).unwrap();
             for ph in elf.program_header_iter() {
                 if ph.ph_type() == ProgramType::LOAD {
                     process.memory.write(

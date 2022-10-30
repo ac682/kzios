@@ -46,13 +46,13 @@ pub struct Hart {
 impl Hart {
     pub fn new(hartid: usize, freq: usize) -> Self {
         let timer = Arc::new(UniProcessCell::new(HartTimer::new(hartid, freq)));
-        let hart = Self {
+        
+        Self {
             id: hartid,
             timer: timer.clone(),
             scheduler: SchedulerImpl::new(hartid, timer),
             context: unsafe { &mut KERNEL_TRAP as *mut TrapFrame },
-        };
-        hart
+        }
     }
 
     pub fn id(&self) -> usize {

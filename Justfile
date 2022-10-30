@@ -14,6 +14,7 @@ alias all := run
 alias b := build
 alias c := clean
 alias d := debug
+alias f := fix
 alias r := run
 
 # qemu
@@ -54,6 +55,10 @@ run: (run_qemu "")
 
 debug: build
     @tmux new-session -d "{{QEMU_LAUNCH}} -s -S" && tmux split-window -h "riscv64-elf-gdb -ex 'file {{OS_ELF}}' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'" && tmux -2 attach-session -d
+
+fix:
+    @cd os && RUSTFLAGS="{{RUSTFLAGS_OS}}" cargo clippy --fix --bin board_{{BOARD}} {{RELEASE}} -Z unstable-options
+    @cd user && RUSTFLAGS="{{RUSTFLAGS_USER}}" cargo clippy --fix --bins {{RELEASE}} -Z unstable-options
 
 clean:
     #!/usr/bin/env sh
