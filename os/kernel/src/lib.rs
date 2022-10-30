@@ -32,6 +32,8 @@ mod rt;
 pub mod sync;
 mod trap;
 mod timer;
+mod hart;
+pub mod prelude;
 
 global_asm!(include_str!("assembly.asm"));
 
@@ -41,8 +43,7 @@ pub fn kernel_init(info: BoardInfo) {
     peripheral::init(&info);
     frame::init();
     pmp::init();
-    timer::init(&info);
-    sch::init();
+    hart::init(&info);
     println!("\x1b[0;34mboot stage #4: prepare user environment\x1b[0m");
 
     // 内核任务完成了， 回收免得 board 占用 uart 设备

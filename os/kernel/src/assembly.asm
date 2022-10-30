@@ -108,9 +108,9 @@ _trap_vector:
     # 进入 rust 环境
     csrr    a0, mhartid
     csrr	a1, mcause
-    csrr    a2, mscratch
     locate_sp
     call    handle_trap
+    csrw    mscratch, a0
 
 .section .text
 .global _switch_to_user

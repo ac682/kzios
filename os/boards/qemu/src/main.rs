@@ -7,8 +7,10 @@ use core::fmt::{Arguments, Result, Write};
 
 use alloc::borrow::ToOwned;
 use dtb_parser::{prop::PropertyValue, traits::HasNamedProperty};
-use erhino_kernel::{board::BoardInfo, env, kernel_init, kernel_main, proc::{Process, sch::add_process}};
+use erhino_kernel::{board::BoardInfo, env, kernel_init, kernel_main, proc::{Process}};
 use tar_no_std::TarArchiveRef;
+
+pub use erhino_kernel::prelude::*;
 
 // 测试用，日后 initfs 应该由 board crate 提供
 // board crate 会在 artifacts 里选择部分包括驱动添加到 initfs 里
@@ -53,10 +55,10 @@ fn main() {
     let systems = archive.entries().filter(|f| f.filename().starts_with("system"));
     for system in systems{
         let process = Process::from_elf(system.data()).unwrap();
-        add_process(process);
+        add_flat_process(process);
     }
     let user_init_proc = Process::from_elf(user_init.data()).unwrap();
-    add_process(user_init_proc);
+    add_flat_process(user_init_proc);
     kernel_main();
 }
 

@@ -11,7 +11,7 @@ pub struct OptimisticLock<T: Sized> {
     data: Option<T>,
 }
 
-pub struct OptimisticLockGuard<T: Sized> {
+pub struct OptimisticLockGuard<T: ?Sized> {
     data: *mut T,
 }
 
@@ -50,14 +50,14 @@ impl<'a, T> Lock<'a, T, OptimisticLockGuard<T>> for OptimisticLock<T> {
     }
 }
 
-impl<T> Deref for OptimisticLockGuard<T> {
+impl<T: ?Sized> Deref for OptimisticLockGuard<T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         unsafe { &*self.data }
     }
 }
 
-impl<T> DerefMut for OptimisticLockGuard<T> {
+impl<T: ?Sized> DerefMut for OptimisticLockGuard<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *self.data }
     }

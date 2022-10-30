@@ -31,6 +31,7 @@
 			"gpio",
 			"hartid",
 			"initfs",
+			"Justfile",
 			"kinlib",
 			"kzios",
 			"Mcause",
@@ -80,7 +81,6 @@
 			"vaddr",
 			"xlen"
 		],
-		"makefile.extensionOutputFolder": "/dev/null"
 	},"tasks": {
 		"version": "2.0.0",
 		"tasks": [

@@ -1,14 +1,17 @@
-use alloc::vec::Vec;
-use erhino_shared::process::{ProcessState, Pid};
+use core::cell::UnsafeCell;
+
+use alloc::{vec::Vec, boxed::Box, sync::Arc};
+use erhino_shared::process::{Pid, ProcessState};
 use riscv::register::{mhartid, mscratch};
 
 use crate::{
+    hart::{my_hart, Hart},
     proc::Process,
     sync::{
         hart::{HartReadWriteLock, HartWriteLockGuard},
-        Lock, ReadWriteLock,
+        Lock, ReadWriteLock, optimistic::OptimisticLockGuard, cell::UniProcessCell,
     },
-    timer,
+    timer::{self, hart::HartTimer, Timer},
     trap::TrapFrame,
 };
 
@@ -71,39 +74,14 @@ impl ProcessCell {
             out_time: 0,
         }
     }
-
-    pub fn next_quantum(&self) -> usize {
-        let max = timer::time_to_cycles(50);
-        let min = timer::time_to_cycles(10);
-        let p = self.last_quantum as f32
-            / (if self.out_time > self.in_time {
-                (self.out_time - self.in_time)
-            } else {
-                1
-            }) as f32;
-        let i = -0.02 * p + 1.62;
-        let n = (i * self.last_quantum as f32) as usize;
-        if n > max {
-            max
-        } else if n < min {
-            min
-        } else {
-            n
-        }
-    }
 }
-pub struct FlatScheduler {
+pub struct FlatScheduler<T: Timer + Sized> {
     hartid: usize,
+    timer: Arc<UniProcessCell<T>>,
     current: Option<HartWriteLockGuard<'static, ProcessCell>>,
 }
 
-impl Scheduler for FlatScheduler {
-    fn new(hartid: usize) -> Self {
-        FlatScheduler {
-            hartid,
-            current: None,
-        }
-    }
+impl<T: Timer + Sized> Scheduler for FlatScheduler<T> {
     fn add(proc: Process) {
         let mut table = unsafe { PROC_TABLE.lock_mut() };
         table.add(proc);
@@ -119,19 +97,29 @@ impl Scheduler for FlatScheduler {
         }
     }
     fn current(&mut self) -> Option<&mut Process> {
-        if let Some(guard) = &mut self.current{
+        if let Some(guard) = &mut self.current {
             Some(&mut guard.inner)
-        }else{
+        } else {
             None
         }
     }
 }
 
-impl FlatScheduler {
+impl<T: Timer + Sized> FlatScheduler<T> {
+    pub fn new(hartid: usize, timer: Arc<UniProcessCell<T>>) -> Self {
+        FlatScheduler {
+            hartid,
+            timer,
+            current: None,
+        }
+    }
+    fn timer(&self) -> &mut T{
+        self.timer.as_ref().get_mut()
+    }
     fn switch_next(&mut self) -> Pid {
         unsafe {
             let mut table = PROC_TABLE.lock_mut();
-            let time = timer::get_time();
+            let time = self.timer.get_cycles();
             if let Some(current) = &mut self.current {
                 if current.inner.state == ProcessState::Running {
                     current.inner.state = ProcessState::Ready;
@@ -143,16 +131,35 @@ impl FlatScheduler {
             // 👆 换出之前的
             // 👇 换入新的
 
-            let mut process = unsafe {(*PROC_TABLE.access_mut()).next_available()};
+            let mut process = unsafe { (*PROC_TABLE.access_mut()).next_available() };
             let next_pid = process.inner.pid;
-            mscratch::write(&process.inner.trap as *const TrapFrame as usize);
             process.inner.state = ProcessState::Running;
             process.in_time = time;
-            let quantum = process.next_quantum();
+            let quantum = self.next_quantum(&process);
             process.last_quantum = quantum;
-            timer::set_timer(self.hartid, quantum, super::forward_tick);
+            self.timer.get_mut().set_timer(self.timer.ms_to_cycles(quantum));
             self.current = Some(process);
             next_pid
+        }
+    }
+
+    fn next_quantum(&self, proc: &ProcessCell) -> usize {
+        let max = 50;
+        let min = 10;
+        let p = proc.last_quantum as f32
+            / (if proc.out_time > proc.in_time {
+                (proc.out_time - proc.in_time)
+            } else {
+                1
+            }) as f32;
+        let i = -0.02 * p + 1.62;
+        let n = (i * proc.last_quantum as f32) as usize;
+        if n > max {
+            max
+        } else if n < min {
+            min
+        } else {
+            n
         }
     }
 }
