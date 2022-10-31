@@ -9,7 +9,7 @@ use super::Process;
 pub mod flat;
 
 pub trait Scheduler {
-    fn add(proc: Process);
+    fn add(proc: Process) -> Pid;
     fn tick(&mut self);
     fn begin(&mut self);
     fn current(&mut self) -> Option<&mut Process>;

@@ -31,10 +31,10 @@ SECTIONS
     } > RAM
 
     .runtime (NOLOAD) : ALIGN(4) {
-        . = ALIGN(8);
+        . = ALIGN(16);
         PROVIDE(_heap_start = .);
         . = . + HEAP_SIZE;
-        . = ALIGN(8);
+        . = ALIGN(16);
         PROVIDE(_stack_start = .);
         . = . + STACK_SIZE*HART_NUM;
     } > RAM

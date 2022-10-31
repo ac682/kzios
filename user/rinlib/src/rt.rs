@@ -19,7 +19,7 @@ static HEAP_ALLOCATOR: LockedHeapWithRescue<HEAP_ORDER> = LockedHeapWithRescue::
 #[lang = "start"]
 fn lang_start<T: Termination + 'static>(main: fn() -> T) -> ! {
     unsafe {
-        sys_extend(_segment_break as usize, 4096, 0b011);
+        sys_extend(_segment_break as usize, 4096, 0b011).unwrap();
         HEAP_ALLOCATOR.lock().init(_segment_break as usize, 4096);
     }
     let code = main().to_exit_code();
@@ -43,7 +43,7 @@ fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
             size *= 2;
         }
         let last = heap.stats_total_bytes() + _segment_break as usize;
-        sys_extend(last, size, 0b011);
+        sys_extend(last, size, 0b011).unwrap();
         heap.add_to_heap(last, last + size);
     }
 }

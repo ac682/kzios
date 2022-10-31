@@ -1,6 +1,6 @@
 use core::cell::UnsafeCell;
 
-use alloc::{vec::Vec, boxed::Box, sync::Arc};
+use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use erhino_shared::process::{Pid, ProcessState};
 use riscv::register::{mhartid, mscratch};
 
@@ -8,8 +8,10 @@ use crate::{
     hart::{my_hart, Hart},
     proc::Process,
     sync::{
+        cell::UniProcessCell,
         hart::{HartReadWriteLock, HartWriteLockGuard},
-        Lock, ReadWriteLock, optimistic::OptimisticLockGuard, cell::UniProcessCell,
+        optimistic::OptimisticLockGuard,
+        Lock, ReadWriteLock,
     },
     timer::{self, hart::HartTimer, Timer},
     trap::TrapFrame,
@@ -33,11 +35,12 @@ impl ProcessTable {
         }
     }
 
-    pub fn add(&mut self, mut proc: Process) {
+    pub fn add(&mut self, mut proc: Process) -> Pid {
         let pid = self.inner.len();
         proc.pid = pid as Pid;
         self.inner
             .push(HartReadWriteLock::new(ProcessCell::new(proc)));
+        pid as Pid
     }
 
     pub fn len(&self) -> usize {
@@ -82,9 +85,9 @@ pub struct FlatScheduler<T: Timer + Sized> {
 }
 
 impl<T: Timer + Sized> Scheduler for FlatScheduler<T> {
-    fn add(proc: Process) {
+    fn add(proc: Process) -> Pid {
         let mut table = unsafe { PROC_TABLE.lock_mut() };
-        table.add(proc);
+        table.add(proc)
     }
     fn tick(&mut self) {
         self.switch_next();
@@ -105,13 +108,13 @@ impl<T: Timer + Sized> Scheduler for FlatScheduler<T> {
     }
 
     fn finish(&mut self) {
-        if let Some(process) = self.current(){
-            if process.state == ProcessState::Running{
+        if let Some(process) = self.current() {
+            if process.state == ProcessState::Running {
                 // 进程调用 exit 之前会自己调用 wait 来等待子进程退出
                 // TODO: 查找所有子进程，然后直接 kill with no mercy
                 process.state = ProcessState::Dead;
                 // TODO: do process clean
-            }else{
+            } else {
                 // ??? 这个 finish 只能是运行中的程序转发，程序不在运行但是被调用，那就是出现了调度错误！
                 panic!("mistakes must have be made before finish invoked");
             }
@@ -133,7 +136,7 @@ impl<T: Timer + Sized> FlatScheduler<T> {
             current: None,
         }
     }
-    fn timer(&self) -> &mut T{
+    fn timer(&self) -> &mut T {
         self.timer.as_ref().get_mut()
     }
     fn switch_next(&mut self) -> Pid {
@@ -157,7 +160,9 @@ impl<T: Timer + Sized> FlatScheduler<T> {
             process.in_time = time;
             let quantum = self.next_quantum(&process);
             process.last_quantum = quantum;
-            self.timer.get_mut().set_timer(self.timer.ms_to_cycles(quantum));
+            self.timer
+                .get_mut()
+                .set_timer(self.timer.ms_to_cycles(quantum));
             self.current = Some(process);
             next_pid
         }

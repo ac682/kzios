@@ -22,7 +22,6 @@
     mul     \tmp, \tmp, \out
     la      \out, _kernel_end
     sub     \out, \out, \tmp
-    #addi    \out, \out, -1
 .endm
 
 .section .text.init
@@ -90,11 +89,11 @@ _trap_vector:
     csrr	t6, mscratch
     save_gp 31, t5
 
-    # .set	i,0
-    # .rept	NUM_REGS
-    #         save_fp	%i,t5
-    #         .set	i,i+1
-    # .endr
+    .set	i,0
+    .rept	NUM_REGS
+            save_fp	%i,t5
+            .set	i,i+1
+    .endr
 
     csrr    t6, satp
     sd      t6, 512(t5)
@@ -127,11 +126,11 @@ _switch_to_user:
     ld      t5, 528(t6)
     csrw    mepc, t5
 
-    # .set	i,0
-    # .rept	NUM_REGS
-    # 		load_fp	%i
-    # 		.set	i,i+1
-    # .endr
+    .set	i,0
+    .rept	NUM_REGS
+    		load_fp	%i
+    		.set	i,i+1
+    .endr
 
     .set	i , 0
     .rept	NUM_REGS

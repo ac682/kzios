@@ -14,7 +14,7 @@ use core::arch::global_asm;
 use board::BoardInfo;
 pub use erhino_shared::*;
 
-use crate::{krn_call::krn_enter_user_space, mm::frame, proc::{sch}};
+use crate::{krn_call::krn_enter_user_space, mm::{frame, unit}, proc::{sch}};
 
 extern crate alloc;
 
@@ -42,6 +42,7 @@ pub fn kernel_init(info: BoardInfo) {
     println!("{}", info);
     peripheral::init(&info);
     frame::init();
+    unit::init();
     pmp::init();
     hart::init(&info);
     println!("\x1b[0;34mboot stage #4: prepare user environment\x1b[0m");

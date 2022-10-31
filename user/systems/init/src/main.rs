@@ -2,7 +2,7 @@
 
 use core::arch::asm;
 
-use rinlib::call::sys_yield;
+use rinlib::call::{sys_yield, sys_fork};
 
 extern crate rinlib;
 
@@ -12,5 +12,7 @@ fn main() {
             asm!("ebreak", in("x10") 0);
             sys_yield();
         }
+        let pid = sys_fork(0).unwrap();
+        asm!("ebreak", in("x10") pid);
     }
 }

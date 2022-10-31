@@ -1,14 +1,30 @@
 use core::{f32::consts::E, fmt::Display};
 
-use erhino_shared::mem::{Address, PageNumber, page::PageLevel};
+use alloc::collections::BTreeMap;
+use erhino_shared::mem::{page::PageLevel, Address, PageNumber};
 use flagset::FlagSet;
+use hashbrown::HashMap;
 
-use crate::{mm::range::PageRange, println};
+use crate::{
+    mm::range::PageRange,
+    println,
+    sync::{
+        hart::{HartLock, HartReadWriteLock},
+        ReadWriteLock,
+    },
+};
 
 use super::{
     frame::frame_alloc,
     page::{PageTable, PageTableEntry, PageTableEntryFlag, PageTableError},
 };
+
+static mut TRACKED_PAGES: HartReadWriteLock<HashMap<PageNumber, usize>> =
+    HartReadWriteLock::empty();
+
+pub fn init() {
+    unsafe { TRACKED_PAGES.put(HashMap::new()) }
+}
 
 // 以后 MemoryUnit 可以有多种实现，例如 Sv39 可换成 Sv48
 #[derive(Debug)]
@@ -24,9 +40,13 @@ pub enum MemoryUnitError {
 }
 
 impl MemoryUnit {
-    pub fn new() -> Self {
-        Self {
-            root: PageTable::new(frame_alloc(1).unwrap()),
+    pub fn new() -> Result<Self, MemoryUnitError> {
+        if let Some(frame) = frame_alloc(1) {
+            Ok(Self {
+                root: PageTable::new(frame_alloc(1).unwrap()),
+            })
+        } else {
+            Err(MemoryUnitError::RanOutOfFrames)
         }
     }
 
@@ -34,8 +54,49 @@ impl MemoryUnit {
         self.root.location()
     }
 
-    pub fn fork(&self) -> MemoryUnit{
-        todo!()
+    pub fn fork(&mut self) -> Result<Self, MemoryUnitError> {
+        let mut unit = MemoryUnit::new()?;
+        Self::copy_table(&mut self.root, &mut unit.root)?;
+        Ok(unit)
+    }
+
+    fn copy_table(old: &mut PageTable, new: &mut PageTable) -> Result<(), MemoryUnitError> {
+        for i in 0..512usize {
+            if let Some(old_entry) = old.entry_mut(i) {
+                if old_entry.is_valid() {
+                    if let Some(new_entry) = new.entry_mut(i) {
+                        if old_entry.is_leaf() {
+                            unsafe {
+                                let ppn = old_entry.physical_page_number();
+                                let mut tracked = TRACKED_PAGES.lock_mut();
+                                if old_entry.is_cow() {
+                                    tracked.entry(ppn).and_modify(|e| *e += 1).or_insert(1);
+                                } else {
+                                    old_entry.set_cow();
+                                    tracked.insert(ppn, 1);
+                                }
+                                new_entry.write(old_entry.read());
+                            }
+                        } else {
+                            if let Some(frame) = frame_alloc(1) {
+                                let table = PageTable::new(frame);
+                                Self::copy_table(
+                                    old_entry.as_page_table_mut(),
+                                    new_entry.set_as_page_table_mut(frame),
+                                );
+                            } else {
+                                return Err(MemoryUnitError::RanOutOfFrames);
+                            }
+                        }
+                    }else {
+                        return Err(MemoryUnitError::EntryNotFound);
+                    }
+                }
+            } else {
+                return Err(MemoryUnitError::EntryNotFound);
+            }
+        }
+        Ok(())
     }
 
     // vpn 和 ppn 都得是连续的
@@ -78,11 +139,8 @@ impl MemoryUnit {
         let mut page_count = 0usize;
         unsafe {
             while copied < real_length {
-                let ppn = self.ensure_created(
-                    (addr >> 12) + page_count,
-                    || frame_alloc(1),
-                    flags,
-                )?;
+                let ppn =
+                    self.ensure_created((addr >> 12) + page_count, || frame_alloc(1), flags)?;
                 let start = (ppn << 12) + offset;
                 let end = if (real_length - copied) > (0x1000 - offset as usize) {
                     (ppn + 1) << 12
@@ -147,7 +205,7 @@ impl MemoryUnit {
                         if entry0.is_leaf() {
                             let bits = entry0.flags().bits();
                             let new_bits = flags.into().bits();
-                            if bits != new_bits{
+                            if bits != new_bits {
                                 entry0.write_bitor(new_bits);
                             }
                             Ok(entry0.physical_page_number())

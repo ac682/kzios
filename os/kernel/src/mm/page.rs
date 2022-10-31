@@ -1,4 +1,4 @@
-use erhino_shared::mem::{Address, PageNumber, page::PageLevel};
+use erhino_shared::mem::{page::PageLevel, Address, PageNumber};
 use flagset::{flags, FlagSet};
 
 use crate::println;
@@ -25,7 +25,6 @@ impl PageTable {
         for i in 0..512usize {
             res.entries[i].write(0);
         }
-        //println!("addr {:#x}", res as *const PageTable as usize);
         res
     }
 
@@ -74,15 +73,15 @@ pub struct PageTableEntry(u64);
 
 impl PageTableEntry {
     pub fn read(&self) -> u64 {
-        unsafe { (self as *const _ as *const u64).read() }
+        self.0
     }
 
     pub fn write(&mut self, val: u64) {
-        unsafe { (self as *mut _ as *mut u64).write_volatile(val) }
+        self.0 = val;
     }
 
     pub fn write_bitor(&mut self, val: u64) {
-        self.write(self.read() | val)
+        self.0 = self.0 | val
     }
 
     pub fn set<F: Into<FlagSet<PageTableEntryFlag>>>(
@@ -95,12 +94,25 @@ impl PageTableEntry {
         self.write(val);
     }
 
+    pub fn set_cow(&mut self) {
+        let cow = 0b1 | if self.is_writeable() { 0b10 } else { 0b00 };
+        self.0 = (self.0 & !0b100) | (cow << 8);
+    }
+
+    pub fn is_cow(&self) -> bool{
+        self.0 & (0b11 << 8) > 0
+    }
+
+    pub fn is_cow_and_writeable(&self) -> bool{
+        self.0 & (0b11 << 8) == 0b11
+    }
+
     pub fn set_as_page_table_mut(&mut self, table_root: PageNumber) -> &mut PageTable {
         self.set(table_root, 0, PageTableEntryFlag::Valid);
         PageTable::new(table_root)
     }
 
-    pub fn as_page_table(&self) -> &PageTable{
+    pub fn as_page_table(&self) -> &PageTable {
         PageTable::from_exist(self.physical_page_number())
     }
 
@@ -109,30 +121,63 @@ impl PageTableEntry {
     }
 
     pub fn physical_page_number(&self) -> PageNumber {
-        (self.read() >> 10 & 0xFFFFFFFFFFF) as PageNumber
+        (self.0 >> 10 & 0xFFFFFFFFFFF) as PageNumber
     }
 
     pub fn is_valid(&self) -> bool {
-        self.read() & 0b1 != 0
+        self.0 & 0b1 != 0
     }
 
     pub fn is_leaf(&self) -> bool {
-        self.read() & 0b1110 != 0
+        self.0 & 0b1110 != 0
     }
 
     pub fn is_readable(&self) -> bool {
-        self.read() >> 1 & 1 != 0
+        self.0 >> 1 & 1 != 0
     }
 
     pub fn is_writeable(&self) -> bool {
-        self.read() >> 2 & 1 != 0
+        self.0 >> 2 & 1 != 0
     }
 
     pub fn is_executable(&self) -> bool {
-        self.read() >> 3 & 1 != 0
+        self.0 >> 3 & 1 != 0
     }
 
     pub fn flags(&self) -> FlagSet<PageTableEntryFlag> {
-        FlagSet::new(self.read() & 0b1111_1111).unwrap()
+        FlagSet::new(self.0 & FlagSet::<PageTableEntryFlag>::full().bits()).unwrap()
+    }
+}
+
+impl<'root> IntoIterator for &'root PageTable {
+    type Item = &'root PageTableEntry;
+
+    type IntoIter = PageTableIter<'root>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Self::IntoIter {
+            root: self,
+            current: 0,
+        }
+    }
+}
+
+pub struct PageTableIter<'root> {
+    root: &'root PageTable,
+    current: usize,
+}
+
+impl<'root> Iterator for PageTableIter<'root> {
+    type Item = &'root PageTableEntry;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.current < self.root.entries.len() {
+            let index = self.current;
+            self.current += 1;
+            if self.root.entries[index].is_valid() {
+                return Some(&self.root.entries[index]);
+            }
+        }
+        None
     }
 }

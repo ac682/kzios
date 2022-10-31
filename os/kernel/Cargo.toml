@@ -17,3 +17,4 @@ flagset = "0.4"
 elf_rs = "0.2"
 num-traits = { version = "0.2", default-features = false}
 num-derive = "0.3"
+hashbrown = "0.12"

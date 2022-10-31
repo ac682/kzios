@@ -14,6 +14,8 @@ use crate::{
     trap::TrapFrame,
 };
 
+const PROC_STATUS_INITIAL: u64 = 1 << 13 | 1 << 4;
+
 #[derive(Debug)]
 pub enum ProcessSpawnError {
     BrokenBinary,
@@ -52,14 +54,14 @@ impl Process {
                 pid: 0,
                 parent: 0,
                 permissions: ProcessPermission::All.into(),
-                memory: MemoryUnit::new(),
+                memory: MemoryUnit::new().unwrap(),
                 trap: TrapFrame::new(),
                 state: ProcessState::Ready,
             };
             process.trap.pc = elf.entry_point();
             process.trap.x[2] = 0x3f_ffff_f000;
             process.trap.satp = (8 << 60) | process.memory.root() as u64;
-            process.trap.status = 1 << 13 | 1 << 7 | 1 << 5 | 1 << 4;
+            process.trap.status = PROC_STATUS_INITIAL;
             let header = elf.elf_header();
             // TODO: validate RV64 from flags parameter
             if header.machine() != ElfMachine::RISC_V || header.elftype() != ElfType::ET_EXEC {
@@ -90,7 +92,7 @@ impl Process {
     }
 
 
-    pub fn fork<P: Into<FlagSet<ProcessPermission>>>(&self, permissions: P) -> Result<Process, ProcessSpawnError>{
+    pub fn fork<P: Into<FlagSet<ProcessPermission>>>(&mut self, permissions: P) -> Result<Process, ProcessSpawnError>{
         let perm_into: FlagSet<ProcessPermission> = permissions.into();
         let perm_new = if perm_into.contains(ProcessPermission::Valid){
             if self.permissions.contains(perm_into){
@@ -111,7 +113,7 @@ impl Process {
                 pid: 0,
                 parent: self.pid,
                 permissions: perm_new,
-                memory: self.memory.fork(),
+                memory: self.memory.fork().unwrap(),
                 trap: self.trap.clone(),
                 state: self.state,
                 

@@ -136,10 +136,11 @@ impl Hart {
                                     if let Some(current) = self.scheduler.current() {
                                         if let Ok(mut fork) = current.fork(perm_into) {
                                             fork.move_to_next_instruction();
-                                            SchedulerImpl::add(fork);
-                                            // TODO: let pid = self.scheduler.add(fork)
-                                            // set frame.x[10] = pid;
-                                            // set fork.trap.x[10] = 0;
+                                            fork.trap.x[10] - 0;
+                                            let pid = SchedulerImpl::add(fork);
+                                            frame.x[10] = pid as u64;
+                                            // 立即调出父进程，尽可能避免 COW 因父进程而发生
+                                            self.scheduler.tick();
                                         } else {
                                             ret = -2;
                                         }

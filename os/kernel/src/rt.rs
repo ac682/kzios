@@ -1,15 +1,28 @@
 use alloc::{format, string::String};
-use core::{arch::asm, panic::PanicInfo};
+use buddy_system_allocator::{Heap, LockedHeap, LockedHeapWithRescue};
+use core::{alloc::Layout, arch::asm, panic::PanicInfo};
 use erhino_shared::process::Termination;
 use riscv::register::misa;
 
 use crate::{
     external::{
-        _bss_end, _bss_start, _hart_num, _kernel_end, _memory_end, _memory_start, _stack_start,
+        _bss_end, _bss_start, _hart_num, _heap_start, _kernel_end, _memory_end, _memory_start,
+        _stack_start,
     },
-    mm::{self, heap, frame}, peripheral, pmp, print, println,
-    proc::{sch}, timer,
+    mm::{
+        self,
+        frame::{self, frame_alloc},
+    },
+    peripheral, pmp, print, println,
+    proc::sch,
+    timer,
 };
+
+const HEAP_ORDER: usize = 64;
+
+#[global_allocator]
+static mut HEAP_ALLOCATOR: LockedHeapWithRescue<HEAP_ORDER> =
+    LockedHeapWithRescue::new(heap_rescue);
 
 const LOGO: &str = include_str!("../logo.txt");
 
@@ -21,9 +34,13 @@ fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize) -> isize
     // 👆 both done in _start@assembly.asm
     // boot stage #2: board(memory & peripheral) initialization
     unsafe {
+        let heap_start = _heap_start as usize;
+        let size = _stack_start as usize - heap_start;
+        HEAP_ALLOCATOR.lock().init(heap_start, size);
+
+        // TODO: 暂时留着，以后板子通过其他方法发送信息
         board_init();
     }
-    heap::init();
     println!("{}\n\x1b[0;34mis still booting\x1b[0m", LOGO);
     print_isa();
     print_segments();
@@ -85,6 +102,21 @@ fn print_segments() {
     println!("}}");
 }
 
+fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
+    let single = 4096;
+    let mut size = 1;
+    unsafe {
+        while layout.size() > size * single {
+            size *= 2;
+        }
+        if let Some(frame_start) = frame_alloc(size) {
+            heap.add_to_heap(frame_start * single, (frame_start + size) * single);
+        } else {
+            panic!("kernel memory request but ran out of memory");
+        }
+    }
+}
+
 #[panic_handler]
 fn handle_panic(info: &PanicInfo) -> ! {
     print!("\x1b[0;31mKernel panicking: \x1b[0m");
@@ -99,6 +131,12 @@ fn handle_panic(info: &PanicInfo) -> ! {
         println!("no information available.");
     }
     park();
+}
+
+#[alloc_error_handler]
+pub fn handle_alloc_error(layout: core::alloc::Layout) -> ! {
+    // TODO: 移到内核外部空间之后有 Rescue 来扩充堆
+    panic!("Heap allocation error, layout = {:?}", layout);
 }
 
 pub fn park() -> ! {
