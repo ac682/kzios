@@ -33,6 +33,8 @@ use crate::{
 #[export_name = "_kernel_trap"]
 static mut KERNEL_TRAP: TrapFrame = TrapFrame::new();
 
+// 不同 Hart 实例要有不同的 Scheduler 类型。
+// 以此达成"hart#0 执行用户程序 hart#1 执行实时进程"的目的
 static mut HARTS: Vec<Hart> = Vec::new();
 
 type SchedulerImpl = FlatScheduler<HartTimer>;
@@ -134,6 +136,7 @@ impl Hart {
                                     if let Some(current) = self.scheduler.current() {
                                         if let Ok(mut fork) = current.fork(perm_into) {
                                             fork.move_to_next_instruction();
+                                            SchedulerImpl::add(fork);
                                             // TODO: let pid = self.scheduler.add(fork)
                                             // set frame.x[10] = pid;
                                             // set fork.trap.x[10] = 0;
