@@ -34,6 +34,10 @@ impl MemoryUnit {
         self.root.location()
     }
 
+    pub fn fork(&self) -> MemoryUnit{
+        todo!()
+    }
+
     // vpn 和 ppn 都得是连续的
     pub fn map<F: Into<FlagSet<PageTableEntryFlag>> + Copy>(
         &mut self,

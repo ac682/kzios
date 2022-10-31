@@ -5,6 +5,7 @@ use erhino_shared::{
     call::{KernelCall, SystemCall},
     mem::PageNumber,
 };
+use flagset::FlagSet;
 use num_traits::FromPrimitive;
 use riscv::register::{
     mcause::{Exception, Interrupt, Mcause, Trap},
@@ -19,7 +20,7 @@ use crate::{
     println,
     proc::{
         sch::{self, flat::FlatScheduler, Scheduler},
-        Process,
+        Process, ProcessPermission,
     },
     sync::{cell::UniProcessCell, optimistic::OptimisticLock, Lock},
     timer::hart::HartTimer,
@@ -46,7 +47,7 @@ pub struct Hart {
 impl Hart {
     pub fn new(hartid: usize, freq: usize) -> Self {
         let timer = Arc::new(UniProcessCell::new(HartTimer::new(hartid, freq)));
-        
+
         Self {
             id: hartid,
             timer: timer.clone(),
@@ -97,6 +98,7 @@ impl Hart {
             }
             Trap::Exception(Exception::UserEnvCall) => {
                 let call_id = frame.x[17];
+                let mut ret = 0i32;
                 if let Some(call) = SystemCall::from_u64(call_id) {
                     match call {
                         SystemCall::Extend => {
@@ -123,15 +125,47 @@ impl Hart {
                                     PageTableEntryFlag::Valid | PageTableEntryFlag::User | flags,
                                 );
                             }
-                        },
+                        }
+                        SystemCall::Fork => {
+                            let perm = frame.x[11];
+                            if perm <= u8::MAX as u64 {
+                                if let Ok(perm_into) = FlagSet::<ProcessPermission>::new(perm as u8)
+                                {
+                                    if let Some(current) = self.scheduler.current() {
+                                        if let Ok(mut fork) = current.fork(perm_into) {
+                                            fork.move_to_next_instruction();
+                                            // TODO: let pid = self.scheduler.add(fork)
+                                            // set frame.x[10] = pid;
+                                            // set fork.trap.x[10] = 0;
+                                        } else {
+                                            ret = -2;
+                                        }
+                                    }
+                                } else {
+                                    ret = -3;
+                                }
+                            } else {
+                                ret = -1;
+                            }
+                        }
                         SystemCall::Exit => {
                             self.scheduler.finish();
                         }
                         SystemCall::Yield => {
                             self.scheduler.tick();
                         }
+                        SystemCall::Map => {
+                            if let Some(current) = self.scheduler.current() {
+                                if current.has_permission(ProcessPermission::Memory) {
+                                    todo!("map sys call");
+                                } else {
+                                    ret = -1;
+                                }
+                            }
+                        }
                         _ => todo!("handle something"),
                     }
+                    frame.x[10] = ret as u64;
                     frame.pc += 4;
                 } else {
                     println!("unsupported system call {}", call_id);
