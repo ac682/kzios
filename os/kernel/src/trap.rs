@@ -20,8 +20,9 @@ use crate::{
 
 #[no_mangle]
 unsafe fn handle_trap(hartid: usize, cause: Mcause, val: usize) -> &'static TrapFrame {
+    // 这里要区分 trap，from machine 和 from user 区别对待
     let hart = of_hart(hartid);
-    hart.handle_trap(cause, val);
+    hart.handle_trap_from_user(cause, val);
     hart.context()
 }
 

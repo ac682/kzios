@@ -1,4 +1,4 @@
-use core::{f32::consts::E, fmt::Display};
+use core::{f32::consts::E, fmt::Display, ops::Add};
 
 use alloc::collections::BTreeMap;
 use erhino_shared::mem::{page::PageLevel, Address, PageNumber};
@@ -10,12 +10,12 @@ use crate::{
     println,
     sync::{
         hart::{HartLock, HartReadWriteLock},
-        ReadWriteLock,
+        Lock, ReadWriteLock,
     },
 };
 
 use super::{
-    frame::frame_alloc,
+    frame::{frame_alloc, frame_dealloc},
     page::{PageTable, PageTableEntry, PageTableEntryFlag, PageTableError},
 };
 
@@ -60,23 +60,66 @@ impl MemoryUnit {
         Ok(unit)
     }
 
+    fn cow_free(ppn: PageNumber) {
+        let mut tracked = unsafe { TRACKED_PAGES.lock_mut() };
+        let count = tracked.get(&ppn).unwrap();
+        if count == &1 {
+            tracked.remove_entry(&ppn);
+            frame_dealloc(ppn, 1);
+        } else {
+            tracked.entry(ppn).and_modify(|e| *e -= 1);
+        }
+    }
+
+    pub fn handle_store_page_fault<F: Into<FlagSet<PageTableEntryFlag>> + Copy>(
+        &mut self,
+        addr: Address,
+        flags: F,
+    ) -> Result<bool, MemoryUnitError> {
+        let vpn = addr >> 12;
+        let entry = self.locate(vpn)?;
+        if entry.is_valid() {
+            if entry.is_cow_and_writeable() {
+                // 复制
+                if let Some(frame) = frame_alloc(1) {
+                    let ppn = entry.physical_page_number();
+                    unsafe {
+                        let from = (ppn << 12) as *const Address;
+                        let to = (frame << 12) as *mut Address;
+                        for i in 0..4096{
+                            to.add(i).write(from.add(i).read());
+                        }
+                    }
+                    Self::cow_free(ppn);
+                    entry.set(frame, 0, entry.flags() | PageTableEntryFlag::Writeable);
+                    Ok(true)
+                } else {
+                    Err(MemoryUnitError::RanOutOfFrames)
+                }
+            } else {
+                // 写入无写权限的页
+                Ok(false)
+            }
+        } else {
+            self.fill(vpn, 1, flags);
+            Ok(true)
+        }
+    }
     fn copy_table(old: &mut PageTable, new: &mut PageTable) -> Result<(), MemoryUnitError> {
         for i in 0..512usize {
             if let Some(old_entry) = old.entry_mut(i) {
                 if old_entry.is_valid() {
                     if let Some(new_entry) = new.entry_mut(i) {
                         if old_entry.is_leaf() {
-                            unsafe {
-                                let ppn = old_entry.physical_page_number();
-                                let mut tracked = TRACKED_PAGES.lock_mut();
-                                if old_entry.is_cow() {
-                                    tracked.entry(ppn).and_modify(|e| *e += 1).or_insert(2);
-                                } else {
-                                    old_entry.set_cow();
-                                    tracked.insert(ppn, 2);
-                                }
-                                new_entry.write(old_entry.read());
+                            let ppn = old_entry.physical_page_number();
+                            let mut tracked = unsafe { TRACKED_PAGES.lock_mut() };
+                            if old_entry.is_cow() {
+                                tracked.entry(ppn).and_modify(|e| *e += 1).or_insert(2);
+                            } else {
+                                old_entry.set_cow();
+                                tracked.insert(ppn, 2);
                             }
+                            new_entry.write(old_entry.read());
                         } else {
                             if let Some(frame) = frame_alloc(1) {
                                 let table = PageTable::new(frame);
@@ -88,7 +131,7 @@ impl MemoryUnit {
                                 return Err(MemoryUnitError::RanOutOfFrames);
                             }
                         }
-                    }else {
+                    } else {
                         return Err(MemoryUnitError::EntryNotFound);
                     }
                 }
@@ -164,15 +207,7 @@ impl MemoryUnit {
         Ok(())
     }
 
-    fn ensure_created<
-        F: Into<FlagSet<PageTableEntryFlag>> + Copy,
-        T: Fn() -> Option<PageNumber>,
-    >(
-        &mut self,
-        vpn: PageNumber,
-        ppn_factory: T,
-        flags: F,
-    ) -> Result<PageNumber, MemoryUnitError> {
+    fn locate(&mut self, vpn: PageNumber) -> Result<&mut PageTableEntry, MemoryUnitError> {
         let vpn2 = PageLevel::Giga.extract(vpn);
         if let Some(entry2) = self.root.entry_mut(vpn2) {
             let table1 = if entry2.is_valid() {
@@ -201,23 +236,7 @@ impl MemoryUnit {
                 };
                 let vpn0 = PageLevel::Kilo.extract(vpn);
                 if let Some(entry0) = table0.entry_mut(vpn0) {
-                    if entry0.is_valid() {
-                        if entry0.is_leaf() {
-                            let bits = entry0.flags().bits();
-                            let new_bits = flags.into().bits();
-                            if bits != new_bits {
-                                entry0.write_bitor(new_bits);
-                            }
-                            Ok(entry0.physical_page_number())
-                        } else {
-                            Err(MemoryUnitError::EntryOverwrite)
-                        }
-                    } else if let Some(ppn) = ppn_factory() {
-                        entry0.set(ppn, 0, flags);
-                        Ok(ppn)
-                    } else {
-                        Err(MemoryUnitError::RanOutOfFrames)
-                    }
+                    Ok(entry0)
                 } else {
                     Err(MemoryUnitError::EntryNotFound)
                 }
@@ -226,6 +245,35 @@ impl MemoryUnit {
             }
         } else {
             Err(MemoryUnitError::EntryNotFound)
+        }
+    }
+
+    fn ensure_created<
+        F: Into<FlagSet<PageTableEntryFlag>> + Copy,
+        T: Fn() -> Option<PageNumber>,
+    >(
+        &mut self,
+        vpn: PageNumber,
+        ppn_factory: T,
+        flags: F,
+    ) -> Result<PageNumber, MemoryUnitError> {
+        let entry = self.locate(vpn)?;
+        if entry.is_valid() {
+            if entry.is_leaf() {
+                let bits = entry.flags().bits();
+                let new_bits = flags.into().bits();
+                if bits != new_bits {
+                    entry.write_bitor(new_bits);
+                }
+                Ok(entry.physical_page_number())
+            } else {
+                Err(MemoryUnitError::EntryOverwrite)
+            }
+        } else if let Some(ppn) = ppn_factory() {
+            entry.set(ppn, 0, flags);
+            Ok(ppn)
+        } else {
+            Err(MemoryUnitError::RanOutOfFrames)
         }
     }
 

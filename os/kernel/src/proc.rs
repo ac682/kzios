@@ -69,7 +69,7 @@ impl Process {
                 .fill(
                     0x03ff_fffe,
                     1,
-                    PageTableEntryFlag::UserReadWrite | PageTableEntryFlag::Valid,
+                    PageTableEntryFlag::UserReadWrite,
                 )
                 .unwrap();
             for ph in elf.program_header_iter() {

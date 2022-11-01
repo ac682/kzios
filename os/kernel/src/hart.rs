@@ -71,7 +71,7 @@ impl Hart {
         unsafe { &*self.context }
     }
 
-    pub fn handle_trap(&mut self, cause: Mcause, val: usize) {
+    pub fn handle_trap_from_user(&mut self, cause: Mcause, val: usize) {
         let frame = unsafe { &mut *self.context };
         match cause.cause() {
             Trap::Interrupt(Interrupt::MachineTimer) => {
@@ -91,10 +91,16 @@ impl Hart {
                 panic!("Store/AMO access fault hart#{}: frame=\n{}", self.id, frame);
             }
             Trap::Exception(Exception::StorePageFault) => {
-                panic!(
-                    "Store/AMO page fault hart#{}: addr={:#x}, frame=\n{}",
-                    self.id, val, frame
-                );
+                // 如果 addr 是 proc 的地址，那么查看该地址的 PTE 是否为 COW 项，COW.W 未置位就杀，置位就置换
+                if let Some(process) = self.scheduler.current(){
+                    if let Ok(success) = process.memory.handle_store_page_fault(val, PageTableEntryFlag::UserReadWrite){
+                        if !success{
+                            panic!("the memory program {}({}) accessed is not writeable: {:#x}", process.name, process.pid, val);
+                        }
+                    }
+                }else{
+                    panic!("ran out of memory");
+                }
             }
             Trap::Exception(Exception::MachineEnvCall) => {
                 let call_id = frame.x[17];

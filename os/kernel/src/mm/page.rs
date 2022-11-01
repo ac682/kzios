@@ -104,7 +104,7 @@ impl PageTableEntry {
     }
 
     pub fn is_cow_and_writeable(&self) -> bool{
-        self.0 & (0b11 << 8) == 0b11
+        self.0 & (0b11 << 8) == 0b11_0000_0000
     }
 
     pub fn set_as_page_table_mut(&mut self, table_root: PageNumber) -> &mut PageTable {
