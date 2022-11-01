@@ -10,7 +10,7 @@ pub mod flat;
 
 pub trait Scheduler {
     fn add(proc: Process) -> Pid;
-    fn tick(&mut self);
+    fn tick(&mut self) -> Pid;
     fn begin(&mut self);
     fn current(&mut self) -> Option<&mut Process>;
     fn finish(&mut self);

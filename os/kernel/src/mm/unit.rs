@@ -71,6 +71,12 @@ impl MemoryUnit {
         }
     }
 
+    fn cow_usage(ppn: PageNumber) -> usize {
+        let mut tracked = unsafe { TRACKED_PAGES.lock_mut() };
+        let count = tracked.get(&ppn).unwrap();
+        *count
+    }
+
     pub fn handle_store_page_fault<F: Into<FlagSet<PageTableEntryFlag>> + Copy>(
         &mut self,
         addr: Address,
@@ -80,21 +86,26 @@ impl MemoryUnit {
         let entry = self.locate(vpn)?;
         if entry.is_valid() {
             if entry.is_cow_and_writeable() {
-                // 复制
-                if let Some(frame) = frame_alloc(1) {
-                    let ppn = entry.physical_page_number();
-                    unsafe {
-                        let from = (ppn << 12) as *const Address;
-                        let to = (frame << 12) as *mut Address;
-                        for i in 0..4096{
-                            to.add(i).write(from.add(i).read());
-                        }
-                    }
+                let ppn = entry.physical_page_number();
+                if Self::cow_usage(ppn) == 1 {
                     Self::cow_free(ppn);
-                    entry.set(frame, 0, entry.flags() | PageTableEntryFlag::Writeable);
+                    entry.set(ppn, 0, entry.flags() | PageTableEntryFlag::Writeable);
                     Ok(true)
                 } else {
-                    Err(MemoryUnitError::RanOutOfFrames)
+                    if let Some(frame) = frame_alloc(1) {
+                        unsafe {
+                            let from = (ppn << 12) as *const Address;
+                            let to = (frame << 12) as *mut Address;
+                            for i in 0..4096 {
+                                to.add(i).write(from.add(i).read());
+                            }
+                        }
+                        Self::cow_free(ppn);
+                        entry.set(frame, 0, entry.flags() | PageTableEntryFlag::Writeable);
+                        Ok(true)
+                    } else {
+                        Err(MemoryUnitError::RanOutOfFrames)
+                    }
                 }
             } else {
                 // 写入无写权限的页

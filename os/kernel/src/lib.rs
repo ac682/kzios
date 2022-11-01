@@ -14,7 +14,7 @@ use core::arch::global_asm;
 use board::BoardInfo;
 pub use erhino_shared::*;
 
-use crate::{krn_call::krn_enter_user_space, mm::{frame, unit}, proc::{sch}};
+use crate::{krn_call::krn_enter_user_space, mm::{frame, unit}, proc::{sch}, external::_hart_num};
 
 extern crate alloc;
 
@@ -26,7 +26,6 @@ mod external;
 mod krn_call;
 mod mm;
 mod peripheral;
-mod pmp;
 pub mod proc;
 mod rt;
 pub mod sync;
@@ -43,7 +42,6 @@ pub fn kernel_init(info: BoardInfo) {
     peripheral::init(&info);
     frame::init();
     unit::init();
-    pmp::init();
     hart::init(&info);
     println!("\x1b[0;34mboot stage #4: prepare user environment\x1b[0m");
 
@@ -53,6 +51,12 @@ pub fn kernel_init(info: BoardInfo) {
 
 pub fn kernel_main() {
     println!("\x1b[0;34mboot completed, enter user mode\x1b[0m");
+    if _hart_num as usize > 1{
+        let aclint = peripheral::aclint();
+        for i in 1..(_hart_num as usize){
+            aclint.set_msip(i);
+        }
+    }
     krn_enter_user_space();
     loop{
 

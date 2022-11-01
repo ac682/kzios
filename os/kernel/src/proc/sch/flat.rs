@@ -14,7 +14,7 @@ use crate::{
         Lock, ReadWriteLock,
     },
     timer::{self, hart::HartTimer, Timer},
-    trap::TrapFrame,
+    trap::TrapFrame, println,
 };
 
 use super::Scheduler;
@@ -89,8 +89,8 @@ impl<T: Timer + Sized> Scheduler for FlatScheduler<T> {
         let mut table = unsafe { PROC_TABLE.lock_mut() };
         table.add(proc)
     }
-    fn tick(&mut self) {
-        self.switch_next();
+    fn tick(&mut self) -> Pid {
+        self.switch_next()
     }
     fn begin(&mut self) {
         if unsafe { (*PROC_TABLE.access()).len() } > 0 {

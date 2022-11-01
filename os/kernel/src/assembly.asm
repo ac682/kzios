@@ -50,6 +50,20 @@ _start:
     sd      a6, 48(t1)
     sd      a7, 56(t1)
 3:
+    # set pmp
+    li      t0, 0x0F0F0B00
+    csrw    pmpcfg0, t0
+    li      t0, 0
+    csrw    pmpaddr0, t0
+    la      t0, _memory_start
+    srliw   t0, t0, 2
+    csrw    pmpaddr1, t0
+    la      t0, _kernel_end
+    srliw   t0, t0, 2
+    csrw    pmpaddr2, t0
+    la      t0, _memory_end
+    srliw   t0, t0, 2
+    csrw    pmpaddr3, t0
     # do hart preinitialization & setup trap context
     # enable interrupt and floating point support
     li		t0, (0b1 << 13) | (0b11 << 11) | (1 << 7)

@@ -13,7 +13,7 @@ use crate::{
         self,
         frame::{self, frame_alloc},
     },
-    peripheral, pmp, print, println,
+    peripheral, print, println,
     proc::sch,
     timer,
 };

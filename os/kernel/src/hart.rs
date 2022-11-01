@@ -7,6 +7,7 @@ use alloc::{boxed::Box, rc::Rc, sync::Arc, vec::Vec};
 use erhino_shared::{
     call::{KernelCall, SystemCall},
     mem::PageNumber,
+    process::ProcessState,
 };
 use flagset::FlagSet;
 use num_traits::FromPrimitive;
@@ -22,7 +23,7 @@ use crate::{
     board::BoardInfo,
     external::_hart_num,
     mm::page::PageTableEntryFlag,
-    println,
+    peripheral, println,
     proc::{
         sch::{self, flat::FlatScheduler, Scheduler},
         Process, ProcessPermission,
@@ -76,29 +77,38 @@ impl Hart {
         match cause.cause() {
             Trap::Interrupt(Interrupt::MachineTimer) => {
                 self.timer.borrow_mut().tick();
-                self.scheduler.tick();
+                let pid = self.scheduler.tick();
             }
             Trap::Interrupt(Interrupt::MachineSoft) => {
-                panic!("Machine Soft Interrupt at hart#{}", self.id);
-                // its time to schedule process!
+                unsafe {
+                    mstatus::set_mpp(MPP::User);
+                }
+                peripheral::aclint().clear_msip(self.id);
+                self.scheduler.begin();
+                frame.pc += 4;
             }
             Trap::Exception(Exception::Breakpoint) => {
                 // panic!("user breakpoint at hart#{}: frame=\n{}", self.id, frame);
-                println!("{}", frame.x[10]);
+                println!("#{}: {}", self.id, frame.x[10]);
                 frame.pc += 4;
             }
             Trap::Exception(Exception::StoreFault) => {
                 panic!("Store/AMO access fault hart#{}: frame=\n{}", self.id, frame);
             }
             Trap::Exception(Exception::StorePageFault) => {
-                // 如果 addr 是 proc 的地址，那么查看该地址的 PTE 是否为 COW 项，COW.W 未置位就杀，置位就置换
-                if let Some(process) = self.scheduler.current(){
-                    if let Ok(success) = process.memory.handle_store_page_fault(val, PageTableEntryFlag::UserReadWrite){
-                        if !success{
-                            panic!("the memory program {}({}) accessed is not writeable: {:#x}", process.name, process.pid, val);
+                if let Some(process) = self.scheduler.current() {
+                    if let Ok(success) = process
+                        .memory
+                        .handle_store_page_fault(val, PageTableEntryFlag::UserReadWrite)
+                    {
+                        if !success {
+                            panic!(
+                                "the memory program {}({}) accessed is not writeable: {:#x}",
+                                process.name, process.pid, val
+                            );
                         }
                     }
-                }else{
+                } else {
                     panic!("ran out of memory");
                 }
             }
@@ -109,10 +119,9 @@ impl Hart {
                         KernelCall::EnterUserSpace => {
                             unsafe {
                                 mstatus::set_mpp(MPP::User);
-                                //mstatus::set_upie();
                             }
                             self.scheduler.begin();
-                            frame.pc += 2;
+                            frame.pc += 4;
                         }
                     }
                 } else {
@@ -121,7 +130,7 @@ impl Hart {
             }
             Trap::Exception(Exception::UserEnvCall) => {
                 let call_id = frame.x[17];
-                let mut ret = 0i32;
+                let mut ret = 0i64;
                 if let Some(call) = SystemCall::from_u64(call_id) {
                     match call {
                         SystemCall::Extend => {
@@ -157,10 +166,12 @@ impl Hart {
                                     if let Some(current) = self.scheduler.current() {
                                         if let Ok(mut fork) = current.fork(perm_into) {
                                             fork.move_to_next_instruction();
-                                            fork.trap.x[10] - 0;
+                                            fork.trap.x[10] = 0;
+                                            if fork.state == ProcessState::Running {
+                                                fork.state = ProcessState::Ready;
+                                            }
                                             let pid = SchedulerImpl::add(fork);
-                                            frame.x[10] = pid as u64;
-                                            // 立即调出父进程，尽可能避免 COW 因父进程而发生
+                                            ret = pid as i64;
                                             self.scheduler.tick();
                                         } else {
                                             ret = -2;
