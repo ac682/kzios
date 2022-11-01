@@ -1,6 +1,9 @@
-use core::{cell::UnsafeCell, ptr::null_mut};
+use core::{
+    cell::{Ref, RefCell, UnsafeCell},
+    ptr::null_mut,
+};
 
-use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, rc::Rc, sync::Arc, vec::Vec};
 use erhino_shared::{
     call::{KernelCall, SystemCall},
     mem::PageNumber,
@@ -10,6 +13,8 @@ use num_traits::FromPrimitive;
 use riscv::register::{
     mcause::{Exception, Interrupt, Mcause, Trap},
     mhartid,
+    mstatus::{self, MPP},
+    sstatus::FS,
 };
 use spin::Once;
 
@@ -41,14 +46,14 @@ type SchedulerImpl = FlatScheduler<HartTimer>;
 
 pub struct Hart {
     id: usize,
-    timer: Arc<UniProcessCell<HartTimer>>,
+    timer: Rc<RefCell<HartTimer>>,
     scheduler: SchedulerImpl,
     context: *mut TrapFrame,
 }
 
 impl Hart {
     pub fn new(hartid: usize, freq: usize) -> Self {
-        let timer = Arc::new(UniProcessCell::new(HartTimer::new(hartid, freq)));
+        let timer = Rc::new(RefCell::new(HartTimer::new(hartid, freq)));
 
         Self {
             id: hartid,
@@ -66,11 +71,11 @@ impl Hart {
         unsafe { &*self.context }
     }
 
-    pub fn handle_trap(&mut self, cause: Mcause) {
+    pub fn handle_trap(&mut self, cause: Mcause, val: usize) {
         let frame = unsafe { &mut *self.context };
         match cause.cause() {
             Trap::Interrupt(Interrupt::MachineTimer) => {
-                self.timer.get_mut().tick();
+                self.timer.borrow_mut().tick();
                 self.scheduler.tick();
             }
             Trap::Interrupt(Interrupt::MachineSoft) => {
@@ -85,13 +90,23 @@ impl Hart {
             Trap::Exception(Exception::StoreFault) => {
                 panic!("Store/AMO access fault hart#{}: frame=\n{}", self.id, frame);
             }
+            Trap::Exception(Exception::StorePageFault) => {
+                panic!(
+                    "Store/AMO page fault hart#{}: addr={:#x}, frame=\n{}",
+                    self.id, val, frame
+                );
+            }
             Trap::Exception(Exception::MachineEnvCall) => {
                 let call_id = frame.x[17];
                 if let Some(call) = KernelCall::from_u64(call_id) {
                     match call {
                         KernelCall::EnterUserSpace => {
+                            unsafe {
+                                mstatus::set_mpp(MPP::User);
+                                //mstatus::set_upie();
+                            }
                             self.scheduler.begin();
-                            frame.pc += 4
+                            frame.pc += 2;
                         }
                     }
                 } else {
@@ -177,9 +192,10 @@ impl Hart {
                 }
             }
             _ => panic!(
-                "unknown trap cause at hart#{}: cause={:#x}, frame=\n{}",
+                "unknown trap cause at hart#{}: cause={:#x}, tval={:#x}, frame=\n{}",
                 self.id,
                 cause.bits(),
+                val,
                 frame
             ),
         }

@@ -14,8 +14,6 @@ use crate::{
     trap::TrapFrame,
 };
 
-const PROC_STATUS_INITIAL: u64 = 1 << 13 | 1 << 4;
-
 #[derive(Debug)]
 pub enum ProcessSpawnError {
     BrokenBinary,
@@ -61,7 +59,6 @@ impl Process {
             process.trap.pc = elf.entry_point();
             process.trap.x[2] = 0x3f_ffff_f000;
             process.trap.satp = (8 << 60) | process.memory.root() as u64;
-            process.trap.status = PROC_STATUS_INITIAL;
             let header = elf.elf_header();
             // TODO: validate RV64 from flags parameter
             if header.machine() != ElfMachine::RISC_V || header.elftype() != ElfType::ET_EXEC {

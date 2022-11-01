@@ -75,6 +75,7 @@
 			"syscall",
 			"tval",
 			"uart",
+			"upie",
 			"userspace",
 			"utimer",
 			"utvec",

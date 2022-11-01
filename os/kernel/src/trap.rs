@@ -19,9 +19,9 @@ use crate::{
 };
 
 #[no_mangle]
-unsafe fn handle_trap(hartid: usize, cause: Mcause) -> &'static TrapFrame {
+unsafe fn handle_trap(hartid: usize, cause: Mcause, val: usize) -> &'static TrapFrame {
     let hart = of_hart(hartid);
-    hart.handle_trap(cause);
+    hart.handle_trap(cause, val);
     hart.context()
 }
 
@@ -35,8 +35,6 @@ pub struct TrapFrame {
     // 512-519
     pub satp: u64,
     // 520-527
-    pub status: u64,
-    // 528-535
     pub pc: u64,
 }
 
@@ -46,7 +44,6 @@ impl TrapFrame {
             x: [0; 32],
             f: [0; 32],
             satp: 0,
-            status: 0,
             pc: 0,
         }
     }
@@ -64,8 +61,8 @@ impl Display for TrapFrame {
         writeln!(f, "a6={:#016x}, a7={:#016x}", self.x[16], self.x[17])?;
         writeln!(
             f,
-            "mepc={:#x}, satp={:#x}, status={:#x}",
-            self.pc, self.satp, self.status
+            "mepc={:#x}, satp={:#x}",
+            self.pc, self.satp
         )
     }
 }

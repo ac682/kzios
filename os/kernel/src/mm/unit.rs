@@ -70,10 +70,10 @@ impl MemoryUnit {
                                 let ppn = old_entry.physical_page_number();
                                 let mut tracked = TRACKED_PAGES.lock_mut();
                                 if old_entry.is_cow() {
-                                    tracked.entry(ppn).and_modify(|e| *e += 1).or_insert(1);
+                                    tracked.entry(ppn).and_modify(|e| *e += 1).or_insert(2);
                                 } else {
                                     old_entry.set_cow();
-                                    tracked.insert(ppn, 1);
+                                    tracked.insert(ppn, 2);
                                 }
                                 new_entry.write(old_entry.read());
                             }

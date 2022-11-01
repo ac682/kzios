@@ -8,7 +8,7 @@ extern crate rinlib;
 
 fn main() {
     unsafe {
-        for _ in 0..20 {
+        for _ in 0..10 {
             asm!("ebreak", in("x10") 0);
             sys_yield();
         }

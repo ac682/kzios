@@ -52,7 +52,7 @@ _start:
 3:
     # do hart preinitialization & setup trap context
     # enable interrupt and floating point support
-    li		t0, (0b1 << 13) | (0b11 << 11) | (1 << 7) | (1 << 3)
+    li		t0, (0b1 << 13) | (0b11 << 11) | (1 << 7)
     csrw	mstatus, t0
     li      t0, (1 << 3)
     csrw    mie, t0
@@ -71,8 +71,11 @@ _start:
     csrr    a0, mhartid
     mret
 4:
+    li      t0, (0b1 << 13) | (0b11 << 11) | (1 << 7) | (1 << 3)
+    csrw    mstatus, t0
+5:
 	wfi
-	j	4b
+	j	5b
 
 .section .text
 .global _trap_vector
@@ -89,24 +92,36 @@ _trap_vector:
     csrr	t6, mscratch
     save_gp 31, t5
 
+    csrr    t0, mstatus
+    srliw   t0, t0, 13
+    andi    t0, t0, 3
+    li      t1, 3
+    bne     t0, t1, 6f
+
     .set	i,0
     .rept	NUM_REGS
             save_fp	%i,t5
             .set	i,i+1
     .endr
 
+    csrr    t0, mstatus
+    li      t1, 1
+    slliw   t1, t1, 13
+    not     t1, t1
+    and     t0, t0, t1
+    csrw    mstatus, t0
+6:
     csrr    t6, satp
     sd      t6, 512(t5)
-    csrr    t6, mstatus
-    sd      t6, 520(t5)
     csrr    t6, mepc
-    sd      t6, 528(t5)
+    sd      t6, 520(t5)
 
     csrw	mscratch, t5
 
     # 进入 rust 环境
     csrr    a0, mhartid
     csrr	a1, mcause
+    csrr    a2, mtval
     locate_sp
     call    handle_trap
     csrw    mscratch, a0
@@ -118,20 +133,33 @@ _switch_to_user:
     # 恢复寄存器
     csrr	t6, mscratch
 
-    # 复原 satp 和 mstatus
+    # 复原 satp 和 mepc
     ld      t5, 512(t6)
     csrw    satp, t5
     ld      t5, 520(t6)
-    csrw    mstatus, t5
-    ld      t5, 528(t6)
     csrw    mepc, t5
 
+    csrr    t0, mstatus
+    srliw   t0, t0, 13
+    andi    t0, t0, 3
+    li      t1, 1
+    li      t2, 2
+    bne     t0, t1, initial
+    bne     t0, t2, clean
+initial:
+    .set    i, 0
+    .rept   NUM_REGS
+
+            .set    i,i+1
+    .endr
+    j       7f
+clean:
     .set	i,0
     .rept	NUM_REGS
-    		load_fp	%i
+    		load_fp	0
     		.set	i,i+1
     .endr
-
+7:
     .set	i , 0
     .rept	NUM_REGS
         load_gp	%i

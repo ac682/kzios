@@ -1,6 +1,6 @@
-use core::cell::UnsafeCell;
+use core::cell::{RefCell, UnsafeCell};
 
-use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, rc::Rc, sync::Arc, vec::Vec};
 use erhino_shared::process::{Pid, ProcessState};
 use riscv::register::{mhartid, mscratch};
 
@@ -80,7 +80,7 @@ impl ProcessCell {
 }
 pub struct FlatScheduler<T: Timer + Sized> {
     hartid: usize,
-    timer: Arc<UniProcessCell<T>>,
+    timer: Rc<RefCell<T>>,
     current: Option<HartWriteLockGuard<'static, ProcessCell>>,
 }
 
@@ -129,20 +129,17 @@ impl<T: Timer + Sized> Scheduler for FlatScheduler<T> {
 }
 
 impl<T: Timer + Sized> FlatScheduler<T> {
-    pub fn new(hartid: usize, timer: Arc<UniProcessCell<T>>) -> Self {
+    pub fn new(hartid: usize, timer: Rc<RefCell<T>>) -> Self {
         FlatScheduler {
             hartid,
             timer,
             current: None,
         }
     }
-    fn timer(&self) -> &mut T {
-        self.timer.as_ref().get_mut()
-    }
     fn switch_next(&mut self) -> Pid {
         unsafe {
             let mut table = PROC_TABLE.lock_mut();
-            let time = self.timer.get_cycles();
+            let time = self.timer.borrow().get_cycles();
             if let Some(current) = &mut self.current {
                 if current.inner.state == ProcessState::Running {
                     current.inner.state = ProcessState::Ready;
@@ -160,9 +157,8 @@ impl<T: Timer + Sized> FlatScheduler<T> {
             process.in_time = time;
             let quantum = self.next_quantum(&process);
             process.last_quantum = quantum;
-            self.timer
-                .get_mut()
-                .set_timer(self.timer.ms_to_cycles(quantum));
+            let cycles = self.timer.borrow().ms_to_cycles(quantum);
+            self.timer.borrow_mut().set_timer(cycles);
             self.current = Some(process);
             next_pid
         }
@@ -171,14 +167,14 @@ impl<T: Timer + Sized> FlatScheduler<T> {
     fn next_quantum(&self, proc: &ProcessCell) -> usize {
         let max = 50;
         let min = 10;
-        let p = proc.last_quantum as f32
+        let p = proc.last_quantum as i64
             / (if proc.out_time > proc.in_time {
                 (proc.out_time - proc.in_time)
             } else {
                 1
-            }) as f32;
-        let i = -0.02 * p + 1.62;
-        let n = (i * proc.last_quantum as f32) as usize;
+            }) as i64;
+        let i = -2 * p + 162;
+        let n = (i as usize * proc.last_quantum / 100);
         if n > max {
             max
         } else if n < min {

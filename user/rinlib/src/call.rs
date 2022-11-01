@@ -12,7 +12,15 @@ unsafe fn raw_call(id: usize, arg0: usize, arg1: usize, arg2: usize, arg3: usize
     _ret
 }
 
-// 0b0000_N.M.P.V.
+pub unsafe fn sys_exit(code: ExitCode) {
+    raw_call(SystemCall::Exit as usize, code as usize, 0, 0, 0);
+}
+
+pub unsafe fn sys_yield() {
+    raw_call(SystemCall::Yield as usize, 0, 0, 0, 0);
+}
+
+// perm: 0b0000_N.M.P.V.
 pub unsafe fn sys_fork(perm: u8) -> Result<Pid, ()> {
     let pid = raw_call(SystemCall::Fork as usize, perm as usize, 0, 0, 0) as i64;
     if pid < 0{
@@ -20,14 +28,6 @@ pub unsafe fn sys_fork(perm: u8) -> Result<Pid, ()> {
     }else{
         Ok(pid as Pid)
     }
-}
-
-pub unsafe fn sys_exit(code: ExitCode) {
-    raw_call(SystemCall::Exit as usize, code as usize, 0, 0, 0);
-}
-
-pub unsafe fn sys_yield() {
-    raw_call(SystemCall::Yield as usize, 0, 0, 0, 0);
 }
 
 /// flags: 00000XWR
