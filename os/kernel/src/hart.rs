@@ -6,8 +6,8 @@ use core::{
 use alloc::{boxed::Box, rc::Rc, sync::Arc, vec::Vec};
 use erhino_shared::{
     call::{KernelCall, SystemCall},
-    mem::PageNumber,
-    process::ProcessState,
+    mem::{Address, PageNumber},
+    process::{Pid, ProcessState, Signal, SignalMap},
 };
 use flagset::FlagSet;
 use num_traits::FromPrimitive;
@@ -77,19 +77,19 @@ impl Hart {
         match cause.cause() {
             Trap::Interrupt(Interrupt::MachineTimer) => {
                 self.timer.borrow_mut().tick();
-                let pid = self.scheduler.tick();
+                self.scheduler.tick();
             }
             Trap::Interrupt(Interrupt::MachineSoft) => {
+                peripheral::aclint().clear_msip(self.id);
                 unsafe {
                     mstatus::set_mpp(MPP::User);
                 }
-                peripheral::aclint().clear_msip(self.id);
                 self.scheduler.begin();
                 frame.pc += 4;
             }
             Trap::Exception(Exception::Breakpoint) => {
                 // panic!("user breakpoint at hart#{}: frame=\n{}", self.id, frame);
-                println!("#{}: {}", self.id, frame.x[10]);
+                println!("DBG #{}: {:#x}", self.id, frame.x[10]);
                 frame.pc += 4;
             }
             Trap::Exception(Exception::StoreFault) => {
@@ -172,10 +172,13 @@ impl Hart {
                                             }
                                             let pid = SchedulerImpl::add(fork);
                                             ret = pid as i64;
-                                            self.scheduler.tick();
                                         } else {
                                             ret = -2;
                                         }
+                                    }
+                                    if ret >= 0 {
+                                        // TODO: 让出 parent 控制权避免 cow
+                                        //self.scheduler.tick();
                                     }
                                 } else {
                                     ret = -3;
@@ -189,6 +192,30 @@ impl Hart {
                         }
                         SystemCall::Yield => {
                             self.scheduler.tick();
+                        }
+                        SystemCall::SignalReturn => {
+                            if let Some(process) = self.scheduler.current() {
+                                (process.signal.trap, process.trap) =
+                                    (process.trap, process.signal.trap);
+                            }
+                            self.scheduler.tick();
+                        }
+                        SystemCall::SignalSend => {
+                            let pid = frame.x[10] as Pid;
+                            // 其实是 Signal，但 Signal 和 SignalMap 在数值上等价
+                            let signal = frame.x[11] as SignalMap;
+                            self.scheduler.unlocked(pid, |process| {
+                                let map = process.signal.mask & signal;
+                                process.signal.pending |= map;
+                            });
+                        }
+                        SystemCall::SignalSet => {
+                            let address = frame.x[10] as Address;
+                            let mask = frame.x[11] as SignalMap;
+                            if let Some(process) = self.scheduler.current() {
+                                process.signal.mask = mask;
+                                process.signal.handler = address;
+                            }
                         }
                         SystemCall::Map => {
                             if let Some(current) = self.scheduler.current() {

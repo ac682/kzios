@@ -4,7 +4,7 @@ use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use elf_rs::{Elf, ElfFile, ElfMachine, ElfType, ProgramHeaderFlags, ProgramType};
 use erhino_shared::{
     mem::{page::PageLevel, Address},
-    process::{Pid, ProcessState},
+    process::{Pid, ProcessState, SignalMap},
 };
 use flagset::{flags, FlagSet};
 
@@ -33,7 +33,20 @@ flags! {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy)]
+pub struct SignalControlBlock{
+    pub mask: SignalMap,
+    pub pending: SignalMap,
+    pub handler: Address,
+    pub trap: TrapFrame
+}
+
+impl Default for SignalControlBlock{
+    fn default() -> Self {
+        Self { mask: Default::default(), pending: Default::default(), handler: Default::default(), trap: TrapFrame::new() }
+    }
+}
+
 pub struct Process {
     pub name: String,
     pub pid: Pid,
@@ -41,6 +54,7 @@ pub struct Process {
     pub permissions: FlagSet<ProcessPermission>,
     pub memory: MemoryUnit,
     pub trap: TrapFrame,
+    pub signal: SignalControlBlock,
     pub state: ProcessState,
 }
 
@@ -54,6 +68,8 @@ impl Process {
                 permissions: ProcessPermission::All.into(),
                 memory: MemoryUnit::new().unwrap(),
                 trap: TrapFrame::new(),
+                // ignore all signal
+                signal: SignalControlBlock::default(),
                 state: ProcessState::Ready,
             };
             process.trap.pc = elf.entry_point();
@@ -112,6 +128,7 @@ impl Process {
                 permissions: perm_new,
                 memory: self.memory.fork().unwrap(),
                 trap: self.trap.clone(),
+                signal: self.signal,
                 state: self.state,
                 
             };

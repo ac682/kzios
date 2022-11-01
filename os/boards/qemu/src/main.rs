@@ -58,7 +58,7 @@ fn main() {
         add_flat_process(process);
     }
     let user_init_proc = Process::from_elf(user_init.data(), user_init.filename().as_str()).unwrap();
-    add_flat_process(user_init_proc);
+    //add_flat_process(user_init_proc);
     kernel_main();
 }
 

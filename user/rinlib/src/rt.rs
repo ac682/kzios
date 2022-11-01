@@ -1,9 +1,9 @@
 use core::{alloc::Layout, panic::PanicInfo};
 
 use buddy_system_allocator::{Heap, LockedHeapWithRescue};
-use erhino_shared::process::Termination;
+use erhino_shared::process::{Signal, Termination};
 
-use crate::call::{sys_exit, sys_extend};
+use crate::call::{sys_exit, sys_extend, sys_signal_return};
 
 #[allow(unused)]
 const INITIAL_HEAP_SIZE: usize = 1 * 0x1000;
@@ -30,6 +30,16 @@ fn lang_start<T: Termination + 'static>(main: fn() -> T) -> ! {
     }
 }
 
+pub static mut SIGNAL_HANDLER: Option<fn(Signal)> = None;
+
+// 这里有个问题就是 rinlib 会被动态链接，存在 rinlib 里的值会被共享吗？会的话那其实 HEAP_ALLOCATOR 也会。。不如不动态链接了。
+pub fn signal_handler(signal: Signal) {
+    if let Some(func) = unsafe { SIGNAL_HANDLER } {
+        func(signal);
+    }
+    unsafe { sys_signal_return() };
+}
+
 #[panic_handler]
 fn handle_panic(_info: &PanicInfo) -> ! {
     todo!();
@@ -38,8 +48,8 @@ fn handle_panic(_info: &PanicInfo) -> ! {
 fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
     let single = 4096;
     let mut size = single;
-    unsafe{
-        while layout.size() > size{
+    unsafe {
+        while layout.size() > size {
             size *= 2;
         }
         let last = heap.stats_total_bytes() + _segment_break as usize;

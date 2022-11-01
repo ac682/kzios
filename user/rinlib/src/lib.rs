@@ -5,4 +5,5 @@
 pub use erhino_shared::*;
 
 pub mod call;
+pub mod signal;
 mod rt;
