@@ -12,9 +12,8 @@ use crate::{
     println,
     proc::Process,
     sync::{
-        cell::UniProcessCell,
         hart::{HartReadWriteLock, HartWriteLockGuard},
-        optimistic::OptimisticLockGuard,
+        optimistic::{OptimisticLock, OptimisticLockGuard},
         Lock, ReadWriteLock,
     },
     timer::{self, hart::HartTimer, Timer},
@@ -23,8 +22,8 @@ use crate::{
 
 use super::Scheduler;
 
-static mut PROC_TABLE: HartReadWriteLock<ProcessTable> =
-    HartReadWriteLock::new(ProcessTable::new());
+// 就不上锁了
+static mut PROC_TABLE: HartReadWriteLock<ProcessTable> = HartReadWriteLock::new(ProcessTable::new());
 
 struct ProcessTable {
     inner: Vec<HartReadWriteLock<ProcessCell>>,
@@ -44,7 +43,6 @@ impl ProcessTable {
         proc.pid = pid as Pid;
         self.inner
             .push(HartReadWriteLock::new(ProcessCell::new(proc)));
-        println!("process added: {}", pid);
         pid as Pid
     }
 
@@ -52,7 +50,7 @@ impl ProcessTable {
         self.inner.len()
     }
 
-    pub fn next_available(&mut self) -> HartWriteLockGuard<ProcessCell> {
+    pub fn next_available(& mut self) -> HartWriteLockGuard<ProcessCell> {
         loop {
             let current = self.current;
             self.current = (self.current + 1) % self.inner.len();
@@ -90,7 +88,7 @@ pub struct FlatScheduler<T: Timer + Sized> {
 }
 
 impl<T: Timer + Sized> Scheduler for FlatScheduler<T> {
-    fn add(proc: Process) -> Pid {
+    fn add(&self, proc: Process) -> Pid {
         let mut table = unsafe { PROC_TABLE.lock_mut() };
         table.add(proc)
     }
@@ -98,7 +96,7 @@ impl<T: Timer + Sized> Scheduler for FlatScheduler<T> {
         self.switch_next()
     }
     fn begin(&mut self) {
-        if unsafe { (*PROC_TABLE.access()).len() } > 0 {
+        if unsafe { (PROC_TABLE).lock().len() } > 0 {
             self.switch_next();
         } else {
             panic!("no process available");
@@ -112,11 +110,11 @@ impl<T: Timer + Sized> Scheduler for FlatScheduler<T> {
         }
     }
 
-    fn unlocked<F: Fn(&mut Process)>(&mut self, pid: Pid, func: F) {
-        let mut table = unsafe { PROC_TABLE.lock_mut() };
-        let mut cell = table.inner[pid as usize].lock_mut();
-        func(&mut cell.inner);
-    }
+    // fn unlocked<F: Fn(&mut Process)>(&mut self, pid: Pid, func: F) {
+    //     let table = unsafe { &mut PROC_TABLE };
+    //     let mut cell = table.inner[pid as usize].lock_mut();
+    //     func(&mut cell.inner);
+    // }
 
     fn finish(&mut self) {
         if let Some(process) = self.current() {
@@ -148,54 +146,38 @@ impl<T: Timer + Sized> FlatScheduler<T> {
         }
     }
     fn switch_next(&mut self) -> Pid {
-        unsafe {
-            let mut table = PROC_TABLE.lock_mut();
-            let time = self.timer.borrow().get_cycles();
-            if let Some(current) = &mut self.owned {
-                if current.inner.state == ProcessState::Running {
-                    current.inner.state = ProcessState::Ready;
-                    current.out_time = time;
-                }
-                self.owned = None;
+        let time = self.timer.borrow().get_cycles();
+        if let Some(current) = &mut self.owned {
+            if current.inner.state == ProcessState::Running {
+                current.inner.state = ProcessState::Ready;
+                current.out_time = time;
             }
 
-            // 👆 换出之前的
-            // 👇 换入新的
-
-            let mut process = unsafe { (*PROC_TABLE.access_mut()).next_available() };
-            let next_pid = process.inner.pid;
-            process.inner.state = ProcessState::Running;
-            process.in_time = time;
-            let quantum = self.next_quantum(&process);
-            process.last_quantum = quantum;
-            let cycles = self.timer.borrow().ms_to_cycles(quantum);
-
-            if process.inner.signal.pending > 0 {
-                process.inner.signal.trap = process.inner.trap;
-                process.inner.trap = TrapFrame::new();
-                process.inner.trap.satp = process.inner.signal.trap.satp;
-                process.inner.trap.x[2] = process.inner.signal.trap.x[2];
-                process.inner.trap.pc = process.inner.signal.handler as u64;
-
-                let mut pending = process.inner.signal.pending;
-                let mut position = 0usize;
-                loop {
-                    let bit = pending % 2;
-                    if bit != 0{
-                        break;
-                    }else{
-                        position += 1;
-                        pending >>= 1;
-                    }
-                }
-                let signal = 1 << position;
-                process.inner.signal.pending &=  !signal;
-                process.inner.trap.x[10] = signal;
-            }
-            self.timer.borrow_mut().set_timer(cycles);
-            self.owned = Some(process);
-            next_pid
+            println!(
+                "#{} switching out {}({})@{:#x}",
+                self.hartid, current.inner.name, current.inner.pid, current.inner.trap.pc
+            );
+            self.owned = None;
         }
+
+        // 👆 换出之前的
+        // 👇 换入新的
+
+        let mut process = unsafe { (*PROC_TABLE.access_mut()).next_available() };
+        let next_pid = process.inner.pid;
+        process.inner.state = ProcessState::Running;
+        process.in_time = time;
+        let quantum = self.next_quantum(&process);
+        process.last_quantum = quantum;
+        let cycles = self.timer.borrow().ms_to_cycles(quantum);
+
+        self.timer.borrow_mut().set_timer(cycles);
+        println!(
+            "#{} switching in {}({})@{:#x}",
+            self.hartid, process.inner.name, process.inner.pid, process.inner.trap.pc
+        );
+        self.owned = Some(process);
+        next_pid
     }
 
     fn next_quantum(&self, proc: &ProcessCell) -> usize {

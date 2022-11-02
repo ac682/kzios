@@ -2,7 +2,7 @@ use alloc::{format, string::String};
 use buddy_system_allocator::{Heap, LockedHeap, LockedHeapWithRescue};
 use core::{alloc::Layout, arch::asm, panic::PanicInfo};
 use erhino_shared::process::Termination;
-use riscv::register::misa;
+use riscv::register::{mhartid, misa};
 
 use crate::{
     external::{
@@ -119,7 +119,9 @@ fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
 
 #[panic_handler]
 fn handle_panic(info: &PanicInfo) -> ! {
-    print!("\x1b[0;31mKernel panicking: \x1b[0m");
+    print!("\x1b[0;31mKernel panicking at #{}: \x1b[0m", unsafe {
+        mhartid::read()
+    });
     if let Some(location) = info.location() {
         println!(
             "file {}, {}: {}",

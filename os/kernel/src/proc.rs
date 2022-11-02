@@ -38,12 +38,12 @@ pub struct SignalControlBlock{
     pub mask: SignalMap,
     pub pending: SignalMap,
     pub handler: Address,
-    pub trap: TrapFrame
+    pub backup: TrapFrame
 }
 
 impl Default for SignalControlBlock{
     fn default() -> Self {
-        Self { mask: Default::default(), pending: Default::default(), handler: Default::default(), trap: TrapFrame::new() }
+        Self { mask: Default::default(), pending: Default::default(), handler: Default::default(), backup: TrapFrame::new() }
     }
 }
 
@@ -54,8 +54,8 @@ pub struct Process {
     pub permissions: FlagSet<ProcessPermission>,
     pub memory: MemoryUnit,
     pub trap: TrapFrame,
-    pub signal: SignalControlBlock,
     pub state: ProcessState,
+    pub signal: SignalControlBlock,
 }
 
 impl Process {

@@ -1,7 +1,6 @@
 pub mod hart;
 pub mod mutex;
 pub mod optimistic;
-pub mod cell;
 
 pub trait Lock<'a, Data: Sized, Guard> {
     fn is_locked(&self) -> bool;

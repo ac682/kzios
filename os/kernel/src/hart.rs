@@ -28,7 +28,7 @@ use crate::{
         sch::{self, flat::FlatScheduler, Scheduler},
         Process, ProcessPermission,
     },
-    sync::{cell::UniProcessCell, optimistic::OptimisticLock, Lock},
+    sync::{optimistic::OptimisticLock, Lock},
     timer::hart::HartTimer,
     trap::TrapFrame,
 };
@@ -48,7 +48,7 @@ type SchedulerImpl = FlatScheduler<HartTimer>;
 pub struct Hart {
     id: usize,
     timer: Rc<RefCell<HartTimer>>,
-    scheduler: SchedulerImpl,
+    scheduler: Box<dyn Scheduler>,
     context: *mut TrapFrame,
 }
 
@@ -59,7 +59,7 @@ impl Hart {
         Self {
             id: hartid,
             timer: timer.clone(),
-            scheduler: SchedulerImpl::new(hartid, timer),
+            scheduler: Box::new(SchedulerImpl::new(hartid, timer)),
             context: unsafe { &mut KERNEL_TRAP as *mut TrapFrame },
         }
     }
@@ -88,7 +88,6 @@ impl Hart {
                 frame.pc += 4;
             }
             Trap::Exception(Exception::Breakpoint) => {
-                // panic!("user breakpoint at hart#{}: frame=\n{}", self.id, frame);
                 println!("DBG #{}: {:#x}", self.id, frame.x[10]);
                 frame.pc += 4;
             }
@@ -170,15 +169,11 @@ impl Hart {
                                             if fork.state == ProcessState::Running {
                                                 fork.state = ProcessState::Ready;
                                             }
-                                            let pid = SchedulerImpl::add(fork);
+                                            let pid = self.scheduler.add(fork);
                                             ret = pid as i64;
                                         } else {
                                             ret = -2;
                                         }
-                                    }
-                                    if ret >= 0 {
-                                        // TODO: 让出 parent 控制权避免 cow
-                                        //self.scheduler.tick();
                                     }
                                 } else {
                                     ret = -3;
@@ -195,8 +190,8 @@ impl Hart {
                         }
                         SystemCall::SignalReturn => {
                             if let Some(process) = self.scheduler.current() {
-                                (process.signal.trap, process.trap) =
-                                    (process.trap, process.signal.trap);
+                                (process.signal.backup, process.trap) =
+                                    (process.trap, process.signal.backup);
                             }
                             self.scheduler.tick();
                         }
@@ -204,10 +199,11 @@ impl Hart {
                             let pid = frame.x[10] as Pid;
                             // 其实是 Signal，但 Signal 和 SignalMap 在数值上等价
                             let signal = frame.x[11] as SignalMap;
-                            self.scheduler.unlocked(pid, |process| {
-                                let map = process.signal.mask & signal;
-                                process.signal.pending |= map;
-                            });
+                            todo!()
+                            // self.scheduler.unlocked(pid, |process| {
+                            //     let map = process.signal.mask & signal;
+                            //     process.signal.pending |= map;
+                            // });
                         }
                         SystemCall::SignalSet => {
                             let address = frame.x[10] as Address;
@@ -270,5 +266,5 @@ pub fn of_hart(hartid: usize) -> &'static mut Hart {
 }
 
 pub fn add_flat_process(proc: Process) {
-    SchedulerImpl::add(proc);
+    my_hart().scheduler.add(proc);
 }

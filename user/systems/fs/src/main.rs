@@ -14,12 +14,10 @@ mod impls;
 extern crate rinlib;
 
 fn main() {
-    signal::set_handler(Signal::Interrupt as SignalMap, signal_handler);
+    //signal::set_handler(Signal::Interrupt as SignalMap, signal_handler);
     unsafe {
         let pid = sys_fork(0).unwrap();
-        if pid != 0 {
-            sys_signal_send(pid, Signal::Interrupt);
-        }
+        asm!("ebreak", in("x10") pid);
     }
 }
 
