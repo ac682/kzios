@@ -4,14 +4,12 @@ use alloc::collections::BTreeMap;
 use erhino_shared::mem::{page::PageLevel, Address, PageNumber};
 use flagset::FlagSet;
 use hashbrown::HashMap;
+use spin::Once;
 
 use crate::{
     mm::range::PageRange,
     println,
-    sync::{
-        hart::{HartLock, HartReadWriteLock},
-        Lock, ReadWriteLock,
-    },
+    sync::{hart::HartReadWriteLock, DataLock, InteriorReadWriteLock, InteriorLock},
 };
 
 use super::{
@@ -19,11 +17,13 @@ use super::{
     page::{PageTable, PageTableEntry, PageTableEntryFlag, PageTableError},
 };
 
-static mut TRACKED_PAGES: HartReadWriteLock<HashMap<PageNumber, usize>> =
-    HartReadWriteLock::empty();
+static mut TRACKED_PAGES: Once<HashMap<PageNumber, usize>> = Once::new();
+static mut TRACKED_LOCK: HartReadWriteLock = HartReadWriteLock::new();
 
 pub fn init() {
-    unsafe { TRACKED_PAGES.put(HashMap::new()) }
+    unsafe{
+        TRACKED_PAGES.call_once(||{HashMap::new()});
+    }
 }
 
 // 以后 MemoryUnit 可以有多种实现，例如 Sv39 可换成 Sv48
@@ -61,7 +61,8 @@ impl MemoryUnit {
     }
 
     fn cow_free(ppn: PageNumber) {
-        let mut tracked = unsafe { TRACKED_PAGES.lock_mut() };
+        let lock = unsafe { TRACKED_LOCK.lock_mut() };
+        let mut tracked = unsafe { TRACKED_PAGES.get_mut().unwrap() };
         let count = tracked.get(&ppn).unwrap();
         if count == &1 {
             tracked.remove_entry(&ppn);
@@ -72,7 +73,8 @@ impl MemoryUnit {
     }
 
     fn cow_usage(ppn: PageNumber) -> usize {
-        let mut tracked = unsafe { TRACKED_PAGES.lock_mut() };
+        let lock = unsafe{TRACKED_LOCK.lock()};
+        let mut tracked = unsafe { TRACKED_PAGES.get_unchecked() };
         let count = tracked.get(&ppn).unwrap();
         *count
     }
@@ -123,7 +125,8 @@ impl MemoryUnit {
                     if let Some(new_entry) = new.entry_mut(i) {
                         if old_entry.is_leaf() {
                             let ppn = old_entry.physical_page_number();
-                            let mut tracked = unsafe { TRACKED_PAGES.lock_mut() };
+                            let lock = unsafe{TRACKED_LOCK.lock_mut()};
+                            let mut tracked = unsafe { TRACKED_PAGES.get_mut().unwrap() };
                             if old_entry.is_cow() {
                                 tracked.entry(ppn).and_modify(|e| *e += 1).or_insert(2);
                             } else {

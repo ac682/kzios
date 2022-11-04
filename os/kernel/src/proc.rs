@@ -4,7 +4,7 @@ use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use elf_rs::{Elf, ElfFile, ElfMachine, ElfType, ProgramHeaderFlags, ProgramType};
 use erhino_shared::{
     mem::{page::PageLevel, Address},
-    process::{Pid, ProcessState, SignalMap},
+    proc::{Pid, ProcessPermission, ProcessState, Signal},
 };
 use flagset::{flags, FlagSet};
 
@@ -18,32 +18,25 @@ use crate::{
 pub enum ProcessSpawnError {
     BrokenBinary,
     WrongTarget,
-    InvalidPermissions
-}
-
-flags! {
-    pub enum ProcessPermission: u8{
-        Valid = 0b1,
-        Process = 0b10,
-        Memory = 0b100,
-        Net = 0b1000,
-
-
-        All = (ProcessPermission::Valid | ProcessPermission::Process | ProcessPermission::Memory | ProcessPermission::Net).bits()
-    }
+    InvalidPermissions,
 }
 
 #[derive(Clone, Copy)]
-pub struct SignalControlBlock{
-    pub mask: SignalMap,
-    pub pending: SignalMap,
+pub struct SignalControlBlock {
+    pub mask: Signal,
+    pub pending: Signal,
     pub handler: Address,
-    pub backup: TrapFrame
+    pub backup: TrapFrame,
 }
 
-impl Default for SignalControlBlock{
+impl Default for SignalControlBlock {
     fn default() -> Self {
-        Self { mask: Default::default(), pending: Default::default(), handler: Default::default(), backup: TrapFrame::new() }
+        Self {
+            mask: Default::default(),
+            pending: Default::default(),
+            handler: Default::default(),
+            backup: TrapFrame::new(),
+        }
     }
 }
 
@@ -53,9 +46,9 @@ pub struct Process {
     pub parent: Pid,
     pub permissions: FlagSet<ProcessPermission>,
     pub memory: MemoryUnit,
-    pub trap: TrapFrame,
+    trap: TrapFrame,
     pub state: ProcessState,
-    pub signal: SignalControlBlock,
+    signal: SignalControlBlock,
 }
 
 impl Process {
@@ -82,11 +75,7 @@ impl Process {
             }
             process
                 .memory
-                .fill(
-                    0x03ff_fffe,
-                    1,
-                    PageTableEntryFlag::UserReadWrite,
-                )
+                .fill(0x03ff_fffe, 1, PageTableEntryFlag::UserReadWrite)
                 .unwrap();
             for ph in elf.program_header_iter() {
                 if ph.ph_type() == ProgramType::LOAD {
@@ -104,24 +93,26 @@ impl Process {
         }
     }
 
-
-    pub fn fork<P: Into<FlagSet<ProcessPermission>>>(&mut self, permissions: P) -> Result<Process, ProcessSpawnError>{
+    pub fn fork<P: Into<FlagSet<ProcessPermission>>>(
+        &mut self,
+        permissions: P,
+    ) -> Result<Process, ProcessSpawnError> {
         let perm_into: FlagSet<ProcessPermission> = permissions.into();
-        let perm_new = if perm_into.contains(ProcessPermission::Valid){
-            if self.permissions.contains(perm_into){
+        let perm_new = if perm_into.contains(ProcessPermission::Valid) {
+            if self.permissions.contains(perm_into) {
                 perm_into
-            }else{
+            } else {
                 return Err(ProcessSpawnError::InvalidPermissions);
             }
-        }else{
-            if perm_into.is_empty(){
+        } else {
+            if perm_into.is_empty() {
                 self.permissions.clone()
-            }else{
+            } else {
                 return Err(ProcessSpawnError::InvalidPermissions);
             }
         };
-        if self.permissions.contains(perm_into){
-            let mut proc = Self{
+        if self.permissions.contains(perm_into) {
+            let mut proc = Self {
                 name: self.name.clone(),
                 pid: 0,
                 parent: self.pid,
@@ -130,22 +121,58 @@ impl Process {
                 trap: self.trap.clone(),
                 signal: self.signal,
                 state: self.state,
-                
             };
             proc.trap.satp = (8 << 60 | proc.memory.root()) as u64;
             Ok(proc)
-        }else{
+        } else {
             Err(ProcessSpawnError::InvalidPermissions)
         }
-        
     }
 
-    pub fn has_permission(&self, perm: ProcessPermission) -> bool{
+    pub fn has_permission(&self, perm: ProcessPermission) -> bool {
         self.permissions.contains(perm)
     }
 
-    pub fn move_to_next_instruction(&mut self){
+    pub fn move_to_next_instruction(&mut self) {
         self.trap.pc += 4;
+    }
+
+    pub fn has_signals_pending(&self) -> bool {
+        self.signal.pending > 0
+    }
+
+    pub fn queue_signal(&mut self, signal: Signal) {
+        self.signal.pending |= signal as Signal;
+    }
+    
+    pub fn set_signal_handler(&mut self, handler: Address, mask: Signal) {
+        self.signal.mask = mask;
+        self.signal.handler = handler;
+    }
+
+    pub fn trap(&mut self) -> &mut TrapFrame {
+        if self.has_signals_pending() {
+            self.signal.backup = self.trap.clone();
+
+            let mut signal = 0 as Signal;
+            let mut pending = self.signal.pending;
+            let mut position = 0usize;
+            for i in 0..64 {
+                if pending & 2 == 1 {
+                    signal = 1 << position;
+                    break;
+                } else {
+                    position += 1;
+                }
+            }
+
+            self.signal.pending &= !pending;
+            self.signal.backup.x[10] = pending;
+            self.signal.backup.pc = self.signal.handler as u64;
+            &mut self.signal.backup
+        } else {
+            &mut self.trap
+        }
     }
 }
 

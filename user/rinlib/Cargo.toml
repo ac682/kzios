@@ -10,3 +10,4 @@ edition = "2021"
 [dependencies]
 erhino_shared = { path = "../../shared"}
 buddy_system_allocator = { version = "0.8", features = ["const_fn"]}
+flagset = "0.4"

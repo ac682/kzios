@@ -7,7 +7,7 @@ use alloc::{boxed::Box, rc::Rc, sync::Arc, vec::Vec};
 use erhino_shared::{
     call::{KernelCall, SystemCall},
     mem::{Address, PageNumber},
-    process::{Pid, ProcessState, Signal, SignalMap},
+    proc::{Pid, ProcessPermission, ProcessState, Signal},
 };
 use flagset::FlagSet;
 use num_traits::FromPrimitive;
@@ -26,9 +26,9 @@ use crate::{
     peripheral, println,
     proc::{
         sch::{self, flat::FlatScheduler, Scheduler},
-        Process, ProcessPermission,
+        Process,
     },
-    sync::{optimistic::OptimisticLock, Lock},
+    sync::{InteriorLock},
     timer::hart::HartTimer,
     trap::TrapFrame,
 };
@@ -88,7 +88,12 @@ impl Hart {
                 frame.pc += 4;
             }
             Trap::Exception(Exception::Breakpoint) => {
-                println!("DBG #{}: {:#x}", self.id, frame.x[10]);
+                if let Some(current) = self.scheduler.current() {
+                    println!(
+                        "DBG #{} Pid={} Sym={:#x}",
+                        self.id, current.pid, frame.x[10]
+                    );
+                }
                 frame.pc += 4;
             }
             Trap::Exception(Exception::StoreFault) => {
@@ -165,7 +170,7 @@ impl Hart {
                                     if let Some(current) = self.scheduler.current() {
                                         if let Ok(mut fork) = current.fork(perm_into) {
                                             fork.move_to_next_instruction();
-                                            fork.trap.x[10] = 0;
+                                            fork.trap().x[10] = 0;
                                             if fork.state == ProcessState::Running {
                                                 fork.state = ProcessState::Ready;
                                             }
@@ -188,29 +193,18 @@ impl Hart {
                         SystemCall::Yield => {
                             self.scheduler.tick();
                         }
-                        SystemCall::SignalReturn => {
-                            if let Some(process) = self.scheduler.current() {
-                                (process.signal.backup, process.trap) =
-                                    (process.trap, process.signal.backup);
+                        SystemCall::SignalSet => {
+                            if let Some(current) = self.scheduler.current() {
+                                let handler = frame.x[10];
+                                let mask = frame.x[11];
+                                current.set_signal_handler(handler as Address, mask);
                             }
-                            self.scheduler.tick();
                         }
                         SystemCall::SignalSend => {
                             let pid = frame.x[10] as Pid;
-                            // 其实是 Signal，但 Signal 和 SignalMap 在数值上等价
-                            let signal = frame.x[11] as SignalMap;
-                            todo!()
-                            // self.scheduler.unlocked(pid, |process| {
-                            //     let map = process.signal.mask & signal;
-                            //     process.signal.pending |= map;
-                            // });
-                        }
-                        SystemCall::SignalSet => {
-                            let address = frame.x[10] as Address;
-                            let mask = frame.x[11] as SignalMap;
-                            if let Some(process) = self.scheduler.current() {
-                                process.signal.mask = mask;
-                                process.signal.handler = address;
+                            let signal = frame.x[11] as Signal;
+                            if let Some(proc) = self.scheduler.find_mut(pid) {
+                                proc.queue_signal(signal);
                             }
                         }
                         SystemCall::Map => {
@@ -240,7 +234,7 @@ impl Hart {
             ),
         }
         self.context = if let Some(proc) = self.scheduler.current() {
-            &mut proc.trap as *mut TrapFrame
+            proc.trap() as *mut TrapFrame
         } else {
             unsafe { &mut KERNEL_TRAP as *mut TrapFrame }
         }

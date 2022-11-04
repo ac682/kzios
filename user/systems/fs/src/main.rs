@@ -3,8 +3,8 @@
 use core::arch::asm;
 
 use rinlib::{
-    call::{sys_fork, sys_yield, sys_signal_send},
-    process::{Signal, SignalMap},
+    proc::fork,
+    shared::proc::{ProcessPermission, Signal, SystemSignal},
     signal,
 };
 
@@ -14,13 +14,24 @@ mod impls;
 extern crate rinlib;
 
 fn main() {
-    //signal::set_handler(Signal::Interrupt as SignalMap, signal_handler);
-    unsafe {
-        let pid = sys_fork(0).unwrap();
-        asm!("ebreak", in("x10") pid);
+    signal::set_handler(SystemSignal::Interrupt as Signal, handle_signal);
+    let pid = fork(ProcessPermission::Invalid).unwrap();
+    if pid != 0 {
+        debug(pid as usize);
+        signal::send(pid, SystemSignal::Interrupt as Signal);
+    }else{
+        loop {
+            
+        }
     }
 }
 
-fn signal_handler(signal: Signal) {
-    unsafe { asm!("ebreak", in("x10") signal as usize) };
+fn handle_signal(signal: Signal) {
+    debug(signal as usize);
+}
+
+fn debug(sym :usize){
+    unsafe {
+        asm!("ebreak", in("x10") sym);
+    }
 }

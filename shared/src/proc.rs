@@ -1,3 +1,4 @@
+use flagset::{flags, FlagSet};
 use num_derive::{FromPrimitive, ToPrimitive};
 
 /// ExitCode(i64) type for process
@@ -8,12 +9,12 @@ pub type Pid = u32;
 /// If uniform thread-id required, It is uni_tid = ((pid << 32) + tid)
 pub type Tid = u32;
 /// SignalMap(u64) for process
-pub type SignalMap = u64;
+pub type Signal = u64;
 
-/// Predefined signal numbers
 #[repr(u64)]
 #[derive(FromPrimitive, ToPrimitive)]
-pub enum Signal {
+/// Predefined signal numbers
+pub enum SystemSignal {
     /// Do nothing
     Nop = 0b1,
     /// Interrupt current workflow but not quit
@@ -21,9 +22,28 @@ pub enum Signal {
     /// Request to finalize the job and quit
     Terminate = 0b100,
     /// Kill the process after signal handled within a period of time
-    Stop = 0b1000
+    Stop = 0b1000,
 }
 
+flags! {
+    /// Permission of the process
+    /// Invalid when fork means copy the permissions from the parend
+    pub enum ProcessPermission: u8{
+        /// Not available
+        Invalid = 0b0,
+        /// Should be always present
+        Valid = 0b1,
+        /// Process operations
+        Process = 0b10,
+        /// Map
+        Memory = 0b100,
+        /// IDK
+        Net = 0b1000,
+
+        /// All of them
+        All = (ProcessPermission::Valid | ProcessPermission::Process | ProcessPermission::Memory | ProcessPermission::Net).bits()
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 /// States of process
@@ -38,16 +58,15 @@ pub enum ProcessState {
     Dead,
 }
 
-
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 /// Waiting reasons
-pub enum WaitingReason{
+pub enum WaitingReason {
     /// Waken up when time up
     Timer,
     /// Sending message blocks itself
     SendBusy,
     /// Receiving message blocks itself
-    ReceiveBusy
+    ReceiveBusy,
 }
 
 /// Process's main function product

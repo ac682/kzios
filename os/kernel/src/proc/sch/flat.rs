@@ -3,7 +3,7 @@ use core::cell::{RefCell, UnsafeCell};
 use alloc::{boxed::Box, rc::Rc, sync::Arc, vec::Vec};
 use erhino_shared::{
     mem::Address,
-    process::{Pid, ProcessState, WaitingReason},
+    proc::{Pid, ProcessState, WaitingReason},
 };
 use riscv::register::{mhartid, mscratch};
 
@@ -11,11 +11,7 @@ use crate::{
     hart::{my_hart, Hart},
     println,
     proc::Process,
-    sync::{
-        hart::{HartReadWriteLock, HartWriteLockGuard},
-        optimistic::{OptimisticLock, OptimisticLockGuard},
-        Lock, ReadWriteLock,
-    },
+    sync::{DataLock, InteriorLock, hart::HartLock},
     timer::{self, hart::HartTimer, Timer},
     trap::TrapFrame,
 };
@@ -23,26 +19,30 @@ use crate::{
 use super::Scheduler;
 
 // 就不上锁了
-static mut PROC_TABLE: HartReadWriteLock<ProcessTable> = HartReadWriteLock::new(ProcessTable::new());
+static mut PROC_TABLE: ProcessTable = ProcessTable::new();
 
 struct ProcessTable {
-    inner: Vec<HartReadWriteLock<ProcessCell>>,
+    lock: HartLock,
+    inner: Vec<ProcessCell>,
     current: usize,
 }
 
 impl ProcessTable {
     pub const fn new() -> Self {
         Self {
+            lock: HartLock::new(),
             inner: Vec::new(),
             current: 0,
         }
     }
 
+    pub fn lock(&mut self) {
+        self.lock.lock();
+    }
     pub fn add(&mut self, mut proc: Process) -> Pid {
         let pid = self.inner.len();
         proc.pid = pid as Pid;
-        self.inner
-            .push(HartReadWriteLock::new(ProcessCell::new(proc)));
+        self.inner.push(ProcessCell::new(proc));
         pid as Pid
     }
 
@@ -50,20 +50,21 @@ impl ProcessTable {
         self.inner.len()
     }
 
-    pub fn next_available(& mut self) -> HartWriteLockGuard<ProcessCell> {
+    pub fn next_available(&mut self) -> &mut ProcessCell {
         loop {
             let current = self.current;
             self.current = (self.current + 1) % self.inner.len();
             if !self.inner[current].is_locked()
-                && unsafe { (*self.inner[current].access()).inner.state == ProcessState::Ready }
+                && self.inner[current].inner.state == ProcessState::Ready
             {
                 // 由于进程表只增不减少，应该释出一份 'static 的 Guard
-                return self.inner[current].lock_mut();
+                return &mut self.inner[current];
             }
         }
     }
 }
 struct ProcessCell {
+    lock: HartLock,
     inner: Process,
     // 单位都是 cycles
     in_time: usize,
@@ -74,29 +75,37 @@ struct ProcessCell {
 impl ProcessCell {
     pub fn new(proc: Process) -> Self {
         Self {
+            lock: HartLock::new(),
             inner: proc,
             last_quantum: 50,
             in_time: 0,
             out_time: 0,
         }
     }
+
+    pub fn is_locked(&self) -> bool {
+        self.lock.is_locked()
+    }
 }
 pub struct FlatScheduler<T: Timer + Sized> {
     hartid: usize,
     timer: Rc<RefCell<T>>,
-    owned: Option<HartWriteLockGuard<'static, ProcessCell>>,
+    owned: Option<&'static mut ProcessCell>,
+    borrowed: Option<&'static mut ProcessCell>,
 }
 
 impl<T: Timer + Sized> Scheduler for FlatScheduler<T> {
     fn add(&self, proc: Process) -> Pid {
-        let mut table = unsafe { PROC_TABLE.lock_mut() };
-        table.add(proc)
+        unsafe {
+            PROC_TABLE.lock();
+            PROC_TABLE.add(proc)
+        }
     }
     fn tick(&mut self) -> Pid {
         self.switch_next()
     }
     fn begin(&mut self) {
-        if unsafe { (PROC_TABLE).lock().len() } > 0 {
+        if unsafe { PROC_TABLE.len() } > 0 {
             self.switch_next();
         } else {
             panic!("no process available");
@@ -109,12 +118,6 @@ impl<T: Timer + Sized> Scheduler for FlatScheduler<T> {
             None
         }
     }
-
-    // fn unlocked<F: Fn(&mut Process)>(&mut self, pid: Pid, func: F) {
-    //     let table = unsafe { &mut PROC_TABLE };
-    //     let mut cell = table.inner[pid as usize].lock_mut();
-    //     func(&mut cell.inner);
-    // }
 
     fn finish(&mut self) {
         if let Some(process) = self.current() {
@@ -135,6 +138,20 @@ impl<T: Timer + Sized> Scheduler for FlatScheduler<T> {
     fn kill(&mut self, pid: Pid) {
         todo!()
     }
+
+    fn find(&mut self, pid: Pid) -> Option<&Process> {
+        todo!()
+    }
+
+    fn find_mut(&mut self, pid: Pid) -> Option<&mut Process> {
+        unsafe {
+            if (pid as usize) < PROC_TABLE.inner.len() {
+                Some(&mut PROC_TABLE.inner[pid as usize].inner)
+            } else {
+                None
+            }
+        }
+    }
 }
 
 impl<T: Timer + Sized> FlatScheduler<T> {
@@ -143,39 +160,37 @@ impl<T: Timer + Sized> FlatScheduler<T> {
             hartid,
             timer,
             owned: None,
+            borrowed: None,
         }
     }
     fn switch_next(&mut self) -> Pid {
+        if self.borrowed.is_some() {
+            self.borrowed = None;
+        }
         let time = self.timer.borrow().get_cycles();
         if let Some(current) = &mut self.owned {
             if current.inner.state == ProcessState::Running {
                 current.inner.state = ProcessState::Ready;
                 current.out_time = time;
             }
-
-            println!(
-                "#{} switching out {}({})@{:#x}",
-                self.hartid, current.inner.name, current.inner.pid, current.inner.trap.pc
-            );
             self.owned = None;
         }
 
         // 👆 换出之前的
         // 👇 换入新的
 
-        let mut process = unsafe { (*PROC_TABLE.access_mut()).next_available() };
+        let mut process = unsafe { PROC_TABLE.next_available() };
         let next_pid = process.inner.pid;
         process.inner.state = ProcessState::Running;
         process.in_time = time;
         let quantum = self.next_quantum(&process);
         process.last_quantum = quantum;
         let cycles = self.timer.borrow().ms_to_cycles(quantum);
-
-        self.timer.borrow_mut().set_timer(cycles);
         println!(
-            "#{} switching in {}({})@{:#x}",
-            self.hartid, process.inner.name, process.inner.pid, process.inner.trap.pc
+            "#{} -> {} for slice_{} with {:#x}",
+            self.hartid, next_pid, quantum, process.inner.signal.pending
         );
+        self.timer.borrow_mut().set_timer(cycles);
         self.owned = Some(process);
         next_pid
     }

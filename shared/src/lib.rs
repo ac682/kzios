@@ -8,6 +8,6 @@
 /// System calls
 pub mod call;
 /// Process types
-pub mod process;
+pub mod proc;
 /// Memory related
 pub mod mem;

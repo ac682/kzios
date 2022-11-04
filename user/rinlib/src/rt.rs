@@ -1,7 +1,7 @@
-use core::{alloc::Layout, panic::PanicInfo};
+use core::{alloc::Layout, panic::PanicInfo, arch::asm};
 
 use buddy_system_allocator::{Heap, LockedHeapWithRescue};
-use erhino_shared::process::{Signal, Termination};
+use erhino_shared::proc::{Signal, Termination};
 
 use crate::call::{sys_exit, sys_extend, sys_signal_return};
 
@@ -19,7 +19,7 @@ static HEAP_ALLOCATOR: LockedHeapWithRescue<HEAP_ORDER> = LockedHeapWithRescue::
 #[lang = "start"]
 fn lang_start<T: Termination + 'static>(main: fn() -> T) -> ! {
     unsafe {
-        sys_extend(_segment_break as usize, 4096, 0b011).unwrap();
+        sys_extend(_segment_break as usize, 4096, 0b011);
         HEAP_ALLOCATOR.lock().init(_segment_break as usize, 4096);
     }
     let code = main().to_exit_code();
@@ -34,6 +34,9 @@ pub static mut SIGNAL_HANDLER: Option<fn(Signal)> = None;
 
 // 这里有个问题就是 rinlib 会被动态链接，存在 rinlib 里的值会被共享吗？会的话那其实 HEAP_ALLOCATOR 也会。。不如不动态链接了。
 pub fn signal_handler(signal: Signal) {
+    unsafe{
+        asm!("ebreak", in("x10") 0x123);
+    }
     if let Some(func) = unsafe { SIGNAL_HANDLER } {
         func(signal);
     }
@@ -42,7 +45,10 @@ pub fn signal_handler(signal: Signal) {
 
 #[panic_handler]
 fn handle_panic(_info: &PanicInfo) -> ! {
-    todo!();
+    unsafe{
+        asm!("ebreak", in("x10") 0x114514);
+    }
+    loop{}
 }
 
 fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
@@ -53,7 +59,7 @@ fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
             size *= 2;
         }
         let last = heap.stats_total_bytes() + _segment_break as usize;
-        sys_extend(last, size, 0b011).unwrap();
+        sys_extend(last, size, 0b011);
         heap.add_to_heap(last, last + size);
     }
 }

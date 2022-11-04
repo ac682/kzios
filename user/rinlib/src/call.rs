@@ -3,7 +3,7 @@ use core::arch::asm;
 use erhino_shared::{
     call::SystemCall,
     mem::Address,
-    process::{ExitCode, Pid, Signal, SignalMap},
+    proc::{ExitCode, Pid, Signal, SystemSignal},
 };
 
 unsafe fn raw_call(id: usize, arg0: usize, arg1: usize, arg2: usize, arg3: usize) -> usize {
@@ -21,13 +21,8 @@ pub unsafe fn sys_yield() {
 }
 
 // perm: 0b0000_N.M.P.V.
-pub unsafe fn sys_fork(perm: u8) -> Result<Pid, ()> {
-    let pid = raw_call(SystemCall::Fork as usize, perm as usize, 0, 0, 0) as i64;
-    if pid < 0 {
-        Err(())
-    } else {
-        Ok(pid as Pid)
-    }
+pub unsafe fn sys_fork(perm: u8) -> i64 {
+    raw_call(SystemCall::Fork as usize, perm as usize, 0, 0, 0) as i64
 }
 
 pub unsafe fn sys_signal_return() {
@@ -35,19 +30,21 @@ pub unsafe fn sys_signal_return() {
 }
 
 pub unsafe fn sys_signal_send(pid: Pid, signal: Signal) {
-    raw_call(SystemCall::SignalSend as usize, pid as usize, signal as usize, 0, 0);
+    raw_call(
+        SystemCall::SignalSend as usize,
+        pid as usize,
+        signal as usize,
+        0,
+        0,
+    );
 }
 
 // 通过 sys_signal_set(任意值, 0) 就可以在形式上彻底取消 handler
-pub unsafe fn sys_signal_set(handler: Address, mask: SignalMap) {
+pub unsafe fn sys_signal_set(handler: Address, mask: Signal) {
     raw_call(SystemCall::SignalSet as usize, handler, mask as usize, 0, 0);
 }
 
 /// flags: 00000XWR
-pub unsafe fn sys_extend(start: Address, count: usize, flags: u8) -> Result<(), ()> {
-    if raw_call(SystemCall::Extend as usize, start, count, flags as usize, 0) == 0 {
-        Ok(())
-    } else {
-        Err(())
-    }
+pub unsafe fn sys_extend(start: Address, count: usize, flags: u8) -> bool {
+    raw_call(SystemCall::Extend as usize, start, count, flags as usize, 0) == 0
 }

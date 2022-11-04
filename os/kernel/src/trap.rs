@@ -14,7 +14,7 @@ use crate::{
     mm::page::PageTableEntryFlag,
     println,
     proc::sch,
-    sync::{hart::HartLock, Lock},
+    sync::{hart::HartLock, InteriorLock},
     timer, hart::{my_hart, of_hart},
 };
 

@@ -1,7 +1,7 @@
 use alloc::{format, string::String};
 use buddy_system_allocator::{Heap, LockedHeap, LockedHeapWithRescue};
 use core::{alloc::Layout, arch::asm, panic::PanicInfo};
-use erhino_shared::process::Termination;
+use erhino_shared::proc::Termination;
 use riscv::register::{mhartid, misa};
 
 use crate::{
