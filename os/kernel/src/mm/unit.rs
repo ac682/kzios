@@ -9,7 +9,7 @@ use spin::Once;
 use crate::{
     mm::range::PageRange,
     println,
-    sync::{hart::HartReadWriteLock, DataLock, InteriorReadWriteLock, InteriorLock},
+    sync::{hart::HartReadWriteLock, DataLock, InteriorLock, InteriorReadWriteLock},
 };
 
 use super::{
@@ -21,8 +21,8 @@ static mut TRACKED_PAGES: Once<HashMap<PageNumber, usize>> = Once::new();
 static mut TRACKED_LOCK: HartReadWriteLock = HartReadWriteLock::new();
 
 pub fn init() {
-    unsafe{
-        TRACKED_PAGES.call_once(||{HashMap::new()});
+    unsafe {
+        TRACKED_PAGES.call_once(|| HashMap::new());
     }
 }
 
@@ -73,7 +73,7 @@ impl MemoryUnit {
     }
 
     fn cow_usage(ppn: PageNumber) -> usize {
-        let lock = unsafe{TRACKED_LOCK.lock()};
+        let lock = unsafe { TRACKED_LOCK.lock() };
         let mut tracked = unsafe { TRACKED_PAGES.get_unchecked() };
         let count = tracked.get(&ppn).unwrap();
         *count
@@ -125,7 +125,7 @@ impl MemoryUnit {
                     if let Some(new_entry) = new.entry_mut(i) {
                         if old_entry.is_leaf() {
                             let ppn = old_entry.physical_page_number();
-                            let lock = unsafe{TRACKED_LOCK.lock_mut()};
+                            let lock = unsafe { TRACKED_LOCK.lock_mut() };
                             let mut tracked = unsafe { TRACKED_PAGES.get_mut().unwrap() };
                             if old_entry.is_cow() {
                                 tracked.entry(ppn).and_modify(|e| *e += 1).or_insert(2);
@@ -136,7 +136,6 @@ impl MemoryUnit {
                             new_entry.write(old_entry.read());
                         } else {
                             if let Some(frame) = frame_alloc(1) {
-                                let table = PageTable::new(frame);
                                 Self::copy_table(
                                     old_entry.as_page_table_mut(),
                                     new_entry.set_as_page_table_mut(frame),

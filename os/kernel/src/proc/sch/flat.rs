@@ -11,7 +11,10 @@ use crate::{
     hart::{my_hart, Hart},
     println,
     proc::Process,
-    sync::{DataLock, InteriorLock, hart::HartLock},
+    sync::{
+        hart::{HartLock, HartReadWriteLock},
+        DataLock, InteriorLock,
+    },
     timer::{self, hart::HartTimer, Timer},
     trap::TrapFrame,
 };
@@ -22,7 +25,7 @@ use super::Scheduler;
 static mut PROC_TABLE: ProcessTable = ProcessTable::new();
 
 struct ProcessTable {
-    lock: HartLock,
+    lock: HartReadWriteLock,
     inner: Vec<ProcessCell>,
     current: usize,
 }
@@ -30,7 +33,7 @@ struct ProcessTable {
 impl ProcessTable {
     pub const fn new() -> Self {
         Self {
-            lock: HartLock::new(),
+            lock: HartReadWriteLock::new(),
             inner: Vec::new(),
             current: 0,
         }
@@ -38,6 +41,10 @@ impl ProcessTable {
 
     pub fn lock(&mut self) {
         self.lock.lock();
+    }
+
+    pub fn unlock(&mut self){
+        self.lock.unlock();
     }
     pub fn add(&mut self, mut proc: Process) -> Pid {
         let pid = self.inner.len();
@@ -57,12 +64,12 @@ impl ProcessTable {
             if !self.inner[current].is_locked()
                 && self.inner[current].inner.state == ProcessState::Ready
             {
-                // 由于进程表只增不减少，应该释出一份 'static 的 Guard
                 return &mut self.inner[current];
             }
         }
     }
 }
+
 struct ProcessCell {
     lock: HartLock,
     inner: Process,
@@ -77,7 +84,7 @@ impl ProcessCell {
         Self {
             lock: HartLock::new(),
             inner: proc,
-            last_quantum: 50,
+            last_quantum: 35,
             in_time: 0,
             out_time: 0,
         }
@@ -91,14 +98,15 @@ pub struct FlatScheduler<T: Timer + Sized> {
     hartid: usize,
     timer: Rc<RefCell<T>>,
     owned: Option<&'static mut ProcessCell>,
-    borrowed: Option<&'static mut ProcessCell>,
 }
 
 impl<T: Timer + Sized> Scheduler for FlatScheduler<T> {
     fn add(&self, proc: Process) -> Pid {
         unsafe {
             PROC_TABLE.lock();
-            PROC_TABLE.add(proc)
+            let pid = PROC_TABLE.add(proc);
+            PROC_TABLE.unlock();
+            pid
         }
     }
     fn tick(&mut self) -> Pid {
@@ -120,11 +128,13 @@ impl<T: Timer + Sized> Scheduler for FlatScheduler<T> {
     }
 
     fn finish(&mut self) {
+        //let hartid = self.hartid;
         if let Some(process) = self.current() {
             if process.state == ProcessState::Running {
                 // 进程调用 exit 之前会自己调用 wait 来等待子进程退出
                 // TODO: 查找所有子进程，然后直接 kill with no mercy
                 process.state = ProcessState::Dead;
+                //println!("#{} Exit Pid={}", hartid, process.pid);
                 // TODO: do process clean
             } else {
                 // ??? 这个 finish 只能是运行中的程序转发，程序不在运行但是被调用，那就是出现了调度错误！
@@ -160,18 +170,15 @@ impl<T: Timer + Sized> FlatScheduler<T> {
             hartid,
             timer,
             owned: None,
-            borrowed: None,
         }
     }
     fn switch_next(&mut self) -> Pid {
-        if self.borrowed.is_some() {
-            self.borrowed = None;
-        }
         let time = self.timer.borrow().get_cycles();
         if let Some(current) = &mut self.owned {
             if current.inner.state == ProcessState::Running {
                 current.inner.state = ProcessState::Ready;
                 current.out_time = time;
+                current.lock.unlock();
             }
             self.owned = None;
         }
@@ -179,7 +186,11 @@ impl<T: Timer + Sized> FlatScheduler<T> {
         // 👆 换出之前的
         // 👇 换入新的
 
-        let mut process = unsafe { PROC_TABLE.next_available() };
+        let mut process = unsafe {
+            let process = PROC_TABLE.next_available();
+            process.lock.lock();
+            process
+        };
         let next_pid = process.inner.pid;
         process.inner.state = ProcessState::Running;
         process.in_time = time;
@@ -187,9 +198,20 @@ impl<T: Timer + Sized> FlatScheduler<T> {
         process.last_quantum = quantum;
         let cycles = self.timer.borrow().ms_to_cycles(quantum);
         println!(
-            "#{} -> {} for slice_{} with {:#x}",
-            self.hartid, next_pid, quantum, process.inner.signal.pending
+            "#{} -> {} @ {:#x} for slice_{} with {:#x}",
+            self.hartid,
+            next_pid,
+            if process.inner.signal.pending > 0 {
+                process.inner.signal.backup.pc
+            } else {
+                process.inner.trap.pc
+            },
+            quantum,
+            process.inner.signal.pending
         );
+        if process.inner.has_signals_pending() {
+            process.inner.enter_signal();
+        }
         self.timer.borrow_mut().set_timer(cycles);
         self.owned = Some(process);
         next_pid

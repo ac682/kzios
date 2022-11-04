@@ -46,7 +46,7 @@ pub struct Process {
     pub parent: Pid,
     pub permissions: FlagSet<ProcessPermission>,
     pub memory: MemoryUnit,
-    trap: TrapFrame,
+    pub trap: TrapFrame,
     pub state: ProcessState,
     signal: SignalControlBlock,
 }
@@ -150,11 +150,9 @@ impl Process {
         self.signal.handler = handler;
     }
 
-    pub fn trap(&mut self) -> &mut TrapFrame {
-        if self.has_signals_pending() {
-            self.signal.backup = self.trap.clone();
-
-            let mut signal = 0 as Signal;
+    pub fn enter_signal(&mut self){
+        self.signal.backup = self.trap.clone();
+        let mut signal = 0 as Signal;
             let mut pending = self.signal.pending;
             let mut position = 0usize;
             for i in 0..64 {
@@ -169,10 +167,12 @@ impl Process {
             self.signal.pending &= !pending;
             self.signal.backup.x[10] = pending;
             self.signal.backup.pc = self.signal.handler as u64;
-            &mut self.signal.backup
-        } else {
-            &mut self.trap
-        }
+
+            (self.trap, self.signal.backup) = (self.signal.backup, self.trap);
+    }
+
+    pub fn leave_signal(&mut self){
+        (self.trap, self.signal.backup) = (self.signal.backup, self.trap);
     }
 }
 

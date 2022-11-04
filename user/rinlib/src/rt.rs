@@ -34,9 +34,6 @@ pub static mut SIGNAL_HANDLER: Option<fn(Signal)> = None;
 
 // 这里有个问题就是 rinlib 会被动态链接，存在 rinlib 里的值会被共享吗？会的话那其实 HEAP_ALLOCATOR 也会。。不如不动态链接了。
 pub fn signal_handler(signal: Signal) {
-    unsafe{
-        asm!("ebreak", in("x10") 0x123);
-    }
     if let Some(func) = unsafe { SIGNAL_HANDLER } {
         func(signal);
     }

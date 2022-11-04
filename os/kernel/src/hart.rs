@@ -28,7 +28,7 @@ use crate::{
         sch::{self, flat::FlatScheduler, Scheduler},
         Process,
     },
-    sync::{InteriorLock},
+    sync::{hart::{HartLock, HartReadWriteLock}, InteriorLock, InteriorReadWriteLock},
     timer::hart::HartTimer,
     trap::TrapFrame,
 };
@@ -42,6 +42,9 @@ static mut KERNEL_TRAP: TrapFrame = TrapFrame::new();
 // 不同 Hart 实例要有不同的 Scheduler 类型。
 // 以此达成"hart#0 执行用户程序 hart#1 执行实时进程"的目的
 static mut HARTS: Vec<Hart> = Vec::new();
+
+static mut SIZE: usize = 0usize;
+static mut SIZE_LOCK: HartReadWriteLock = HartReadWriteLock::new();
 
 type SchedulerImpl = FlatScheduler<HartTimer>;
 
@@ -87,6 +90,22 @@ impl Hart {
                 self.scheduler.begin();
                 frame.pc += 4;
             }
+            Trap::Exception(Exception::MachineEnvCall) => {
+                let call_id = frame.x[17];
+                if let Some(call) = KernelCall::from_u64(call_id) {
+                    match call {
+                        KernelCall::EnterUserSpace => {
+                            unsafe {
+                                mstatus::set_mpp(MPP::User);
+                            }
+                            self.scheduler.begin();
+                            frame.pc += 4;
+                        }
+                    }
+                } else {
+                    panic!("unsupported kernel call: {}", call_id);
+                }
+            }
             Trap::Exception(Exception::Breakpoint) => {
                 if let Some(current) = self.scheduler.current() {
                     println!(
@@ -114,22 +133,6 @@ impl Hart {
                     }
                 } else {
                     panic!("ran out of memory");
-                }
-            }
-            Trap::Exception(Exception::MachineEnvCall) => {
-                let call_id = frame.x[17];
-                if let Some(call) = KernelCall::from_u64(call_id) {
-                    match call {
-                        KernelCall::EnterUserSpace => {
-                            unsafe {
-                                mstatus::set_mpp(MPP::User);
-                            }
-                            self.scheduler.begin();
-                            frame.pc += 4;
-                        }
-                    }
-                } else {
-                    panic!("unsupported kernel call: {}", call_id);
                 }
             }
             Trap::Exception(Exception::UserEnvCall) => {
@@ -170,7 +173,7 @@ impl Hart {
                                     if let Some(current) = self.scheduler.current() {
                                         if let Ok(mut fork) = current.fork(perm_into) {
                                             fork.move_to_next_instruction();
-                                            fork.trap().x[10] = 0;
+                                            fork.trap.x[10] = 0;
                                             if fork.state == ProcessState::Running {
                                                 fork.state = ProcessState::Ready;
                                             }
@@ -192,6 +195,11 @@ impl Hart {
                         }
                         SystemCall::Yield => {
                             self.scheduler.tick();
+                        }
+                        SystemCall::SignalReturn => {
+                            if let Some(current) = self.scheduler.current() {
+                                current.leave_signal();
+                            }
                         }
                         SystemCall::SignalSet => {
                             if let Some(current) = self.scheduler.current() {
@@ -234,7 +242,7 @@ impl Hart {
             ),
         }
         self.context = if let Some(proc) = self.scheduler.current() {
-            proc.trap() as *mut TrapFrame
+            &mut proc.trap as *mut TrapFrame
         } else {
             unsafe { &mut KERNEL_TRAP as *mut TrapFrame }
         }
