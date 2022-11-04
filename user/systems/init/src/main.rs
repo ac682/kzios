@@ -4,6 +4,5 @@ extern crate rinlib;
 
 fn main() {
     loop {
-        
     }
 }

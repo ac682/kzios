@@ -13,7 +13,7 @@ use crate::{
     proc::Process,
     sync::{
         hart::{HartLock, HartReadWriteLock},
-        DataLock, InteriorLock,
+        DataLock, InteriorLock, InteriorReadWriteLock,
     },
     timer::{self, hart::HartTimer, Timer},
     trap::TrapFrame,
@@ -27,7 +27,6 @@ static mut PROC_TABLE: ProcessTable = ProcessTable::new();
 struct ProcessTable {
     lock: HartReadWriteLock,
     inner: Vec<ProcessCell>,
-    current: usize,
 }
 
 impl ProcessTable {
@@ -35,7 +34,6 @@ impl ProcessTable {
         Self {
             lock: HartReadWriteLock::new(),
             inner: Vec::new(),
-            current: 0,
         }
     }
 
@@ -43,7 +41,11 @@ impl ProcessTable {
         self.lock.lock();
     }
 
-    pub fn unlock(&mut self){
+    pub fn lock_mut(&mut self) {
+        self.lock.lock_mut();
+    }
+
+    pub fn unlock(&mut self) {
         self.lock.unlock();
     }
     pub fn add(&mut self, mut proc: Process) -> Pid {
@@ -57,14 +59,16 @@ impl ProcessTable {
         self.inner.len()
     }
 
-    pub fn next_available(&mut self) -> &mut ProcessCell {
+    pub fn next_available(&mut self, cursor: usize) -> (usize, &mut ProcessCell) {
+        let mut current = cursor;
         loop {
-            let current = self.current;
-            self.current = (self.current + 1) % self.inner.len();
-            if !self.inner[current].is_locked()
-                && self.inner[current].inner.state == ProcessState::Ready
-            {
-                return &mut self.inner[current];
+            current = (current + 1) % self.inner.len();
+            if self.inner[current].lock.try_lock() {
+                if self.inner[current].inner.state == ProcessState::Ready {
+                    return (current, &mut self.inner[current]);
+                } else {
+                    self.inner[current].lock.unlock();
+                }
             }
         }
     }
@@ -89,15 +93,12 @@ impl ProcessCell {
             out_time: 0,
         }
     }
-
-    pub fn is_locked(&self) -> bool {
-        self.lock.is_locked()
-    }
 }
 pub struct FlatScheduler<T: Timer + Sized> {
     hartid: usize,
+    current: usize,
     timer: Rc<RefCell<T>>,
-    owned: Option<&'static mut ProcessCell>,
+    owned: Option<usize>,
 }
 
 impl<T: Timer + Sized> Scheduler for FlatScheduler<T> {
@@ -120,8 +121,12 @@ impl<T: Timer + Sized> Scheduler for FlatScheduler<T> {
         }
     }
     fn current(&mut self) -> Option<&mut Process> {
-        if let Some(guard) = &mut self.owned {
-            Some(&mut guard.inner)
+        if let Some(owned) = self.owned {
+            if owned < unsafe { &PROC_TABLE }.len() {
+                Some(&mut unsafe { &mut PROC_TABLE }.inner[owned].inner)
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -168,29 +173,27 @@ impl<T: Timer + Sized> FlatScheduler<T> {
     pub fn new(hartid: usize, timer: Rc<RefCell<T>>) -> Self {
         FlatScheduler {
             hartid,
+            current: 0,
             timer,
             owned: None,
         }
     }
     fn switch_next(&mut self) -> Pid {
         let time = self.timer.borrow().get_cycles();
-        if let Some(current) = &mut self.owned {
+        if let Some(owned) = self.owned.take() {
+            let current = unsafe { &mut PROC_TABLE.inner[owned] };
             if current.inner.state == ProcessState::Running {
                 current.inner.state = ProcessState::Ready;
-                current.out_time = time;
-                current.lock.unlock();
             }
-            self.owned = None;
+            current.out_time = time;
+            current.lock.unlock();
         }
 
         // 👆 换出之前的
         // 👇 换入新的
 
-        let mut process = unsafe {
-            let process = PROC_TABLE.next_available();
-            process.lock.lock();
-            process
-        };
+        let (current, mut process) = unsafe { PROC_TABLE.next_available(self.current) };
+        self.current = current;
         let next_pid = process.inner.pid;
         process.inner.state = ProcessState::Running;
         process.in_time = time;
@@ -213,7 +216,7 @@ impl<T: Timer + Sized> FlatScheduler<T> {
             process.inner.enter_signal();
         }
         self.timer.borrow_mut().set_timer(cycles);
-        self.owned = Some(process);
+        self.owned = Some(current);
         next_pid
     }
 

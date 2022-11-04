@@ -57,6 +57,9 @@ pub fn kernel_main() {
             aclint.set_msip(i);
         }
     }
+    for _ in 0..50000{
+        
+    }
     krn_enter_user_space();
     loop{
 

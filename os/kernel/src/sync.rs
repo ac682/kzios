@@ -6,11 +6,13 @@ pub mod mutex;
 pub trait InteriorLock {
     fn is_locked(&self) -> bool;
     fn lock(& mut self);
+    fn try_lock(&mut self) -> bool;
     fn unlock(&mut self);
 }
 
 pub trait InteriorReadWriteLock: InteriorLock{
     fn lock_mut(&mut self);
+    fn try_lock_mut(&mut self) -> bool;
 }
 
 pub struct DataLock<Data: Sized, Lock: InteriorLock> {

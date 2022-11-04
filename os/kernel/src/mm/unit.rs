@@ -61,7 +61,7 @@ impl MemoryUnit {
     }
 
     fn cow_free(ppn: PageNumber) {
-        let lock = unsafe { TRACKED_LOCK.lock_mut() };
+        unsafe { TRACKED_LOCK.lock_mut() };
         let mut tracked = unsafe { TRACKED_PAGES.get_mut().unwrap() };
         let count = tracked.get(&ppn).unwrap();
         if count == &1 {
@@ -70,12 +70,14 @@ impl MemoryUnit {
         } else {
             tracked.entry(ppn).and_modify(|e| *e -= 1);
         }
+        unsafe { TRACKED_LOCK.unlock() };
     }
 
     fn cow_usage(ppn: PageNumber) -> usize {
-        let lock = unsafe { TRACKED_LOCK.lock() };
+        unsafe { TRACKED_LOCK.lock() };
         let mut tracked = unsafe { TRACKED_PAGES.get_unchecked() };
         let count = tracked.get(&ppn).unwrap();
+        unsafe { TRACKED_LOCK.unlock() };
         *count
     }
 
@@ -96,9 +98,9 @@ impl MemoryUnit {
                 } else {
                     if let Some(frame) = frame_alloc(1) {
                         unsafe {
-                            let from = (ppn << 12) as *const u64;
-                            let to = (frame << 12) as *mut u64;
-                            for i in 0..(4096/8) {
+                            let from = (ppn << 12) as *const usize;
+                            let to = (frame << 12) as *mut usize;
+                            for i in 0..(4096 / (core::mem::size_of::<usize>())) {
                                 to.add(i).write(from.add(i).read());
                             }
                         }
@@ -125,7 +127,7 @@ impl MemoryUnit {
                     if let Some(new_entry) = new.entry_mut(i) {
                         if old_entry.is_leaf() {
                             let ppn = old_entry.physical_page_number();
-                            let lock = unsafe { TRACKED_LOCK.lock_mut() };
+                            unsafe { TRACKED_LOCK.lock_mut() };
                             let mut tracked = unsafe { TRACKED_PAGES.get_mut().unwrap() };
                             if old_entry.is_cow() {
                                 tracked.entry(ppn).and_modify(|e| *e += 1).or_insert(2);
@@ -133,6 +135,7 @@ impl MemoryUnit {
                                 old_entry.set_cow();
                                 tracked.insert(ppn, 2);
                             }
+                            unsafe { TRACKED_LOCK.unlock() };
                             new_entry.write(old_entry.read());
                         } else {
                             if let Some(frame) = frame_alloc(1) {
