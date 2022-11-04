@@ -96,9 +96,9 @@ impl MemoryUnit {
                 } else {
                     if let Some(frame) = frame_alloc(1) {
                         unsafe {
-                            let from = (ppn << 12) as *const Address;
-                            let to = (frame << 12) as *mut Address;
-                            for i in 0..4096 {
+                            let from = (ppn << 12) as *const u64;
+                            let to = (frame << 12) as *mut u64;
+                            for i in 0..(4096/8) {
                                 to.add(i).write(from.add(i).read());
                             }
                         }

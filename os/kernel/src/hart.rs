@@ -109,7 +109,7 @@ impl Hart {
             Trap::Exception(Exception::Breakpoint) => {
                 if let Some(current) = self.scheduler.current() {
                     println!(
-                        "DBG #{} Pid={} Sym={:#x}",
+                        "\x1b[0;35mDBG #{} Pid={} Sym={:#x}\x1b[0m",
                         self.id, current.pid, frame.x[10]
                     );
                 }

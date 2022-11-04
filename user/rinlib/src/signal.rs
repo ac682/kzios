@@ -1,4 +1,4 @@
-use erhino_shared::proc::{Pid, Signal, SystemSignal};
+use erhino_shared::proc::{Pid, Signal};
 
 use crate::{
     call::{sys_signal_send, sys_signal_set},

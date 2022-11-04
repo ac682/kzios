@@ -3,7 +3,7 @@ use core::arch::asm;
 use erhino_shared::{
     call::SystemCall,
     mem::Address,
-    proc::{ExitCode, Pid, Signal, SystemSignal},
+    proc::{ExitCode, Pid, Signal},
 };
 
 unsafe fn raw_call(id: usize, arg0: usize, arg1: usize, arg2: usize, arg3: usize) -> usize {

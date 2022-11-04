@@ -1,5 +1,5 @@
 use erhino_shared::proc::{Pid, ProcessPermission};
-use flagset::{flags, FlagSet};
+use flagset::FlagSet;
 
 use crate::call::sys_fork;
 

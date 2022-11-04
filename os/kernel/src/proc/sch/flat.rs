@@ -197,18 +197,18 @@ impl<T: Timer + Sized> FlatScheduler<T> {
         let quantum = self.next_quantum(&process);
         process.last_quantum = quantum;
         let cycles = self.timer.borrow().ms_to_cycles(quantum);
-        println!(
-            "#{} -> {} @ {:#x} for slice_{} with {:#x}",
-            self.hartid,
-            next_pid,
-            if process.inner.signal.pending > 0 {
-                process.inner.signal.backup.pc
-            } else {
-                process.inner.trap.pc
-            },
-            quantum,
-            process.inner.signal.pending
-        );
+        // println!(
+        //     "#{} -> {} @ {:#x} for slice_{} with {:#x}",
+        //     self.hartid,
+        //     next_pid,
+        //     if process.inner.signal.pending > 0 {
+        //         process.inner.signal.backup.pc
+        //     } else {
+        //         process.inner.trap.pc
+        //     },
+        //     quantum,
+        //     process.inner.signal.pending
+        // );
         if process.inner.has_signals_pending() {
             process.inner.enter_signal();
         }

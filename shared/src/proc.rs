@@ -1,4 +1,4 @@
-use flagset::{flags, FlagSet};
+use flagset::flags;
 use num_derive::{FromPrimitive, ToPrimitive};
 
 /// ExitCode(i64) type for process
