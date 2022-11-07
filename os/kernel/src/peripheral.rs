@@ -1,4 +1,4 @@
-use crate::{board::BoardInfo, peripheral::aclint::Aclint, sync::InteriorLock};
+use crate::{board::BoardInfo, peripheral::aclint::Aclint};
 
 pub mod aclint;
 pub mod plic;

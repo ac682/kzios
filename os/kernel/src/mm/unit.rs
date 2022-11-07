@@ -1,20 +1,15 @@
-use core::{f32::consts::E, fmt::Display, ops::Add};
+use core::fmt::Display;
 
-use alloc::collections::BTreeMap;
 use erhino_shared::mem::{page::PageLevel, Address, PageNumber};
 use flagset::FlagSet;
 use hashbrown::HashMap;
 use spin::Once;
 
-use crate::{
-    mm::range::PageRange,
-    println,
-    sync::{hart::HartReadWriteLock, DataLock, InteriorLock, InteriorReadWriteLock},
-};
+use crate::sync::{hart::HartReadWriteLock, InteriorLock, InteriorReadWriteLock};
 
 use super::{
     frame::{frame_alloc, frame_dealloc},
-    page::{PageTable, PageTableEntry, PageTableEntryFlag, PageTableError},
+    page::{PageTable, PageTableEntry, PageTableEntryFlag},
 };
 
 static mut TRACKED_PAGES: Once<HashMap<PageNumber, usize>> = Once::new();
@@ -43,7 +38,7 @@ impl MemoryUnit {
     pub fn new() -> Result<Self, MemoryUnitError> {
         if let Some(frame) = frame_alloc(1) {
             Ok(Self {
-                root: PageTable::new(frame_alloc(1).unwrap()),
+                root: PageTable::new(frame),
             })
         } else {
             Err(MemoryUnitError::RanOutOfFrames)
@@ -62,7 +57,7 @@ impl MemoryUnit {
 
     fn cow_free(ppn: PageNumber) {
         unsafe { TRACKED_LOCK.lock_mut() };
-        let mut tracked = unsafe { TRACKED_PAGES.get_mut().unwrap() };
+        let tracked = unsafe { TRACKED_PAGES.get_mut().unwrap() };
         let count = tracked.get(&ppn).unwrap();
         if count == &1 {
             tracked.remove_entry(&ppn);
@@ -75,7 +70,7 @@ impl MemoryUnit {
 
     fn cow_usage(ppn: PageNumber) -> usize {
         unsafe { TRACKED_LOCK.lock() };
-        let mut tracked = unsafe { TRACKED_PAGES.get_unchecked() };
+        let tracked = unsafe { TRACKED_PAGES.get_unchecked() };
         let count = tracked.get(&ppn).unwrap();
         unsafe { TRACKED_LOCK.unlock() };
         *count
@@ -116,7 +111,7 @@ impl MemoryUnit {
                 Ok(false)
             }
         } else {
-            self.fill(vpn, 1, flags);
+            self.fill(vpn, 1, flags)?;
             Ok(true)
         }
     }
@@ -128,7 +123,7 @@ impl MemoryUnit {
                         if old_entry.is_leaf() {
                             let ppn = old_entry.physical_page_number();
                             unsafe { TRACKED_LOCK.lock_mut() };
-                            let mut tracked = unsafe { TRACKED_PAGES.get_mut().unwrap() };
+                            let tracked = unsafe { TRACKED_PAGES.get_mut().unwrap() };
                             if old_entry.is_cow() {
                                 tracked.entry(ppn).and_modify(|e| *e += 1).or_insert(2);
                             } else {
@@ -142,7 +137,7 @@ impl MemoryUnit {
                                 Self::copy_table(
                                     old_entry.as_page_table_mut(),
                                     new_entry.set_as_page_table_mut(frame),
-                                );
+                                )?;
                             } else {
                                 return Err(MemoryUnitError::RanOutOfFrames);
                             }
@@ -293,11 +288,11 @@ impl MemoryUnit {
         }
     }
 
-    pub fn lookup(&self, addr: Address) -> Result<(PageNumber, PageLevel), PageLevel> {
+    pub fn lookup(&self, _addr: Address) -> Result<(PageNumber, PageLevel), PageLevel> {
         todo!()
     }
 
-    pub fn unmap(&mut self, vpn: PageNumber) -> Result<(), MemoryUnitError> {
+    pub fn unmap(&mut self, _vpn: PageNumber) -> Result<(), MemoryUnitError> {
         todo!();
     }
 }

@@ -8,10 +8,12 @@ use num_derive::{ToPrimitive, FromPrimitive};
 #[derive(FromPrimitive, ToPrimitive)]
 pub enum SystemCall {
     // System reserved
+    /// Undefined behavior in release environment
+    Debug = 0x0,
     /// Write to board defined output stream
-    Write = 0x0,
+    Write = 0x1,
     /// Read from board defined input stream
-    Read = 0x1,
+    Read = 0x2,
     // Process control
     /// Finalized process notifies kernel to cleanup
     Exit = 0x10,

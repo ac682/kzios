@@ -2,5 +2,6 @@
 members = [
 	"rinlib",
 	"systems/init",
-	"systems/fs"
+	"systems/fs",
+	"systems/ts"
 ]

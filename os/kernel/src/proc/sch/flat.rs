@@ -1,22 +1,17 @@
-use core::cell::{RefCell, UnsafeCell};
+use core::cell::{RefCell};
 
-use alloc::{boxed::Box, rc::Rc, sync::Arc, vec::Vec};
+use alloc::{ rc::Rc, vec::Vec};
 use erhino_shared::{
-    mem::Address,
-    proc::{Pid, ProcessState, WaitingReason},
+    proc::{Pid, ProcessState},
 };
-use riscv::register::{mhartid, mscratch};
 
 use crate::{
-    hart::{my_hart, Hart},
-    println,
     proc::Process,
     sync::{
         hart::{HartLock, HartReadWriteLock},
-        DataLock, InteriorLock, InteriorReadWriteLock,
+        InteriorLock, InteriorReadWriteLock,
     },
-    timer::{self, hart::HartTimer, Timer},
-    trap::TrapFrame,
+    timer::{Timer},
 };
 
 use super::Scheduler;
@@ -150,11 +145,11 @@ impl<T: Timer + Sized> Scheduler for FlatScheduler<T> {
     }
 
     // 深度优先递归击杀子进程然后击杀自己
-    fn kill(&mut self, pid: Pid) {
+    fn kill(&mut self, _pid: Pid) {
         todo!()
     }
 
-    fn find(&mut self, pid: Pid) -> Option<&Process> {
+    fn find(&mut self, _pid: Pid) -> Option<&Process> {
         todo!()
     }
 
@@ -225,12 +220,12 @@ impl<T: Timer + Sized> FlatScheduler<T> {
         let min = 10;
         let p = proc.last_quantum as i64
             / (if proc.out_time > proc.in_time {
-                (proc.out_time - proc.in_time)
+                proc.out_time - proc.in_time
             } else {
                 1
             }) as i64;
         let i = -2 * p + 162;
-        let n = (i as usize * proc.last_quantum / 100);
+        let n = i as usize * proc.last_quantum / 100;
         if n > max {
             max
         } else if n < min {

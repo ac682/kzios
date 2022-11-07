@@ -1,9 +1,5 @@
 use erhino_shared::proc::Pid;
 
-use crate::timer::Timer;
-
-use self::flat::FlatScheduler;
-
 use super::Process;
 
 pub mod flat;

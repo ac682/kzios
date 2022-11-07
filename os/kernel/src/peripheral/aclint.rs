@@ -35,7 +35,6 @@ impl Aclint {
 
     pub fn set_timer(&self, hartid: usize, cycles: usize) {
         unsafe {
-            let time = self.get_time();
             (self.mtimer_address as *mut u64)
                 .add(hartid)
                 .write_volatile(self.get_time() + cycles as u64);

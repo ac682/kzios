@@ -1,7 +1,5 @@
 use alloc::vec::Vec;
-use erhino_shared::mem::{PageNumber, page::PageLevel};
-
-use crate::{print, println};
+use erhino_shared::mem::{page::PageLevel, PageNumber};
 
 pub struct PageRange {
     start: PageNumber,

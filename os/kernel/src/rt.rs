@@ -1,5 +1,5 @@
 use alloc::{format, string::String};
-use buddy_system_allocator::{Heap, LockedHeap, LockedHeapWithRescue};
+use buddy_system_allocator::{Heap, LockedHeapWithRescue};
 use core::{alloc::Layout, arch::asm, panic::PanicInfo};
 use erhino_shared::proc::Termination;
 use riscv::register::{mhartid, misa};
@@ -9,13 +9,8 @@ use crate::{
         _bss_end, _bss_start, _hart_num, _heap_start, _kernel_end, _memory_end, _memory_start,
         _stack_start,
     },
-    mm::{
-        self,
-        frame::{self, frame_alloc},
-    },
-    peripheral, print, println,
-    proc::sch,
-    timer,
+    mm::frame::frame_alloc,
+    print, println,
 };
 
 const HEAP_ORDER: usize = 64;
@@ -28,7 +23,7 @@ const LOGO: &str = include_str!("../logo.txt");
 
 // only #0 goes here, others called in trap context
 #[lang = "start"]
-fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize) -> isize {
+fn rust_start<T: Termination + 'static>(main: fn() -> T, _hartid: usize) -> isize {
     // boot stage #0: enter rust environment
     // boot stage #1: hart(core & trap context) initialization
     // 👆 both done in _start@assembly.asm
@@ -119,9 +114,10 @@ fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
 
 #[panic_handler]
 fn handle_panic(info: &PanicInfo) -> ! {
-    print!("\x1b[0;31mKernel panicking at #{}: \x1b[0m", unsafe {
+    print!(
+        "\x1b[0;31mKernel panicking at #{}: \x1b[0m",
         mhartid::read()
-    });
+    );
     if let Some(location) = info.location() {
         println!(
             "file {}, {}: {}",

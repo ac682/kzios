@@ -1,13 +1,9 @@
 use core::{
     hint::spin_loop,
-    ops::{Deref, DerefMut},
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use riscv::{asm::nop, register::mhartid};
-use spin::Once;
-
-use crate::println;
+use riscv::{register::mhartid};
 
 use super::{InteriorLock, InteriorReadWriteLock};
 
@@ -53,7 +49,7 @@ impl InteriorLock for HartLock {
             .lock
             .compare_exchange(u64::MAX, hartid, Ordering::Acquire, Ordering::Relaxed)
         {
-            Ok(current) => true,
+            Ok(_) => true,
             Err(current) => current == hartid,
         }
     }
@@ -121,7 +117,7 @@ impl InteriorReadWriteLock for HartReadWriteLock {
             .lock
             .compare_exchange(u64::MAX, hartid, Ordering::Acquire, Ordering::Relaxed)
         {
-            Ok(current) => true,
+            Ok(_) => true,
             Err(current) => current == hartid,
         }
     }

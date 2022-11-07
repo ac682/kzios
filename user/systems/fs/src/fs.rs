@@ -1,5 +1,4 @@
 pub trait FileSystem{
-    //
 }
 
 pub trait Directory{

@@ -1,9 +1,8 @@
 use core::{
-    cell::{Ref, RefCell, UnsafeCell},
-    ptr::null_mut,
+    cell::{RefCell},
 };
 
-use alloc::{boxed::Box, rc::Rc, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, rc::Rc, vec::Vec};
 use erhino_shared::{
     call::{KernelCall, SystemCall},
     mem::{Address, PageNumber},
@@ -15,9 +14,7 @@ use riscv::register::{
     mcause::{Exception, Interrupt, Mcause, Trap},
     mhartid,
     mstatus::{self, MPP},
-    sstatus::FS,
 };
-use spin::Once;
 
 use crate::{
     board::BoardInfo,
@@ -25,10 +22,10 @@ use crate::{
     mm::page::PageTableEntryFlag,
     peripheral, println,
     proc::{
-        sch::{self, flat::FlatScheduler, Scheduler},
+        sch::{flat::FlatScheduler, Scheduler},
         Process,
     },
-    sync::{hart::{HartLock, HartReadWriteLock}, InteriorLock, InteriorReadWriteLock},
+    sync::{hart::{HartReadWriteLock}},
     timer::hart::HartTimer,
     trap::TrapFrame,
 };
@@ -107,13 +104,7 @@ impl Hart {
                 }
             }
             Trap::Exception(Exception::Breakpoint) => {
-                if let Some(current) = self.scheduler.current() {
-                    println!(
-                        "\x1b[0;35mDBG #{} Pid={} Sym={:#x}\x1b[0m",
-                        self.id, current.pid, frame.x[10]
-                    );
-                }
-                frame.pc += 4;
+                panic!("breakpoint: frame={}", frame);
             }
             Trap::Exception(Exception::StoreFault) => {
                 panic!("Store/AMO access fault hart#{}: frame=\n{}", self.id, frame);
@@ -140,6 +131,14 @@ impl Hart {
                 let mut ret = 0i64;
                 if let Some(call) = SystemCall::from_u64(call_id) {
                     match call {
+                        SystemCall::Debug => {
+                            if let Some(current) = self.scheduler.current() {
+                                println!(
+                                    "\x1b[0;35mDBG #{} Pid={} Sym={:#x}\x1b[0m",
+                                    self.id, current.pid, frame.x[10]
+                                );
+                            }
+                        }
                         SystemCall::Extend => {
                             if let Some(process) = self.scheduler.current() {
                                 let start = frame.x[10];
@@ -162,7 +161,7 @@ impl Hart {
                                     (start >> 12) as PageNumber,
                                     ((end - start) >> 12) as PageNumber,
                                     PageTableEntryFlag::Valid | PageTableEntryFlag::User | flags,
-                                );
+                                ).unwrap();
                             }
                         }
                         SystemCall::Fork => {

@@ -4,7 +4,7 @@ use core::arch::asm;
 
 use rinlib::{
     proc::{fork, exit},
-    shared::proc::{ProcessPermission, Signal, SystemSignal},
+    shared::proc::{ProcessPermission, SystemSignal, Signal},
     signal,
 };
 
@@ -31,6 +31,6 @@ fn handle_signal(signal: Signal) {
 
 fn debug(sym: usize) {
     unsafe {
-        asm!("ebreak", in("x10") sym);
+        asm!("ecall", in("x10") sym, in("x17") 0);
     }
 }

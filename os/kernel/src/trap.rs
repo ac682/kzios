@@ -1,22 +1,7 @@
 use core::fmt::Display;
+use riscv::register::mcause::Mcause;
 
-use erhino_shared::{
-    call::{KernelCall, SystemCall},
-    mem::PageNumber,
-};
-use flagset::FlagSet;
-use riscv::register::{
-    mcause::{Exception, Interrupt, Mcause, Trap},
-    mepc, mhartid,
-};
-
-use crate::{
-    mm::page::PageTableEntryFlag,
-    println,
-    proc::sch,
-    sync::{hart::HartLock, InteriorLock},
-    timer, hart::{my_hart, of_hart},
-};
+use crate::hart::of_hart;
 
 #[no_mangle]
 unsafe fn handle_trap(hartid: usize, cause: Mcause, val: usize) -> &'static TrapFrame {
@@ -60,10 +45,6 @@ impl Display for TrapFrame {
         writeln!(f, "a2={:#016x}, a3={:#016x}", self.x[12], self.x[13])?;
         writeln!(f, "a4={:#016x}, a5={:#016x}", self.x[14], self.x[15])?;
         writeln!(f, "a6={:#016x}, a7={:#016x}", self.x[16], self.x[17])?;
-        writeln!(
-            f,
-            "mepc={:#x}, satp={:#x}",
-            self.pc, self.satp
-        )
+        writeln!(f, "mepc={:#x}, satp={:#x}", self.pc, self.satp)
     }
 }

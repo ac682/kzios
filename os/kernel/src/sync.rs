@@ -1,4 +1,4 @@
-use core::{ops::{Deref, DerefMut}, marker::PhantomData};
+use core::{ops::{Deref, DerefMut}};
 
 pub mod hart;
 pub mod mutex;

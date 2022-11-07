@@ -18,13 +18,13 @@
 
 #### boot stage #1: rust_start@rt.rs
 
-初始化内存管理（包括内核自己的 Rust 堆管理）
+初始化内核自己的 Rust 堆管理
 转移控制权到 board crate。
 
 #### boot stage #2: main@board_crate->kernel_init@lib,rs->kernel_main@lib,rs
 
 board crate 准备板子的信息，传递给内核，内核利用这些信息获取硬件控制权。
-设定陷入模式，建立内存保护。此时应用程序执行环境被建立。
+设定陷入模式，建立内存保护，开启内核各种服务。此时应用程序执行环境被建立。
 转移控制权给内核。
 
 #### boot stage #3: in kernel call

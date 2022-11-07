@@ -1,7 +1,5 @@
-use erhino_shared::mem::{page::PageLevel, Address, PageNumber};
+use erhino_shared::mem::PageNumber;
 use flagset::{flags, FlagSet};
-
-use crate::println;
 
 #[derive(Debug)]
 pub struct PageTable {
@@ -21,7 +19,7 @@ pub enum PageTableError {
 
 impl PageTable {
     pub fn new<'a>(root: PageNumber) -> &'a mut Self {
-        let mut res = unsafe { ((root << 12) as *mut PageTable).as_mut().unwrap() };
+        let res = unsafe { ((root << 12) as *mut PageTable).as_mut().unwrap() };
         for i in 0..512usize {
             res.entries[i].write(0);
         }
@@ -99,11 +97,11 @@ impl PageTableEntry {
         self.0 = (self.0 & !0b100) | (cow << 8);
     }
 
-    pub fn is_cow(&self) -> bool{
+    pub fn is_cow(&self) -> bool {
         self.0 & (0b11 << 8) > 0
     }
 
-    pub fn is_cow_and_writeable(&self) -> bool{
+    pub fn is_cow_and_writeable(&self) -> bool {
         self.0 & (0b11 << 8) == 0b11_0000_0000
     }
 

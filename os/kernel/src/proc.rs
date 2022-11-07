@@ -1,16 +1,15 @@
 pub mod sch;
 
-use alloc::{borrow::ToOwned, string::String, vec::Vec};
+use alloc::{borrow::ToOwned, string::String};
 use elf_rs::{Elf, ElfFile, ElfMachine, ElfType, ProgramHeaderFlags, ProgramType};
 use erhino_shared::{
-    mem::{page::PageLevel, Address},
+    mem::{ Address},
     proc::{Pid, ProcessPermission, ProcessState, Signal},
 };
-use flagset::{flags, FlagSet};
+use flagset::{FlagSet};
 
 use crate::{
-    mm::{frame::frame_alloc, page::PageTableEntryFlag, unit::MemoryUnit},
-    println,
+    mm::{page::PageTableEntryFlag, unit::MemoryUnit},
     trap::TrapFrame,
 };
 
@@ -84,7 +83,7 @@ impl Process {
                         ph.content(),
                         ph.memsz() as usize,
                         flags_to_permission(ph.flags()),
-                    );
+                    ).unwrap();
                 }
             }
             Ok(process)
@@ -154,18 +153,17 @@ impl Process {
         self.signal.backup = self.trap.clone();
         let mut signal = 0 as Signal;
             let mut pending = self.signal.pending;
-            let mut position = 0usize;
             for i in 0..64 {
                 if pending & 2 == 1 {
-                    signal = 1 << position;
+                    signal = 1 << i;
                     break;
                 } else {
-                    position += 1;
+                    pending >>= 1;
                 }
             }
 
-            self.signal.pending &= !pending;
-            self.signal.backup.x[10] = pending;
+            self.signal.pending &= !signal;
+            self.signal.backup.x[10] = signal;
             self.signal.backup.pc = self.signal.handler as u64;
 
             (self.trap, self.signal.backup) = (self.signal.backup, self.trap);

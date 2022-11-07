@@ -7,7 +7,7 @@ use core::fmt::{Arguments, Result, Write};
 
 use alloc::borrow::ToOwned;
 use dtb_parser::{prop::PropertyValue, traits::HasNamedProperty};
-use erhino_kernel::{board::BoardInfo, env, kernel_init, kernel_main, proc::{Process}};
+use erhino_kernel::{board::BoardInfo, env, kernel_init, kernel_main, proc::{Process}, println};
 use tar_no_std::TarArchiveRef;
 
 pub use erhino_kernel::prelude::*;
@@ -20,7 +20,7 @@ fn main() {
     // prepare BoardInfo
     let dtb_addr = env::args()[1] as usize;
     let tree = dtb_parser::device_tree::DeviceTree::from_address(dtb_addr).unwrap();
-    // println!("{}", tree);
+    println!("{}", tree);
     let mut clint_base = 0usize;
     let mut timebase_frequency = 0usize;
     for node in tree.into_iter() {
