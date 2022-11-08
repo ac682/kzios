@@ -1,9 +1,12 @@
-use core::{alloc::Layout, panic::PanicInfo, arch::asm};
+use core::{alloc::Layout, arch::asm, panic::PanicInfo};
 
 use buddy_system_allocator::{Heap, LockedHeapWithRescue};
 use erhino_shared::proc::{Signal, Termination};
 
-use crate::call::{sys_exit, sys_extend, sys_signal_return};
+use crate::{
+    call::{sys_exit, sys_extend, sys_signal_return},
+    dbg,
+};
 
 #[allow(unused)]
 const INITIAL_HEAP_SIZE: usize = 1 * 0x1000;
@@ -41,11 +44,19 @@ pub fn signal_handler(signal: Signal) {
 }
 
 #[panic_handler]
-fn handle_panic(_info: &PanicInfo) -> ! {
-    unsafe{
-        asm!("ebreak", in("x10") 0x114514);
+fn handle_panic(info: &PanicInfo) -> ! {
+    dbg!("process panicking: ");
+    if let Some(location) = info.location() {
+        dbg!(
+            "file {}, {}: {}\n",
+            location.file(),
+            location.line(),
+            info.message().unwrap()
+        );
+    } else {
+        dbg!("no information available.\n");
     }
-    loop{}
+    loop {}
 }
 
 fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {

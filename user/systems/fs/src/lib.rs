@@ -4,5 +4,4 @@
 //! File system service library
 //! and calling api (through ipc)
 
-/// File system definition
-pub mod fs;
+extern crate rinlib;

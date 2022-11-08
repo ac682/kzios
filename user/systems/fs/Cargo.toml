@@ -9,3 +9,5 @@ edition = "2021"
 
 [dependencies]
 rinlib = { path = "../../rinlib" }
+flagset = "0.4"
+unix_path = { version = "1.0", default-features = false, features = ["alloc"]}

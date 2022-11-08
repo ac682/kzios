@@ -1,6 +1,4 @@
-use core::{
-    cell::{RefCell},
-};
+use core::cell::RefCell;
 
 use alloc::{boxed::Box, rc::Rc, vec::Vec};
 use erhino_shared::{
@@ -20,12 +18,12 @@ use crate::{
     board::BoardInfo,
     external::_hart_num,
     mm::page::PageTableEntryFlag,
-    peripheral, println,
+    peripheral, print, println,
     proc::{
         sch::{flat::FlatScheduler, Scheduler},
         Process,
     },
-    sync::{hart::{HartReadWriteLock}},
+    sync::hart::HartReadWriteLock,
     timer::hart::HartTimer,
     trap::TrapFrame,
 };
@@ -133,10 +131,18 @@ impl Hart {
                     match call {
                         SystemCall::Debug => {
                             if let Some(current) = self.scheduler.current() {
-                                println!(
-                                    "\x1b[0;35mDBG #{} Pid={} Sym={:#x}\x1b[0m",
-                                    self.id, current.pid, frame.x[10]
-                                );
+                                let str_start = frame.x[10];
+                                let str_len = frame.x[11];
+                                let mut bytes = Vec::<u8>::new();
+                                for _ in 0..str_len {
+                                    bytes.push(0);
+                                }
+                                current
+                                    .memory
+                                    .read(str_start as Address, &mut bytes, str_len as usize)
+                                    .unwrap();
+                                let str = core::str::from_utf8(&bytes).unwrap();
+                                print!("\x1b[0;35m{}\x1b[0;m", str);
                             }
                         }
                         SystemCall::Extend => {
@@ -157,11 +163,16 @@ impl Hart {
                                 } else {
                                     PageTableEntryFlag::Valid
                                 };
-                                process.memory.fill(
-                                    (start >> 12) as PageNumber,
-                                    ((end - start) >> 12) as PageNumber,
-                                    PageTableEntryFlag::Valid | PageTableEntryFlag::User | flags,
-                                ).unwrap();
+                                process
+                                    .memory
+                                    .fill(
+                                        (start >> 12) as PageNumber,
+                                        ((end - start) >> 12) as PageNumber,
+                                        PageTableEntryFlag::Valid
+                                            | PageTableEntryFlag::User
+                                            | flags,
+                                    )
+                                    .unwrap();
                             }
                         }
                         SystemCall::Fork => {

@@ -32,6 +32,7 @@ pub enum MemoryUnitError {
     EntryNotFound,
     RanOutOfFrames,
     EntryOverwrite,
+    BufferOverflow,
 }
 
 impl MemoryUnit {
@@ -196,18 +197,18 @@ impl MemoryUnit {
                 let ppn =
                     self.ensure_created((addr >> 12) + page_count, || frame_alloc(1), flags)?;
                 let start = (ppn << 12) + offset;
-                let end = if (real_length - copied) > (0x1000 - offset as usize) {
+                let end = if (real_length - copied) > (0x1000 - offset) {
                     (ppn + 1) << 12
                 } else {
                     start + real_length - copied
                 };
                 let ptr = start as *mut u8;
                 for i in 0..(end - start) {
-                    ptr.add(i as usize)
-                        .write(if copied + i as usize >= data.len() {
+                    ptr.add(i)
+                        .write(if copied + i >= data.len() {
                             0
                         } else {
-                            data[copied + i as usize]
+                            data[copied + i]
                         });
                 }
                 offset = 0;
@@ -216,6 +217,92 @@ impl MemoryUnit {
             }
         }
         Ok(())
+    }
+
+    pub fn read(
+        &self,
+        addr: Address,
+        buffer: &mut [u8],
+        length: usize,
+    ) -> Result<usize, MemoryUnitError> {
+        if buffer.len() < length {
+            return Err(MemoryUnitError::BufferOverflow);
+        }
+        let mut offset = addr & 0xFFF;
+        let mut copied = 0usize;
+        let mut page_count = 0usize;
+        unsafe {
+            while copied < length {
+                let ppn_result = self.lookup((addr >> 12) + page_count);
+                if let Ok((ppn, _)) = ppn_result {
+                    let start = (ppn << 12) + offset;
+                    let end = if (length - copied) > (0x1000 - offset) {
+                        (ppn + 1) << 12
+                    } else {
+                        start + length - copied
+                    };
+                    let ptr = start as *mut u8;
+                    for i in 0..(end - start) {
+                        buffer[copied + i] = ptr.add(i).read();
+                    }
+                    copied += (end - start);
+                } else {
+                    let count = if (length - copied) > (0x1000 - offset){
+                        0x1000 - offset
+                    }else{
+                        length - copied
+                    };
+                    for i in 0..count{
+                        buffer[copied + i] = 0;
+                    }
+                    copied += count;
+                }
+                offset = 0;
+                page_count += 1;
+            }
+        }
+        Ok(copied)
+    }
+
+    pub fn lookup(&self, vpn: PageNumber) -> Result<(PageNumber, PageLevel), PageLevel> {
+        let vpn2 = PageLevel::Giga.extract(vpn);
+        if let Some(entry2) = self.root.entry(vpn2) {
+            let table1 = if entry2.is_valid() {
+                if !entry2.is_leaf() {
+                    entry2.as_page_table()
+                } else {
+                    return Err(PageLevel::Giga);
+                }
+            } else {
+                return Err(PageLevel::Giga);
+            };
+            let vpn1 = PageLevel::Mega.extract(vpn);
+            if let Some(entry1) = table1.entry(vpn1) {
+                let table0 = if entry1.is_valid() {
+                    if !entry1.is_leaf() {
+                        entry1.as_page_table()
+                    } else {
+                        return Err(PageLevel::Mega);
+                    }
+                } else {
+                    return Err(PageLevel::Mega);
+                };
+                let vpn0 = PageLevel::Kilo.extract(vpn);
+                if let Some(entry0) = table0.entry(vpn0) {
+                    Ok((entry0.physical_page_number(), PageLevel::Kilo))
+                } else {
+                    Err(PageLevel::Kilo)
+                }
+            } else {
+                Err(PageLevel::Mega)
+            }
+        } else {
+            Err(PageLevel::Giga)
+        }
+    }
+
+    pub fn unmap(&mut self, _vpn: PageNumber) -> Result<(), MemoryUnitError> {
+        todo!();
     }
 
     fn locate(&mut self, vpn: PageNumber) -> Result<&mut PageTableEntry, MemoryUnitError> {
@@ -286,14 +373,6 @@ impl MemoryUnit {
         } else {
             Err(MemoryUnitError::RanOutOfFrames)
         }
-    }
-
-    pub fn lookup(&self, _addr: Address) -> Result<(PageNumber, PageLevel), PageLevel> {
-        todo!()
-    }
-
-    pub fn unmap(&mut self, _vpn: PageNumber) -> Result<(), MemoryUnitError> {
-        todo!();
     }
 }
 

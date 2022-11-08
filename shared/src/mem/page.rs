@@ -1,7 +1,7 @@
 use crate::mem::PageNumber;
 
 /// Three page level for memory paging
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PageLevel {
     /// Each page has 4096 bytes
     Kilo,

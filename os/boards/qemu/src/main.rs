@@ -7,7 +7,7 @@ use core::fmt::{Arguments, Result, Write};
 
 use alloc::borrow::ToOwned;
 use dtb_parser::{prop::PropertyValue, traits::HasNamedProperty};
-use erhino_kernel::{board::BoardInfo, env, kernel_init, kernel_main, proc::{Process}, println};
+use erhino_kernel::{board::BoardInfo, env, kernel_init, kernel_main, proc::{Process}};
 use tar_no_std::TarArchiveRef;
 
 pub use erhino_kernel::prelude::*;

@@ -60,6 +60,7 @@
 			"PUTCHAR",
 			"rinlib",
 			"riscv",
+			"Rootfs",
 			"rustflags",
 			"satp",
 			"sbss",

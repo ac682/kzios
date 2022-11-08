@@ -12,6 +12,11 @@ unsafe fn raw_call(id: usize, arg0: usize, arg1: usize, arg2: usize, arg3: usize
     _ret
 }
 
+pub unsafe fn sys_debug(msg: &str){
+    let bytes = msg.as_bytes();
+    raw_call(SystemCall::Debug as usize, bytes.as_ptr() as usize, bytes.len(), 0, 0);
+}
+
 pub unsafe fn sys_exit(code: ExitCode) {
     raw_call(SystemCall::Exit as usize, code as usize, 0, 0, 0);
 }
