@@ -74,7 +74,7 @@ impl Process {
             }
             process
                 .memory
-                .fill(0x03ff_fffe, 1, PageTableEntryFlag::UserReadWrite)
+                .fill(0x3f_ffff_e, 1, PageTableEntryFlag::UserReadWrite)
                 .unwrap();
             for ph in elf.program_header_iter() {
                 if ph.ph_type() == ProgramType::LOAD {

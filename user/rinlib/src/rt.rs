@@ -1,6 +1,6 @@
 use core::{alloc::Layout, arch::asm, panic::PanicInfo};
 
-use buddy_system_allocator::{Heap, LockedHeapWithRescue};
+use buddy_system_allocator::{Heap, LockedHeapWithRescue, LockedHeap};
 use erhino_shared::proc::{Signal, Termination};
 
 use crate::{
@@ -17,13 +17,13 @@ extern "C" {
 }
 
 #[global_allocator]
-static HEAP_ALLOCATOR: LockedHeapWithRescue<HEAP_ORDER> = LockedHeapWithRescue::new(heap_rescue);
+static mut HEAP_ALLOCATOR: LockedHeapWithRescue<HEAP_ORDER> = LockedHeapWithRescue::new(heap_rescue);
 
 #[lang = "start"]
 fn lang_start<T: Termination + 'static>(main: fn() -> T) -> ! {
     unsafe {
-        sys_extend(_segment_break as usize, 4096, 0b011);
-        HEAP_ALLOCATOR.lock().init(_segment_break as usize, 4096);
+        sys_extend(_segment_break as usize, 0x4000, 0b011);
+        HEAP_ALLOCATOR.lock().init(_segment_break as usize, 0x4000);
     }
     let code = main().to_exit_code();
     unsafe {
@@ -45,7 +45,7 @@ pub fn signal_handler(signal: Signal) {
 
 #[panic_handler]
 fn handle_panic(info: &PanicInfo) -> ! {
-    dbg!("process panicking: ");
+    dbg!("Process panicking: ");
     if let Some(location) = info.location() {
         dbg!(
             "file {}, {}: {}\n",
@@ -60,13 +60,15 @@ fn handle_panic(info: &PanicInfo) -> ! {
 }
 
 fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
-    let single = 4096;
+    dbg!("rescue: ");
+    let single = 0x4000;
     let mut size = single;
+    while layout.size() > size {
+        size *= 2;
+    }
+    let last = heap.stats_total_bytes() + _segment_break as usize;
+    dbg!("{:#x}..{:#x}", last, last + size);
     unsafe {
-        while layout.size() > size {
-            size *= 2;
-        }
-        let last = heap.stats_total_bytes() + _segment_break as usize;
         sys_extend(last, size, 0b011);
         heap.add_to_heap(last, last + size);
     }

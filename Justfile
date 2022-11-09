@@ -10,7 +10,6 @@ TARGET_DIR := invocation_directory()/"artifacts"
 OS_ELF := TARGET_DIR/"board_"+BOARD
 OS_BIN := OS_ELF+".bin"
 
-alias all := run
 alias b := build
 alias c := clean
 alias d := debug
@@ -21,6 +20,9 @@ alias r := run
 QEMU_CORES := "2"
 QEMU_MEMORY := "128m"
 QEMU_LAUNCH := "qemu-system-riscv64 -smp cores="+QEMU_CORES+" -M "+QEMU_MEMORY+" -machine virt -nographic -bios none -kernel "+OS_ELF
+
+all:
+    @just --help
 
 artifact_dir:
     #!/usr/bin/env bash

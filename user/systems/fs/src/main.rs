@@ -2,6 +2,7 @@
 
 use core::arch::asm;
 
+use alloc::vec::Vec;
 use rinlib::prelude::*;
 
 use fs::FileSystem;
@@ -16,5 +17,6 @@ extern crate rinlib;
 
 fn main() {
     let mut fs = MemoryFs::new("/");
-    fs.make_directory("hello");
+    fs.make_directory("hello").unwrap();
+    fs.print();
 }

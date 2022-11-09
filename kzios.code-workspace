@@ -87,6 +87,7 @@
 			"vaddr",
 			"xlen"
 		],
+		"cSpell.language": "en,lorem",
 	},"tasks": {
 		"version": "2.0.0",
 		"tasks": [
@@ -127,7 +128,7 @@
 				"request": "launch",
 				"preLaunchTask": "launch_gdb_server",
 				"miDebuggerServerAddress": "localhost:1234",
-				"program": "artifacts/board_qemu",
+				"program": "artifacts/initfs/system_fs",
 				"cwd": "${workspaceFolder}",
 				"launchCompleteCommand": "exec-continue",
 				"environment": [],

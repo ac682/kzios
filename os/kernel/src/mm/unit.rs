@@ -245,7 +245,7 @@ impl MemoryUnit {
                     for i in 0..(end - start) {
                         buffer[copied + i] = ptr.add(i).read();
                     }
-                    copied += (end - start);
+                    copied += end - start;
                 } else {
                     let count = if (length - copied) > (0x1000 - offset){
                         0x1000 - offset

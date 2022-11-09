@@ -3,6 +3,8 @@ use core::usize;
 use alloc::boxed::Box;
 use flagset::{flags, FlagSet};
 
+
+#[derive(Debug)]
 pub enum FileSystemError {
     Unsupported,
     Unreachable,

@@ -102,7 +102,11 @@ impl Hart {
                 }
             }
             Trap::Exception(Exception::Breakpoint) => {
-                panic!("breakpoint: frame={}", frame);
+                if let Some(current) = self.scheduler.current() {
+                    panic!("breakpoint: memory={}\nframe={}", current.memory, frame);
+                } else {
+                    panic!("breakpoint: frame={}", frame);
+                }
             }
             Trap::Exception(Exception::StoreFault) => {
                 panic!("Store/AMO access fault hart#{}: frame=\n{}", self.id, frame);

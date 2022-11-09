@@ -15,7 +15,7 @@
     "panic-strategy": "abort",
     "relocation-model": "static",
     "target-pointer-width": "64",
-    "os":"kzios",
+    "os":"erhino",
     "pre-link-args": {
       "ld.lld": [
         "-T",
