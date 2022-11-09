@@ -17,13 +17,14 @@ extern "C" {
 }
 
 #[global_allocator]
-static mut HEAP_ALLOCATOR: LockedHeapWithRescue<HEAP_ORDER> = LockedHeapWithRescue::new(heap_rescue);
+static mut HEAP_ALLOCATOR: LockedHeap<HEAP_ORDER> = LockedHeap::new();
 
 #[lang = "start"]
 fn lang_start<T: Termination + 'static>(main: fn() -> T) -> ! {
+    let single = 0x1000;
     unsafe {
-        sys_extend(_segment_break as usize, 0x4000, 0b011);
-        HEAP_ALLOCATOR.lock().init(_segment_break as usize, 0x4000);
+        sys_extend(_segment_break as usize, single, 0b011);
+        HEAP_ALLOCATOR.lock().init(_segment_break as usize, single);
     }
     let code = main().to_exit_code();
     unsafe {
@@ -61,7 +62,7 @@ fn handle_panic(info: &PanicInfo) -> ! {
 
 fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
     dbg!("rescue: ");
-    let single = 0x4000;
+    let single = 0x1000;
     let mut size = single;
     while layout.size() > size {
         size *= 2;

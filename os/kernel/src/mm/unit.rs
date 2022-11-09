@@ -1,5 +1,6 @@
 use core::fmt::Display;
 
+use alloc::{string::String, vec::Vec};
 use erhino_shared::mem::{page::PageLevel, Address, PageNumber};
 use flagset::FlagSet;
 use hashbrown::HashMap;
@@ -204,12 +205,11 @@ impl MemoryUnit {
                 };
                 let ptr = start as *mut u8;
                 for i in 0..(end - start) {
-                    ptr.add(i)
-                        .write(if copied + i >= data.len() {
-                            0
-                        } else {
-                            data[copied + i]
-                        });
+                    ptr.add(i).write(if copied + i >= data.len() {
+                        0
+                    } else {
+                        data[copied + i]
+                    });
                 }
                 offset = 0;
                 copied += (end - start) as usize;
@@ -217,6 +217,33 @@ impl MemoryUnit {
             }
         }
         Ok(())
+    }
+
+    pub fn read_cstr(&self, addr: Address) -> Result<String, MemoryUnitError> {
+        let mut container = Vec::<u8>::new();
+        let mut finished = false;
+        let mut offset = addr & 0xFFF;
+        let mut page_count = 0usize;
+        while !finished {
+            if let Ok((ppn, _)) = self.lookup((addr >> 12) + page_count) {
+                let start = (ppn << 12) + offset;
+                let end = (ppn + 1) << 12;
+                for i in 0..(end - start) {
+                    let byte = unsafe { (start as *const u8).add(i).read() };
+                    if byte != 0 {
+                        container.push(byte);
+                    } else {
+                        finished = true;
+                        break;
+                    }
+                }
+                offset = 0;
+                page_count += 1;
+            } else {
+                return Err(MemoryUnitError::EntryNotFound);
+            }
+        }
+        String::from_utf8(container).map_err(|_| MemoryUnitError::BufferOverflow)
     }
 
     pub fn read(
@@ -233,8 +260,7 @@ impl MemoryUnit {
         let mut page_count = 0usize;
         unsafe {
             while copied < length {
-                let ppn_result = self.lookup((addr >> 12) + page_count);
-                if let Ok((ppn, _)) = ppn_result {
+                if let Ok((ppn, _)) = self.lookup((addr >> 12) + page_count) {
                     let start = (ppn << 12) + offset;
                     let end = if (length - copied) > (0x1000 - offset) {
                         (ppn + 1) << 12
@@ -247,12 +273,12 @@ impl MemoryUnit {
                     }
                     copied += end - start;
                 } else {
-                    let count = if (length - copied) > (0x1000 - offset){
+                    let count = if (length - copied) > (0x1000 - offset) {
                         0x1000 - offset
-                    }else{
+                    } else {
                         length - copied
                     };
-                    for i in 0..count{
+                    for i in 0..count {
                         buffer[copied + i] = 0;
                     }
                     copied += count;

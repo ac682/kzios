@@ -1,4 +1,4 @@
-use core::arch::asm;
+use core::{arch::asm, ffi::CStr};
 
 use erhino_shared::{
     call::SystemCall,
@@ -12,9 +12,8 @@ unsafe fn raw_call(id: usize, arg0: usize, arg1: usize, arg2: usize, arg3: usize
     _ret
 }
 
-pub unsafe fn sys_debug(msg: &str){
-    let bytes = msg.as_bytes();
-    raw_call(SystemCall::Debug as usize, bytes.as_ptr() as usize, bytes.len(), 0, 0);
+pub unsafe fn sys_debug(msg: &CStr){
+    raw_call(SystemCall::Debug as usize, msg.as_ptr() as usize, 0, 0, 0);
 }
 
 pub unsafe fn sys_exit(code: ExitCode) {

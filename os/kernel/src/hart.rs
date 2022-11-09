@@ -135,6 +135,13 @@ impl Hart {
                     match call {
                         SystemCall::Debug => {
                             if let Some(current) = self.scheduler.current() {
+                                let start = frame.x[10] as usize;
+                                let str = current.memory.read_cstr(start).unwrap();
+                                print!("\x1b[0;35m{}\x1b[0;m", str);
+                            }
+                        }
+                        SystemCall::Write => {
+                            if let Some(current) = self.scheduler.current() {
                                 let str_start = frame.x[10];
                                 let str_len = frame.x[11];
                                 let mut bytes = Vec::<u8>::new();

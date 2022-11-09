@@ -17,7 +17,7 @@ alias f := fix
 alias r := run
 
 # qemu
-QEMU_CORES := "2"
+QEMU_CORES := "1"
 QEMU_MEMORY := "128m"
 QEMU_LAUNCH := "qemu-system-riscv64 -smp cores="+QEMU_CORES+" -M "+QEMU_MEMORY+" -machine virt -nographic -bios none -kernel "+OS_ELF
 
@@ -36,7 +36,7 @@ artifact_dir:
     fi
 
 build_user: artifact_dir
-    @cd user && RUSTFLAGS="{{RUSTFLAGS_USER}}" cargo build --bins {{RELEASE}} -Z unstable-options --out-dir "{{TARGET_DIR}}/initfs"
+    @cd user && RUSTFLAGS="{{RUSTFLAGS_USER}}" cargo build --bin system_fs {{RELEASE}} -Z unstable-options --out-dir "{{TARGET_DIR}}/initfs"
 
 build_initfs: build_user
     @cd "{{TARGET_DIR}}/initfs" && tar -cf ../initfs.tar *

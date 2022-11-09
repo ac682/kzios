@@ -1,6 +1,11 @@
-use core::fmt::{Arguments, Write};
+use core::{
+    arch::asm,
+    fmt::{Arguments, Write},
+};
 
-use crate::call::sys_debug;
+use alloc::{ffi::CString, fmt::format};
+
+use crate::call::{sys_debug};
 
 #[macro_export]
 macro_rules! dbg
@@ -9,16 +14,8 @@ macro_rules! dbg
 		$crate::io::debug(format_args!($($arg)*));
     }};
 }
-
 pub fn debug(args: Arguments) {
-    KernelDebugOutput.write_fmt(args).unwrap();
-}
-
-pub struct KernelDebugOutput;
-
-impl Write for KernelDebugOutput {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        unsafe { sys_debug(s) };
-        Ok(())
-    }
+    let str = format(args);
+    let cstr = CString::new(str).unwrap();
+    unsafe { sys_debug(&cstr) };
 }

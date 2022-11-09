@@ -48,17 +48,11 @@ fn main() {
     kernel_init(info);
     // add processes to scheduler
     let archive = TarArchiveRef::new(INITFS);
-    let user_init = archive
-        .entries()
-        .find(|f| f.filename().as_str() == "user_init")
-        .unwrap();
-    let systems = archive.entries().filter(|f| f.filename().starts_with("system"));
+    let systems = archive.entries().filter(|f| f.filename().starts_with(""));
     for system in systems{
         let process = Process::from_elf(system.data(), system.filename().as_str()).unwrap();
         add_flat_process(process);
     }
-    let user_init_proc = Process::from_elf(user_init.data(), user_init.filename().as_str()).unwrap();
-    add_flat_process(user_init_proc);
     kernel_main();
 }
 

@@ -4,7 +4,7 @@
     "cpu": "generic-rv64",
     "data-layout": "e-m:e-p:64:64-i64:64-i128:128-n64-S128",
     "eh-frame-header": false,
-    "emit-debug-gdb-scripts": false,
+    "emit-debug-gdb-scripts": true,
     "features": "+m,+a,+f,+d,+c",
     "is-builtin": false,
     "linker": "rust-lld",

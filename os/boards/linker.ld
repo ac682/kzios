@@ -9,39 +9,39 @@ SECTIONS
     PROVIDE(_stack_size = STACK_SIZE);
     PROVIDE(_hart_num = HART_NUM);
 
-    .text : ALIGN(4) {
+    .text : ALIGN(8) {
         *(.text.init)
         *(.text .text.*)
     } > RAM
 
-    .rodata : ALIGN(4) {
+    .rodata : ALIGN(8) {
         *(.rodata)
     } > RAM
 
 
-    .data : ALIGN(4) {
+    .data : ALIGN(8) {
         *(.data)
     } > RAM
 
 
-    .bss (NOLOAD) : ALIGN(4) {
+    .bss (NOLOAD) : ALIGN(8) {
         PROVIDE(_bss_start = .);
         *(.bss)
         PROVIDE(_bss_end = .);
     } > RAM
 
-    .runtime (NOLOAD) : ALIGN(4) {
-        . = ALIGN(16);
+    .runtime (NOLOAD) : ALIGN(16) {
         PROVIDE(_heap_start = .);
         . = . + HEAP_SIZE;
         . = ALIGN(16);
         PROVIDE(_stack_start = .);
-        . = . + STACK_SIZE*HART_NUM;
+        . = . + STACK_SIZE * HART_NUM;    
+        . = ALIGN(4k); # make kernel 4k aligned
+        PROVIDE(_kernel_end = .);
     } > RAM
 
 
-    . = ALIGN(4k); # make kernel 4k aligned
-    PROVIDE(_kernel_end = .);
+
 
 
     PROVIDE(_memory_end = ORIGIN(RAM) + LENGTH(RAM));

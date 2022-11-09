@@ -5,6 +5,8 @@
 
 pub use erhino_shared as shared;
 
+extern crate alloc;
+
 mod call;
 pub mod signal;
 mod rt;

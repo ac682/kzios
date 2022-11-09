@@ -3,19 +3,19 @@ ENTRY(main)
 
 SECTIONS
 {
-  .text : ALIGN(4) {
+  .text : ALIGN(8) {
     *(.text .text.*)
   }
 
-  .rodata : ALIGN(4) {
+  .rodata : ALIGN(8) {
     *(.rodata .rodata.*)
   }
 
-  .data : ALIGN(4) {
+  .data : ALIGN(8) {
     *(.data .data.*)
   }
 
-  .bss (NOLOAD) : ALIGN(4) {
+  .bss (NOLOAD) : ALIGN(8) {
     PROVIDE(_bss_start = .);
     *(.bss .bss.*)
     PROVIDE(_bss_end = .);

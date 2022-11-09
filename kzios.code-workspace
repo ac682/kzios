@@ -15,6 +15,7 @@
 			"builtins",
 			"consts",
 			"cppdbg",
+			"cstring",
 			"dealloc",
 			"Deque",
 			"ebreak",
