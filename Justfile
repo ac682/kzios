@@ -53,6 +53,10 @@ run_qemu EXPOSE="-s -S": build
     @echo -e "\033[0;36mQEMU: Simulating\033[0m"
     @{{QEMU_LAUNCH}} {{EXPOSE}}
 
+run_renode CONSOLE="--console": build
+    @echo -e "\033[0;36mRenode console pops up\033[0m"
+    @renode {{CONSOLE}} "os/boards/{{BOARD}}/{{BOARD}}.resc"
+
 run: (run_qemu "")
 
 debug: build

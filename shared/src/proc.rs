@@ -1,4 +1,5 @@
-use flagset::flags;
+use alloc::string::String;
+use flagset::{flags, FlagSet};
 use num_derive::{FromPrimitive, ToPrimitive};
 
 /// ExitCode(i64) type for process
@@ -79,4 +80,18 @@ impl Termination for () {
     fn to_exit_code(self) -> ExitCode {
         0
     }
+}
+
+/// Process struct for inspect
+pub struct ProcessInfo{
+    /// Name registered or command line
+    pub name: String,
+    /// Pid is pid
+    pub pid: Pid,
+    /// Pid of the parent process of the process
+    pub parent: Pid,
+    /// State of the process
+    pub state: ProcessState,
+    /// Permission of the process
+    pub permissions: FlagSet<ProcessPermission>
 }

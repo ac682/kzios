@@ -3,7 +3,7 @@
 use core::arch::asm;
 
 use alloc::{ffi::CString, vec::Vec};
-use rinlib::prelude::*;
+use rinlib::{prelude::*, proc::inspect_myself};
 
 use fs::FileSystem;
 
@@ -15,5 +15,6 @@ extern crate alloc;
 extern crate rinlib;
 
 fn main() {
-    dbg!("aaa");
+    let process = inspect_myself().unwrap();
+    dbg!("{}({}) is me", process.name, process.pid);
 }

@@ -42,8 +42,7 @@ fn main() {
         name: "qemu".to_owned(),
         base_frequency: timebase_frequency,
         mswi_address: clint_base,
-        mtimer_address: clint_base + 0x4000,
-        mtime_address: clint_base + 0xbff8,
+        mtimer_address: clint_base + 0x4000
     };
     kernel_init(info);
     // add processes to scheduler

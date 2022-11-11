@@ -3,7 +3,7 @@ use core::{arch::asm, ffi::CStr};
 use erhino_shared::{
     call::SystemCall,
     mem::Address,
-    proc::{ExitCode, Pid, Signal},
+    proc::{ExitCode, Pid, ProcessInfo, Signal},
 };
 
 unsafe fn raw_call(id: usize, arg0: usize, arg1: usize, arg2: usize, arg3: usize) -> usize {
@@ -12,7 +12,7 @@ unsafe fn raw_call(id: usize, arg0: usize, arg1: usize, arg2: usize, arg3: usize
     _ret
 }
 
-pub unsafe fn sys_debug(msg: &CStr){
+pub unsafe fn sys_debug(msg: &CStr) {
     raw_call(SystemCall::Debug as usize, msg.as_ptr() as usize, 0, 0, 0);
 }
 
@@ -27,6 +27,26 @@ pub unsafe fn sys_yield() {
 // perm: 0b0000_N.M.P.V.
 pub unsafe fn sys_fork(perm: u8) -> i64 {
     raw_call(SystemCall::Fork as usize, perm as usize, 0, 0, 0) as i64
+}
+
+pub unsafe fn sys_inspect(pid: Pid, info: &mut ProcessInfo, name_buffer: &mut [u8; 256]) -> bool {
+    raw_call(
+        SystemCall::Inspect as usize,
+        info as *mut ProcessInfo as Address,
+        pid as usize,
+        name_buffer.as_ptr() as usize,
+        0,
+    ) == 0
+}
+
+pub unsafe fn sys_inspect_myself(info: &mut ProcessInfo, name_buffer: &mut [u8; 256]) -> bool {
+    raw_call(
+        SystemCall::InspectMyself as usize,
+        info as *mut ProcessInfo as Address,
+        0,
+        name_buffer.as_ptr() as usize,
+        0,
+    ) == 0
 }
 
 pub unsafe fn sys_signal_return() {

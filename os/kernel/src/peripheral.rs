@@ -9,8 +9,7 @@ pub fn init(info: &BoardInfo) {
     unsafe {
         ACLINT = Some(Aclint::new(
             info.mswi_address,
-            info.mtimer_address,
-            info.mtime_address,
+            info.mtimer_address
         ))
     }
 }

@@ -25,6 +25,10 @@ pub enum SystemCall {
     Wait = 0x13,
     /// Wait for a certain process to exit
     WaitFor = 0x14,
+    /// Fetch a process's information and fill in the [super::proc::ProcessInfo] struct
+    Inspect = 0x15,
+    /// Fetch the current process's information and fill in the [super::proc::ProcessInfo] struct
+    InspectMyself = 0x16,
     /// Replace the process's execution image with the new one from the bytes
     ExecuteBytes = 0x1A,
     /// Replace the process's execution image with the new one from the file

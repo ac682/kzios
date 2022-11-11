@@ -1,10 +1,10 @@
-use core::cell::RefCell;
+use core::{cell::RefCell, mem::size_of, slice::from_raw_parts};
 
-use alloc::{boxed::Box, rc::Rc, vec::Vec};
+use alloc::{boxed::Box, rc::Rc, string::String, vec::Vec};
 use erhino_shared::{
     call::{KernelCall, SystemCall},
     mem::{Address, PageNumber},
-    proc::{Pid, ProcessPermission, ProcessState, Signal},
+    proc::{Pid, ProcessInfo, ProcessPermission, ProcessState, Signal},
 };
 use flagset::FlagSet;
 use num_traits::FromPrimitive;
@@ -103,7 +103,9 @@ impl Hart {
             }
             Trap::Exception(Exception::Breakpoint) => {
                 if let Some(current) = self.scheduler.current() {
-                    panic!("breakpoint: memory={}\nframe={}", current.memory, frame);
+                    // panic!("breakpoint: memory={}\nframe={}", current.memory, frame);
+                    println!("#{} Pid={} requested a breakpoint", self.id, current.pid);
+                    frame.pc += 4;
                 } else {
                     panic!("breakpoint: frame={}", frame);
                 }
@@ -137,7 +139,10 @@ impl Hart {
                             if let Some(current) = self.scheduler.current() {
                                 let start = frame.x[10] as usize;
                                 let str = current.memory.read_cstr(start).unwrap();
-                                print!("\x1b[0;35m{}\x1b[0;m", str);
+                                print!(
+                                    "\x1b[0;35m#{} Pid={}: {}\x1b[0;m",
+                                    self.id, current.pid, str
+                                );
                             }
                         }
                         SystemCall::Write => {
@@ -216,6 +221,117 @@ impl Hart {
                         }
                         SystemCall::Yield => {
                             self.scheduler.tick();
+                        }
+                        SystemCall::Inspect => {
+                            let address = frame.x[10] as Address;
+                            let pid = frame.x[11] as Pid;
+                            let name_address = frame.x[12] as Address;
+                            let mut info: Option<ProcessInfo> = None;
+                            if let Some(process) = self.scheduler.find(pid) {
+                                info = Some(ProcessInfo {
+                                    name: process.name.clone(),
+                                    pid: process.pid,
+                                    parent: process.parent,
+                                    state: process.state.clone(),
+                                    permissions: process.permissions.clone(),
+                                });
+                            } else {
+                                ret = -1;
+                            }
+                            if ret != -1 {
+                                if let Some(current) = self.scheduler.current() {
+                                    let info = info.unwrap();
+                                    let mut name_buffer = info.name.as_bytes();
+                                    let mut name_len = name_buffer.len();
+                                    if name_len > 255 {
+                                        name_buffer = &name_buffer[..255];
+                                        name_len = 255;
+                                    }
+                                    let data = unsafe {
+                                        from_raw_parts(
+                                            &info as *const ProcessInfo as *const u8,
+                                            size_of::<ProcessInfo>(),
+                                        )
+                                    };
+                                    if current
+                                        .memory
+                                        .write(
+                                            name_address,
+                                            name_buffer,
+                                            name_len + 1,
+                                            PageTableEntryFlag::UserReadWrite
+                                                | PageTableEntryFlag::Valid,
+                                        )
+                                        .is_err()
+                                    {
+                                        ret = -2;
+                                    };
+                                    if current
+                                        .memory
+                                        .write(
+                                            address,
+                                            data,
+                                            data.len(),
+                                            PageTableEntryFlag::UserReadWrite
+                                                | PageTableEntryFlag::Valid,
+                                        )
+                                        .is_err()
+                                    {
+                                        ret = -2;
+                                    };
+                                }
+                            }
+                        }
+                        SystemCall::InspectMyself => {
+                            let address = frame.x[10] as Address;
+                            let name_address = frame.x[12] as Address;
+                            if let Some(current) = self.scheduler.current() {
+                                let info = ProcessInfo {
+                                    name: current.name.clone(),
+                                    pid: current.pid,
+                                    parent: current.parent,
+                                    state: current.state.clone(),
+                                    permissions: current.permissions.clone(),
+                                };
+                                let mut name_buffer = info.name.as_bytes();
+                                let mut name_len = name_buffer.len();
+                                if name_len > 255 {
+                                    name_buffer = &name_buffer[..255];
+                                    name_len = 255;
+                                }
+                                let data = unsafe {
+                                    from_raw_parts(
+                                        &info as *const ProcessInfo as *const u8,
+                                        size_of::<ProcessInfo>(),
+                                    )
+                                };
+                                if current
+                                    .memory
+                                    .write(
+                                        name_address,
+                                        name_buffer,
+                                        name_len + 1,
+                                        PageTableEntryFlag::UserReadWrite
+                                            | PageTableEntryFlag::Valid,
+                                    )
+                                    .is_err()
+                                {
+                                    ret = -2;
+                                };
+                                if current
+                                    .memory
+                                    .write(
+                                        address,
+                                        data,
+                                        data.len(),
+                                        PageTableEntryFlag::UserReadWrite
+                                            | PageTableEntryFlag::Valid,
+                                    )
+                                    .is_err()
+                                {
+                                    ret = -2;
+                                }
+                            }
                         }
                         SystemCall::SignalReturn => {
                             if let Some(current) = self.scheduler.current() {

@@ -1,0 +1,25 @@
+rom: Memory.MappedMemory @ {
+        sysbus 0x80000000;
+        sysbus 0x0
+    }
+    size: 0x2000000
+
+cpu1: CPU.RiscV64 @ sysbus
+    cpuType: "rv64imacfdv"
+    privilegeArchitecture: PrivilegeArchitecture.Priv1_10
+    timeProvider: clint
+    hartId: 0
+
+uart0: UART.NS16550 @ sysbus 0x10000000
+    IRQ -> plic@3
+
+clint: IRQControllers.CoreLevelInterruptor  @ sysbus 0x4000000
+    [0,1] -> cpu1@[3,7]
+    frequency: 1000000000
+    numberOfTargets: 1
+
+plic: IRQControllers.PlatformLevelInterruptController @ sysbus 0x0C000000
+    [0,1] -> cpu1@[11,9]
+    [2,3] -> cpu2@[11,9]
+    numberOfSources: 65
+    numberOfContexts: 4

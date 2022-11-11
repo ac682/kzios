@@ -1,6 +1,6 @@
 use core::{alloc::Layout, arch::asm, panic::PanicInfo};
 
-use buddy_system_allocator::{Heap, LockedHeapWithRescue, LockedHeap};
+use buddy_system_allocator::{Heap, LockedHeap, LockedHeapWithRescue};
 use erhino_shared::proc::{Signal, Termination};
 
 use crate::{
@@ -46,7 +46,7 @@ pub fn signal_handler(signal: Signal) {
 
 #[panic_handler]
 fn handle_panic(info: &PanicInfo) -> ! {
-    dbg!("Process panicking: ");
+    dbg!("Process panicking...\n");
     if let Some(location) = info.location() {
         dbg!(
             "file {}, {}: {}\n",
