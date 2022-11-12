@@ -3,7 +3,7 @@ use core::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use riscv::{register::mhartid};
+use riscv::register::mhartid;
 
 use super::{InteriorLock, InteriorReadWriteLock};
 

@@ -83,7 +83,7 @@ impl Termination for () {
 }
 
 /// Process struct for inspect
-pub struct ProcessInfo{
+pub struct ProcessInfo {
     /// Name registered or command line
     pub name: String,
     /// Pid is pid
@@ -93,5 +93,5 @@ pub struct ProcessInfo{
     /// State of the process
     pub state: ProcessState,
     /// Permission of the process
-    pub permissions: FlagSet<ProcessPermission>
+    pub permissions: FlagSet<ProcessPermission>,
 }

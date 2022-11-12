@@ -7,7 +7,7 @@ use core::fmt::{Arguments, Result, Write};
 
 use alloc::borrow::ToOwned;
 use dtb_parser::{prop::PropertyValue, traits::HasNamedProperty};
-use erhino_kernel::{board::BoardInfo, env, kernel_init, kernel_main, proc::{Process}};
+use erhino_kernel::{board::BoardInfo, env, kernel_init, kernel_main, proc::Process};
 use tar_no_std::TarArchiveRef;
 
 pub use erhino_kernel::prelude::*;
@@ -30,9 +30,9 @@ fn main() {
                     clint_base = *address as usize;
                 }
             }
-        }else if node.name() == "cpus"{
-            if let Some(prop) = node.find_prop("timebase-frequency"){
-                if let PropertyValue::Integer(frequency) = prop.value(){
+        } else if node.name() == "cpus" {
+            if let Some(prop) = node.find_prop("timebase-frequency") {
+                if let PropertyValue::Integer(frequency) = prop.value() {
                     timebase_frequency = *frequency as usize;
                 }
             }
@@ -42,13 +42,13 @@ fn main() {
         name: "qemu".to_owned(),
         base_frequency: timebase_frequency,
         mswi_address: clint_base,
-        mtimer_address: clint_base + 0x4000
+        mtimer_address: clint_base + 0x4000,
     };
     kernel_init(info);
     // add processes to scheduler
     let archive = TarArchiveRef::new(INITFS);
     let systems = archive.entries().filter(|f| f.filename().starts_with(""));
-    for system in systems{
+    for system in systems {
         let process = Process::from_elf(system.data(), system.filename().as_str()).unwrap();
         add_flat_process(process);
     }

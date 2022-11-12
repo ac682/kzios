@@ -3,10 +3,10 @@ pub mod sch;
 use alloc::{borrow::ToOwned, string::String};
 use elf_rs::{Elf, ElfFile, ElfMachine, ElfType, ProgramHeaderFlags, ProgramType};
 use erhino_shared::{
-    mem::{ Address},
+    mem::Address,
     proc::{Pid, ProcessPermission, ProcessState, Signal},
 };
-use flagset::{FlagSet};
+use flagset::FlagSet;
 
 use crate::{
     mm::{page::PageTableEntryFlag, unit::MemoryUnit},
@@ -78,12 +78,15 @@ impl Process {
                 .unwrap();
             for ph in elf.program_header_iter() {
                 if ph.ph_type() == ProgramType::LOAD {
-                    process.memory.write(
-                        ph.vaddr() as Address,
-                        ph.content(),
-                        ph.memsz() as usize,
-                        flags_to_permission(ph.flags()),
-                    ).unwrap();
+                    process
+                        .memory
+                        .write(
+                            ph.vaddr() as Address,
+                            ph.content(),
+                            ph.memsz() as usize,
+                            flags_to_permission(ph.flags()),
+                        )
+                        .unwrap();
                 }
             }
             Ok(process)
@@ -143,33 +146,33 @@ impl Process {
     pub fn queue_signal(&mut self, signal: Signal) {
         self.signal.pending |= signal as Signal;
     }
-    
+
     pub fn set_signal_handler(&mut self, handler: Address, mask: Signal) {
         self.signal.mask = mask;
         self.signal.handler = handler;
     }
 
-    pub fn enter_signal(&mut self){
+    pub fn enter_signal(&mut self) {
         self.signal.backup = self.trap.clone();
         let mut signal = 0 as Signal;
-            let mut pending = self.signal.pending;
-            for i in 0..64 {
-                if pending & 2 == 1 {
-                    signal = 1 << i;
-                    break;
-                } else {
-                    pending >>= 1;
-                }
+        let mut pending = self.signal.pending;
+        for i in 0..64 {
+            if pending & 2 == 1 {
+                signal = 1 << i;
+                break;
+            } else {
+                pending >>= 1;
             }
+        }
 
-            self.signal.pending &= !signal;
-            self.signal.backup.x[10] = signal;
-            self.signal.backup.pc = self.signal.handler as u64;
+        self.signal.pending &= !signal;
+        self.signal.backup.x[10] = signal;
+        self.signal.backup.pc = self.signal.handler as u64;
 
-            (self.trap, self.signal.backup) = (self.signal.backup, self.trap);
+        (self.trap, self.signal.backup) = (self.signal.backup, self.trap);
     }
 
-    pub fn leave_signal(&mut self){
+    pub fn leave_signal(&mut self) {
         (self.trap, self.signal.backup) = (self.signal.backup, self.trap);
     }
 }

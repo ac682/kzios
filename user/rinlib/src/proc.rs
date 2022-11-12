@@ -34,17 +34,13 @@ pub fn inspect(pid: Pid) -> Result<ProcessInfo, ()> {
     let mut name_buffer = [0u8; 256];
     let ret = unsafe { sys_inspect(pid, &mut info, &mut name_buffer) };
     if ret {
-        let mut len = 0usize;
-        for i in 0..256 {
-            if name_buffer[i] == 0 {
-                len = i;
-                break;
+        if let Some(len) = name_buffer.iter().position(|f| f == &b'\0') {
+            if let Ok(name) = String::from_utf8(name_buffer[..len].to_vec()) {
+                info.name = name;
+                Ok(info)
+            } else {
+                Err(())
             }
-        }
-        if len > 0 {
-            let name = String::from_utf8(name_buffer[..len].to_vec());
-            info.name = name.unwrap();
-            Ok(info)
         } else {
             Err(())
         }
@@ -64,17 +60,13 @@ pub fn inspect_myself() -> Result<ProcessInfo, ()> {
     let mut name_buffer = [0u8; 256];
     let ret = unsafe { sys_inspect_myself(&mut info, &mut name_buffer) };
     if ret {
-        let mut len = 0usize;
-        for i in 0..256 {
-            if name_buffer[i] == 0 {
-                len = i;
-                break;
+        if let Some(len) = name_buffer.iter().position(|f| f == &b'\0') {
+            if let Ok(name) = String::from_utf8(name_buffer[..len].to_vec()) {
+                info.name = name;
+                Ok(info)
+            } else {
+                Err(())
             }
-        }
-        if len > 0 {
-            let name = String::from_utf8(name_buffer[..len].to_vec());
-            info.name = name.unwrap();
-            Ok(info)
         } else {
             Err(())
         }

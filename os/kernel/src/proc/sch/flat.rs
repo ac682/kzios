@@ -1,9 +1,7 @@
-use core::cell::{RefCell};
+use core::cell::RefCell;
 
-use alloc::{ rc::Rc, vec::Vec};
-use erhino_shared::{
-    proc::{Pid, ProcessState},
-};
+use alloc::{rc::Rc, vec::Vec};
+use erhino_shared::proc::{Pid, ProcessState};
 
 use crate::{
     proc::Process,
@@ -11,7 +9,7 @@ use crate::{
         hart::{HartLock, HartReadWriteLock},
         InteriorLock, InteriorReadWriteLock,
     },
-    timer::{Timer},
+    timer::Timer,
 };
 
 use super::Scheduler;
@@ -149,8 +147,14 @@ impl<T: Timer + Sized> Scheduler for FlatScheduler<T> {
         todo!()
     }
 
-    fn find(&mut self, _pid: Pid) -> Option<&Process> {
-        todo!()
+    fn find(&mut self, pid: Pid) -> Option<&Process> {
+        unsafe {
+            if (pid as usize) < PROC_TABLE.inner.len() {
+                Some(&PROC_TABLE.inner[pid as usize].inner)
+            } else {
+                None
+            }
+        }
     }
 
     fn find_mut(&mut self, pid: Pid) -> Option<&mut Process> {

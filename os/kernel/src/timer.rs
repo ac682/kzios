@@ -1,6 +1,6 @@
 pub mod hart;
 
-pub trait Timer{
+pub trait Timer {
     fn get_uptime(&self) -> usize;
     fn get_cycles(&self) -> usize;
     fn set_timer(&mut self, cycles: usize);

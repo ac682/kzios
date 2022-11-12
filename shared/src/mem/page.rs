@@ -12,7 +12,6 @@ pub enum PageLevel {
 }
 
 impl PageLevel {
-
     /// The numerical level of page
     pub fn value(&self) -> u8 {
         match self {
@@ -71,8 +70,7 @@ impl PageLevel {
     }
 }
 
-
-impl PartialOrd for PageLevel{
+impl PartialOrd for PageLevel {
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         self.value().partial_cmp(&other.value())
     }

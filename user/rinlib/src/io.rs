@@ -5,7 +5,7 @@ use core::{
 
 use alloc::{ffi::CString, fmt::format};
 
-use crate::call::{sys_debug};
+use crate::call::sys_debug;
 
 #[macro_export]
 macro_rules! dbg

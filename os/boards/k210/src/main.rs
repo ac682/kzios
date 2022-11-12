@@ -1,12 +1,9 @@
 #![no_std]
 
-use core::fmt::{Arguments, Write, Result};
+use core::fmt::{Arguments, Result, Write};
 
 use alloc::string::ToString;
-use erhino_kernel::{
-    prelude::*,
-    proc::Process,
-};
+use erhino_kernel::{prelude::*, proc::Process};
 
 extern crate alloc;
 
@@ -14,11 +11,11 @@ const FIRST: &[u8] = include_bytes!("../../../../artifacts/initfs/user_init");
 
 fn main() {
     let clint_base = 0x02000000;
-    let info = BoardInfo{
+    let info = BoardInfo {
         name: "kendryte k210".to_string(),
         base_frequency: 400_000_000,
         mswi_address: clint_base,
-        mtimer_address: clint_base + 0x4000
+        mtimer_address: clint_base + 0x4000,
     };
     kernel_init(info);
 

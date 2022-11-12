@@ -6,7 +6,7 @@ pub struct BoardInfo {
     pub name: String,
     pub base_frequency: usize,
     pub mswi_address: usize,
-    pub mtimer_address: usize
+    pub mtimer_address: usize,
 }
 
 impl Display for BoardInfo {

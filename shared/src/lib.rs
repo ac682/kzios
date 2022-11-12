@@ -9,9 +9,9 @@ extern crate alloc;
 
 /// System calls
 pub mod call;
-/// Process types
-pub mod proc;
 /// Memory related
 pub mod mem;
+/// Process types
+pub mod proc;
 /// Service
 pub mod service;

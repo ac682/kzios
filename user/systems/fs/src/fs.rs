@@ -3,7 +3,6 @@ use core::usize;
 use alloc::boxed::Box;
 use flagset::{flags, FlagSet};
 
-
 #[derive(Debug)]
 pub enum FileSystemError {
     Unsupported,
@@ -16,12 +15,12 @@ pub enum FileSystemError {
     DirectoryNotFound,
     FileAlreadyExist,
     DirectoryAlreadyExist,
-    DeviceUnavailable
+    DeviceUnavailable,
 }
 
-pub enum FileType{
+pub enum FileType {
     Block,
-    Character
+    Character,
 }
 
 flags! {
@@ -45,7 +44,7 @@ pub trait Directory {
     fn mount(&mut self, fs: Box<dyn FileSystem>) -> Result<(), FileSystemError>;
 }
 
-pub trait File{
+pub trait File {
     fn open(&self) -> Result<Box<dyn Stream>, FileSystemError>;
 }
 
