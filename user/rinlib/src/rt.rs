@@ -1,6 +1,6 @@
-use core::{alloc::Layout, arch::asm, panic::PanicInfo};
+use core::{alloc::Layout, panic::PanicInfo};
 
-use buddy_system_allocator::{Heap, LockedHeap, LockedHeapWithRescue};
+use buddy_system_allocator::{Heap, LockedHeap};
 use erhino_shared::proc::{Signal, Termination};
 
 use crate::{

@@ -5,7 +5,7 @@ machine LoadPlatformDescription @os/boards/k210/k210.repl
 
 $ex=`machine SetSerialExecution True`
 
-showAnalyzer uart0
+showAnalyzer uarths
 
 sysbus Tag <0x50440000 0x10000> "SYSCTL"
 sysbus Tag <0x50440018 0x4> "pll_lock" 0xFFFFFFFF
@@ -16,10 +16,12 @@ sysbus Tag <0x50440028 0x4> "clk_en_cent"
 sysbus Tag <0x5044002c 0x4> "clk_en_peri"
 
 # enable uart tx
-# uart0 WriteDoubleWord 0x8 0x1
-# original uart is replaced from
-# uart: UART.SiFive_UART @ sysbus 0x38000000
+# uarths WriteDoubleWord 0x8 0x1
+# uart types
+# uarths: UART.SiFive_UART @ sysbus 0x38000000
 #     -> plic@33
+# uart0: UART.NS16550 @ sysbus 0x10000000
+#     IRQ -> plic@3
 
 macro reset
 """

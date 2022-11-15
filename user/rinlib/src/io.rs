@@ -1,7 +1,4 @@
-use core::{
-    arch::asm,
-    fmt::{Arguments, Write},
-};
+use core::fmt::Arguments;
 
 use alloc::{ffi::CString, fmt::format};
 

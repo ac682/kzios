@@ -1,6 +1,6 @@
 use core::{cell::RefCell, mem::size_of, slice::from_raw_parts};
 
-use alloc::{boxed::Box, rc::Rc, string::String, vec::Vec};
+use alloc::{boxed::Box, rc::Rc, vec::Vec};
 use erhino_shared::{
     call::{KernelCall, SystemCall},
     mem::{Address, PageNumber},

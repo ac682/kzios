@@ -1,13 +1,13 @@
 #![no_std]
 
-use core::fmt::{Arguments, Result, Write};
+use core::fmt::{Arguments, Write, Result};
 
 use alloc::string::ToString;
 use erhino_kernel::{prelude::*, proc::Process};
 
 extern crate alloc;
 
-const FIRST: &[u8] = include_bytes!("../../../../artifacts/initfs/system_fs");
+const FIRST: &[u8] = include_bytes!("../../../../artifacts/initfs/driver_sifive_uart");
 
 fn main() {
     let clint_base = 0x02000000;
@@ -20,7 +20,7 @@ fn main() {
     kernel_init(info);
 
     println!("K210 with 6MB ram only supports loading one elf(with debug symbols).");
-    if let Ok(process) = Process::from_elf(FIRST, "test") {
+    if let Ok(process) = Process::from_elf(FIRST, "adam") {
         add_flat_process(process);
     } else {
         panic!("process from artifacts has wrong format");
@@ -32,35 +32,32 @@ fn main() {
 
 #[export_name = "board_write"]
 pub fn uart_write(args: Arguments) {
-    NS16550a.write_fmt(args).unwrap();
+    UartHs.write_fmt(args).unwrap();
 }
 
 #[export_name = "board_init"]
 pub fn board_init() {
-    ns16550a_init();
-}
-
-pub struct NS16550a;
-
-impl Write for NS16550a {
-    fn write_str(&mut self, s: &str) -> Result {
-        unsafe {
-            for i in s.chars() {
-                NS16550A.add(0).write_volatile(i as u8);
-            }
-            Ok(())
-        }
+    unsafe{
+        // 1 stop bits and enable transmit
+        SIFIVE_UARTHS.add(2).write(0b11);
+        // ie auto reset to zero
+        SIFIVE_UARTHS.add(4).write(0);
+        // div = CLOCK / BAUD_RATE - 1, 3472 for 115200
+        SIFIVE_UARTHS.add(6).write(3472);
     }
 }
 
-const NS16550A: *mut u8 = 0x1000_0000usize as *mut u8;
-fn ns16550a_init() {
-    unsafe {
-        // 8 bit
-        NS16550A.add(3).write_volatile(0b11);
-        // FIFO
-        NS16550A.add(2).write_volatile(0b1);
-        // 关闭中断
-        NS16550A.add(1).write_volatile(0b0);
+const SIFIVE_UARTHS: *mut u32 = 0x38000000 as *mut u32;
+
+struct UartHs;
+
+impl Write for UartHs{
+    fn write_str(&mut self, s: &str) -> Result {
+        unsafe{
+            for i in s.chars() {
+                SIFIVE_UARTHS.add(0).write_volatile(i as u32);
+            }
+            Ok(())
+        }
     }
 }

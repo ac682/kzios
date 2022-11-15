@@ -61,7 +61,7 @@ impl PageLevel {
 
     /// The certain segment of page number according to its level
     pub fn extract(&self, page_number: PageNumber) -> usize {
-        ((page_number >> (9 * self.value())) & 0x1ff) as usize
+        (page_number >> (9 * self.value())) & 0x1ff
     }
 
     /// Make size of pages to page number of its level

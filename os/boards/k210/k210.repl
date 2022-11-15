@@ -16,10 +16,8 @@ cpu2: CPU.RiscV64 @ sysbus
     timeProvider: clint
     hartId: 1
 
-
-
-uart0: UART.NS16550 @ sysbus 0x10000000
-    IRQ -> plic@3
+uarths: UART.SiFive_UART @ sysbus 0x38000000
+    -> plic@33
 
 clint: IRQControllers.CoreLevelInterruptor  @ sysbus 0x02000000
     [0,1] -> cpu1@[3,7]

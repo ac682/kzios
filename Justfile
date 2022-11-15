@@ -67,9 +67,8 @@ debug: build
     @tmux new-session -d "{{QEMU_LAUNCH}} -s -S" && tmux split-window -h "riscv64-elf-gdb -ex 'file {{OS_ELF}}' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'" && tmux -2 attach-session -d
 
 fix:
-    @cd shared && cargo clippy --fix
-    @cd os && RUSTFLAGS="{{RUSTFLAGS_OS}}" cargo clippy --fix --bin board_{{BOARD}} {{RELEASE}} -Z unstable-options
-    @cd user && RUSTFLAGS="{{RUSTFLAGS_USER}}" cargo clippy --fix --bins {{RELEASE}} -Z unstable-options
+    @cd os && RUSTFLAGS="{{RUSTFLAGS_OS}}" cargo clippy --fix --allow-dirty --bins {{RELEASE}} -Z unstable-options
+    @cd user && RUSTFLAGS="{{RUSTFLAGS_USER}}" cargo clippy --fix --allow-dirty --bins {{RELEASE}} -Z unstable-options
 
 clean:
     #!/usr/bin/env sh

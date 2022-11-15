@@ -70,6 +70,7 @@
 			"Scause",
 			"sepc",
 			"SFENCE",
+			"sifive",
 			"sigreturn",
 			"singlethread",
 			"skernel",

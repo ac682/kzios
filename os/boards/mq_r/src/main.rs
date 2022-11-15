@@ -23,7 +23,7 @@ fn main() {
 }
 
 #[export_name = "board_write"]
-pub fn board_write(args: Arguments) {}
+pub fn board_write(_args: Arguments) {}
 
 #[export_name = "board_init"]
 pub fn board_init() {}
