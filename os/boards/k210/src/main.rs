@@ -7,7 +7,7 @@ use erhino_kernel::{prelude::*, proc::Process};
 
 extern crate alloc;
 
-const FIRST: &[u8] = include_bytes!("../../../../artifacts/initfs/user_init");
+const FIRST: &[u8] = include_bytes!("../../../../artifacts/initfs/system_fs");
 
 fn main() {
     let clint_base = 0x02000000;
@@ -19,7 +19,7 @@ fn main() {
     };
     kernel_init(info);
 
-    println!("K210 with 8MB ram only supports loading one elf(with debug symbols).");
+    println!("K210 with 6MB ram only supports loading one elf(with debug symbols).");
     if let Ok(process) = Process::from_elf(FIRST, "test") {
         add_flat_process(process);
     } else {

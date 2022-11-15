@@ -1,6 +1,6 @@
 MEMORY
 {
-    DRAM (rwx) : ORIGIN = 0x4000_0000, LENGTH = 64M
+    DRAM (rwx) : ORIGIN = 0x40000000, LENGTH = 64M
 }
 
 HEAP_SIZE = 0xC000;

@@ -1,5 +1,7 @@
 #![no_std]
 
+use rinlib::prelude::*;
+
 mod fs;
 mod impls;
 mod tree;
@@ -7,4 +9,6 @@ mod tree;
 extern crate alloc;
 extern crate rinlib;
 
-fn main() {}
+fn main() {
+    dbg!("Hello, World");
+}

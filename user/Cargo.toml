@@ -1,7 +1,2 @@
 [workspace]
-members = [
-	"rinlib",
-	"systems/init",
-	"systems/fs",
-	"systems/ts"
-]
+members = ["rinlib", "systems/init", "systems/fs", "systems/ts", "systems/dr"]

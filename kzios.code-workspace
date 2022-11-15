@@ -101,7 +101,9 @@
 				"type": "shell",
 				"command": "just",
 				"args": [
-					"run_qemu"
+					"run_qemu",
+					"-s",
+					"-S"
 				],
 				"isBackground": true,
 				"problemMatcher": [

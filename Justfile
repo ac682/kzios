@@ -16,6 +16,9 @@ alias d := debug
 alias f := fix
 alias r := run
 
+alias run_k210 := run_renode
+alias run_mq_r := run_renode
+
 # qemu
 QEMU_CORES := "1"
 QEMU_MEMORY := "128m"
@@ -36,7 +39,7 @@ artifact_dir:
     fi
 
 build_user: artifact_dir
-    @cd user && RUSTFLAGS="{{RUSTFLAGS_USER}}" cargo build --bin system_fs {{RELEASE}} -Z unstable-options --out-dir "{{TARGET_DIR}}/initfs"
+    @cd user && RUSTFLAGS="{{RUSTFLAGS_USER}}" cargo build --bins {{RELEASE}} -Z unstable-options --out-dir "{{TARGET_DIR}}/initfs"
 
 build_initfs: build_user
     @cd "{{TARGET_DIR}}/initfs" && tar -cf ../initfs.tar *
@@ -49,7 +52,7 @@ build_os: artifact_dir
 build: build_initfs build_os
     @echo -e "\033[0;32mBuild Successfully!\033[0m"
 
-run_qemu EXPOSE="-s -S": build
+run_qemu +EXPOSE="": build
     @echo -e "\033[0;36mQEMU: Simulating\033[0m"
     @{{QEMU_LAUNCH}} {{EXPOSE}}
 
@@ -57,12 +60,14 @@ run_renode CONSOLE="--console": build
     @echo -e "\033[0;36mRenode console pops up\033[0m"
     @renode {{CONSOLE}} "os/boards/{{BOARD}}/{{BOARD}}.resc"
 
-run: (run_qemu "")
+run: build
+    @just BOARD={{BOARD}} MODE={{MODE}} run_{{BOARD}}
 
 debug: build
     @tmux new-session -d "{{QEMU_LAUNCH}} -s -S" && tmux split-window -h "riscv64-elf-gdb -ex 'file {{OS_ELF}}' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'" && tmux -2 attach-session -d
 
 fix:
+    @cd shared && cargo clippy --fix
     @cd os && RUSTFLAGS="{{RUSTFLAGS_OS}}" cargo clippy --fix --bin board_{{BOARD}} {{RELEASE}} -Z unstable-options
     @cd user && RUSTFLAGS="{{RUSTFLAGS_USER}}" cargo clippy --fix --bins {{RELEASE}} -Z unstable-options
 
