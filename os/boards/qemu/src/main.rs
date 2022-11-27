@@ -7,7 +7,12 @@ use core::fmt::{Arguments, Result, Write};
 
 use alloc::borrow::ToOwned;
 use dtb_parser::{prop::PropertyValue, traits::HasNamedProperty};
-use erhino_kernel::{board::BoardInfo, env, kernel_init, kernel_main, proc::Process};
+use erhino_kernel::{
+    board::BoardInfo,
+    env, kernel_init, kernel_main,
+    proc::Process,
+    sync::{hart::HartLock, InteriorLock},
+};
 use tar_no_std::TarArchiveRef;
 
 pub use erhino_kernel::prelude::*;
@@ -15,6 +20,7 @@ pub use erhino_kernel::prelude::*;
 // 测试用，日后 initfs 应该由 board crate 提供
 // board crate 会在 artifacts 里选择部分包括驱动添加到 initfs 里
 const INITFS: &[u8] = include_bytes!("../../../../artifacts/initfs.tar");
+static mut LOCK: HartLock = HartLock::new();
 
 fn main() {
     // prepare BoardInfo
@@ -47,7 +53,9 @@ fn main() {
     kernel_init(info);
     // add processes to scheduler
     let archive = TarArchiveRef::new(INITFS);
-    let systems = archive.entries().filter(|f| f.filename().starts_with(""));
+    let systems = archive
+        .entries()
+        .filter(|f| f.filename().starts_with("system") || f.filename().starts_with("user"));
     for system in systems {
         let process = Process::from_elf(system.data(), system.filename().as_str()).unwrap();
         add_flat_process(process);
@@ -57,7 +65,11 @@ fn main() {
 
 #[export_name = "board_write"]
 pub fn uart_write(args: Arguments) {
-    NS16550a.write_fmt(args).unwrap();
+    unsafe {
+        LOCK.lock();
+        NS16550a.write_fmt(args).unwrap();
+        LOCK.unlock();
+    }
 }
 
 #[export_name = "board_init"]

@@ -4,7 +4,8 @@ use alloc::{boxed::Box, rc::Rc, vec::Vec};
 use erhino_shared::{
     call::{KernelCall, SystemCall},
     mem::{Address, PageNumber},
-    proc::{Pid, ProcessInfo, ProcessPermission, ProcessState, Signal},
+    proc::{ExitCode, Pid, ProcessInfo, ProcessPermission, ProcessState, Signal},
+    service::Sid,
 };
 use flagset::FlagSet;
 use num_traits::FromPrimitive;
@@ -217,7 +218,8 @@ impl Hart {
                             }
                         }
                         SystemCall::Exit => {
-                            self.scheduler.finish();
+                            let code = frame.x[10] as ExitCode;
+                            self.scheduler.finish(code);
                         }
                         SystemCall::Yield => {
                             self.scheduler.tick();
@@ -352,12 +354,23 @@ impl Hart {
                                 proc.queue_signal(signal);
                             }
                         }
+                        SystemCall::ServiceRegister => {
+                            let sid = frame.x[10] as Sid;
+                            if let Some(current) = self.scheduler.current() {
+                                let pid = current.pid;
+                                if current.has_permission(ProcessPermission::Service) {
+                                    todo!("service_register sys call");
+                                } else {
+                                    ret = -7;
+                                }
+                            }
+                        }
                         SystemCall::Map => {
                             if let Some(current) = self.scheduler.current() {
                                 if current.has_permission(ProcessPermission::Memory) {
                                     todo!("map sys call");
                                 } else {
-                                    ret = -1;
+                                    ret = -7;
                                 }
                             }
                         }

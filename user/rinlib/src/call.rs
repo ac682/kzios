@@ -4,6 +4,7 @@ use erhino_shared::{
     call::SystemCall,
     mem::Address,
     proc::{ExitCode, Pid, ProcessInfo, Signal},
+    service::Sid,
 };
 
 unsafe fn raw_call(id: usize, arg0: usize, arg1: usize, arg2: usize, arg3: usize) -> usize {
@@ -49,6 +50,14 @@ pub unsafe fn sys_inspect_myself(info: &mut ProcessInfo, name_buffer: &mut [u8; 
     ) == 0
 }
 
+pub unsafe fn sys_wait() -> bool {
+    raw_call(SystemCall::Wait as usize, 0, 0, 0, 0) == 0
+}
+
+pub unsafe fn sys_wait_for(pid: Pid) -> ExitCode {
+    raw_call(SystemCall::WaitFor as usize, pid as usize, 0, 0, 0) as ExitCode
+}
+
 pub unsafe fn sys_signal_return() {
     raw_call(SystemCall::SignalReturn as usize, 0, 0, 0, 0);
 }
@@ -61,6 +70,13 @@ pub unsafe fn sys_signal_send(pid: Pid, signal: Signal) {
         0,
         0,
     );
+}
+
+// 返回值应该预先对 sys_call 有定义，大概就是负数表示错误，由于 sys_call 都是进程调用，所以先定义
+// -1 为错误，但没有细节
+// -7 为权限不足，先这样子
+pub unsafe fn sys_service_register(sid: Sid) -> bool {
+    raw_call(SystemCall::ServiceRegister as usize, sid, 0, 0, 0) == 0
 }
 
 // 通过 sys_signal_set(任意值, 0) 就可以在形式上彻底取消 handler

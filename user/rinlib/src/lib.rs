@@ -12,4 +12,5 @@ pub mod io;
 pub mod prelude;
 pub mod proc;
 mod rt;
+pub mod service;
 pub mod signal;

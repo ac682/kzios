@@ -1,7 +1,7 @@
 use core::usize;
 
 use alloc::boxed::Box;
-use flagset::{flags};
+use flagset::flags;
 
 #[derive(Debug)]
 pub enum FileSystemError {

@@ -47,6 +47,11 @@ pub enum SystemCall {
     Receive = 0x31,
     /// IDK
     Notify = 0x32,
+    // IPC for services
+    /// Register a service. Requires Service permission
+    ServiceRegister = 0x3A,
+    /// Find a service's pid
+    ServiceQuery = 0x3B,
     // Process memory
     /// Map a range of virtual addresses for the process with kernel served pages
     Extend = 0x40,

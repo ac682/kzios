@@ -10,5 +10,5 @@ extern crate alloc;
 extern crate rinlib;
 
 fn main() {
-    dbg!("Hello, World");
+    dbg!("File System Ready\n");
 }

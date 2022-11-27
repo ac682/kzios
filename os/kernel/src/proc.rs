@@ -1,10 +1,11 @@
 pub mod sch;
+pub mod service;
 
 use alloc::{borrow::ToOwned, string::String};
 use elf_rs::{Elf, ElfFile, ElfMachine, ElfType, ProgramHeaderFlags, ProgramType};
 use erhino_shared::{
     mem::Address,
-    proc::{Pid, ProcessPermission, ProcessState, Signal},
+    proc::{ExitCode, Pid, ProcessPermission, ProcessState, Signal},
 };
 use flagset::FlagSet;
 
@@ -47,6 +48,7 @@ pub struct Process {
     pub memory: MemoryUnit,
     pub trap: TrapFrame,
     pub state: ProcessState,
+    pub exit_code: ExitCode,
     signal: SignalControlBlock,
 }
 
@@ -63,6 +65,7 @@ impl Process {
                 // ignore all signal
                 signal: SignalControlBlock::default(),
                 state: ProcessState::Ready,
+                exit_code: 0,
             };
             process.trap.pc = elf.entry_point();
             process.trap.x[2] = 0x3f_ffff_f000;
@@ -123,6 +126,7 @@ impl Process {
                 trap: self.trap.clone(),
                 signal: self.signal,
                 state: self.state,
+                exit_code: self.exit_code,
             };
             proc.trap.satp = (8 << 60 | proc.memory.root()) as u64;
             Ok(proc)

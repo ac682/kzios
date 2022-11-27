@@ -20,7 +20,7 @@ extern "C" {
 static mut HEAP_ALLOCATOR: LockedHeap<HEAP_ORDER> = LockedHeap::new();
 
 #[lang = "start"]
-fn lang_start<T: Termination + 'static>(main: fn() -> T) -> ! {
+fn lang_start<T: Termination + 'static>(main: fn() -> T, _: isize, _: *const *const u8) -> ! {
     let single = 0x1000;
     unsafe {
         sys_extend(_segment_break as usize, single, 0b011);

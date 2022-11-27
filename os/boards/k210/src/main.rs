@@ -1,6 +1,6 @@
 #![no_std]
 
-use core::fmt::{Arguments, Write, Result};
+use core::fmt::{Arguments, Result, Write};
 
 use alloc::string::ToString;
 use erhino_kernel::{prelude::*, proc::Process};
@@ -37,7 +37,7 @@ pub fn uart_write(args: Arguments) {
 
 #[export_name = "board_init"]
 pub fn board_init() {
-    unsafe{
+    unsafe {
         // 1 stop bits and enable transmit
         SIFIVE_UARTHS.add(2).write(0b11);
         // ie auto reset to zero
@@ -51,9 +51,9 @@ const SIFIVE_UARTHS: *mut u32 = 0x38000000 as *mut u32;
 
 struct UartHs;
 
-impl Write for UartHs{
+impl Write for UartHs {
     fn write_str(&mut self, s: &str) -> Result {
-        unsafe{
+        unsafe {
             for i in s.chars() {
                 SIFIVE_UARTHS.add(0).write_volatile(i as u32);
             }

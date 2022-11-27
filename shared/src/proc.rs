@@ -28,7 +28,7 @@ pub enum SystemSignal {
 
 flags! {
     /// Permission of the process
-    /// Invalid when fork means copy the permissions from the parend
+    /// Invalid when fork means copy the permissions from the parent
     pub enum ProcessPermission: u8{
         /// Not available
         Invalid = 0b0,
@@ -36,13 +36,15 @@ flags! {
         Valid = 0b1,
         /// Process operations
         Process = 0b10,
+        /// It's a service and can be registered as service
+        Service = 0b100,
         /// Map
-        Memory = 0b100,
+        Memory = 0b1000,
         /// IDK
-        Net = 0b1000,
+        Net = 0b10000,
 
         /// All of them
-        All = (ProcessPermission::Valid | ProcessPermission::Process | ProcessPermission::Memory | ProcessPermission::Net).bits()
+        All = (ProcessPermission::Valid | ProcessPermission::Process | ProcessPermission::Service | ProcessPermission::Memory | ProcessPermission::Net).bits()
     }
 }
 
@@ -79,6 +81,29 @@ pub trait Termination {
 impl Termination for () {
     fn to_exit_code(self) -> ExitCode {
         0
+    }
+}
+
+impl Termination for bool {
+    fn to_exit_code(self) -> ExitCode {
+        if self {
+            0
+        } else {
+            -1
+        }
+    }
+}
+
+/// ExitCode for process result which treated as Termination
+pub type ProgramResult = Result<(), ExitCode>;
+
+impl Termination for ProgramResult {
+    fn to_exit_code(self) -> ExitCode {
+        if let Err(code) = self {
+            code
+        } else {
+            0
+        }
     }
 }
 

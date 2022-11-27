@@ -1,7 +1,9 @@
 #![no_std]
 
+use rinlib::prelude::*;
+
 extern crate rinlib;
 
 fn main() {
-    loop {}
+    dbg!("Time Service Ready\n");
 }

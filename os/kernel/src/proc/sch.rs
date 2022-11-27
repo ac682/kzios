@@ -1,4 +1,4 @@
-use erhino_shared::proc::Pid;
+use erhino_shared::proc::{ExitCode, Pid};
 
 use super::Process;
 
@@ -11,6 +11,6 @@ pub trait Scheduler {
     fn current(&mut self) -> Option<&mut Process>;
     fn find(&mut self, pid: Pid) -> Option<&Process>;
     fn find_mut(&mut self, pid: Pid) -> Option<&mut Process>;
-    fn finish(&mut self);
+    fn finish(&mut self, code: ExitCode);
     fn kill(&mut self, pid: Pid);
 }

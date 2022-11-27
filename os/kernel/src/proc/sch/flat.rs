@@ -1,7 +1,7 @@
 use core::cell::RefCell;
 
 use alloc::{rc::Rc, vec::Vec};
-use erhino_shared::proc::{Pid, ProcessState};
+use erhino_shared::proc::{ExitCode, Pid, ProcessState};
 
 use crate::{
     proc::Process,
@@ -125,13 +125,14 @@ impl<T: Timer + Sized> Scheduler for FlatScheduler<T> {
         }
     }
 
-    fn finish(&mut self) {
+    fn finish(&mut self, code: ExitCode) {
         //let hartid = self.hartid;
         if let Some(process) = self.current() {
             if process.state == ProcessState::Running {
                 // 进程调用 exit 之前会自己调用 wait 来等待子进程退出
                 // TODO: 查找所有子进程，然后直接 kill with no mercy
                 process.state = ProcessState::Dead;
+                process.exit_code = code;
                 //println!("#{} Exit Pid={}", hartid, process.pid);
                 // TODO: do process clean
             } else {

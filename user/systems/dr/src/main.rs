@@ -5,5 +5,5 @@ use rinlib::prelude::*;
 extern crate rinlib;
 
 fn main() {
-    dbg!("Hello, world!");
+    dbg!("Driver Registry Ready\n");
 }

@@ -1,6 +1,7 @@
 use num_derive::{FromPrimitive, ToPrimitive};
 
-
+/// Service id, treated as special process id
+pub type Sid = usize;
 
 #[repr(usize)]
 #[derive(FromPrimitive, ToPrimitive)]
@@ -11,5 +12,6 @@ pub enum ServiceId {
     /// TS
     TimerService = 2,
     /// Id must be less than this or defined as user registered service
-    Reserved = 3,
+    /// 1-128 is reserved for system services
+    Reserved = 128,
 }

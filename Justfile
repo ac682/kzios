@@ -20,9 +20,9 @@ alias run_k210 := run_renode
 alias run_mq_r := run_renode
 
 # qemu
-QEMU_CORES := "1"
+QEMU_CORES := "4"
 QEMU_MEMORY := "128m"
-QEMU_LAUNCH := "qemu-system-riscv64 -smp cores="+QEMU_CORES+" -M "+QEMU_MEMORY+" -machine virt -nographic -bios none -kernel "+OS_ELF
+QEMU_LAUNCH := "qemu-system-riscv64 -smp cores="+QEMU_CORES+" -M "+QEMU_MEMORY+" -machine virt -nographic -bios none -kernel "+OS_BIN
 
 all:
     @just --help
@@ -60,7 +60,7 @@ run_renode CONSOLE="--console": build
     @echo -e "\033[0;36mRenode console pops up\033[0m"
     @renode {{CONSOLE}} "os/boards/{{BOARD}}/{{BOARD}}.resc"
 
-run: build
+run:
     @just BOARD={{BOARD}} MODE={{MODE}} run_{{BOARD}}
 
 debug: build

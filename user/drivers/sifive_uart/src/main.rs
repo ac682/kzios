@@ -5,5 +5,5 @@ use rinlib::prelude::*;
 extern crate rinlib;
 
 fn main() {
-    dbg!("Hello, world!");
+    dbg!("SiFive Uart should not be Ready in qemu\n");
 }
