@@ -2,6 +2,8 @@
 
 操作系统学习：RV64 嵌入式系统
 
+~~越来越大了，已经嵌不进去力~~
+
 ## 设计
 
 系统内核可执行文件组成为 `erhino-kernel` 和 board crate，后者作为可执行文件依赖内核库。board crate 会提供和板子有关的部分代码，包括内存布局，被选择的亚当程序，以及一些硬件信息（信息不多，在内核上不需要用到设备树）。
@@ -82,6 +84,8 @@ RR且动态时间片。每个 hart 使用一个调度器实例，但该调度器
     - [ ] wait_for
   - [ ] 多核调度
     - [ ] 为不同核心指定调度器
+- [ ] 线程
+  - [ ] 线程模型
 - [ ] 内存分页,~~支持大中小页~~又不支持了，这么搞后期会很麻烦
   - [x] map, 作为系统调用 sys_map 提供给具有 ProcessPermission::Memory 权限的进程
   - [x] write
@@ -108,12 +112,13 @@ RR且动态时间片。每个 hart 使用一个调度器实例，但该调度器
 
 ## (将)受支持的平台
 
-- qemu-system-riscv64: 1 core 8MB ram with MMU
-- k210: 2 cores (suspend #1) 8MB ram with MMU
+- [x] qemu-system-riscv64: 4 cores 128MB ram with MMU
+- [ ] k210: 2 cores (suspend #1) 8MB ram with MMU *内存太少了哇*
+- [ ] D1s(F133): single core minimal 64mb with MMU *板子还没准备好，还没测*
 
 ## 标准库
 
-~~Porting std is a huge thing, I wont do it at the current stage.~~
+~~Porting std is huge work, I wont do it at the current stage.~~
 
 仅提供 ~~`kinlib`~~`rinlib`
 
