@@ -3,24 +3,11 @@ use core::fmt::Display;
 use alloc::{string::String, vec::Vec};
 use erhino_shared::mem::{page::PageLevel, Address, PageNumber};
 use flagset::FlagSet;
-use hashbrown::HashMap;
-use spin::Once;
 
-use crate::sync::{hart::HartReadWriteLock, InteriorLock, InteriorReadWriteLock};
-
-use super::{
-    frame::{frame_alloc, frame_dealloc},
+use crate::mm::{
+    frame::{cow_free, cow_track, cow_usage, frame_alloc},
     page::{PageTable, PageTableEntry, PageTableEntryFlag},
 };
-
-static mut TRACKED_PAGES: Once<HashMap<PageNumber, usize>> = Once::new();
-static mut TRACKED_LOCK: HartReadWriteLock = HartReadWriteLock::new();
-
-pub fn init() {
-    unsafe {
-        TRACKED_PAGES.call_once(|| HashMap::new());
-    }
-}
 
 // 以后 MemoryUnit 可以有多种实现，例如 Sv39 可换成 Sv48
 #[derive(Debug)]
@@ -57,27 +44,6 @@ impl MemoryUnit {
         Ok(unit)
     }
 
-    fn cow_free(ppn: PageNumber) {
-        unsafe { TRACKED_LOCK.lock_mut() };
-        let tracked = unsafe { TRACKED_PAGES.get_mut().unwrap() };
-        let count = tracked.get(&ppn).unwrap();
-        if count == &1 {
-            tracked.remove_entry(&ppn);
-            frame_dealloc(ppn, 1);
-        } else {
-            tracked.entry(ppn).and_modify(|e| *e -= 1);
-        }
-        unsafe { TRACKED_LOCK.unlock() };
-    }
-
-    fn cow_usage(ppn: PageNumber) -> usize {
-        unsafe { TRACKED_LOCK.lock() };
-        let tracked = unsafe { TRACKED_PAGES.get_unchecked() };
-        let count = tracked.get(&ppn).unwrap();
-        unsafe { TRACKED_LOCK.unlock() };
-        *count
-    }
-
     pub fn handle_store_page_fault<F: Into<FlagSet<PageTableEntryFlag>> + Copy>(
         &mut self,
         addr: Address,
@@ -88,8 +54,8 @@ impl MemoryUnit {
         if entry.is_valid() {
             if entry.is_cow_and_writeable() {
                 let ppn = entry.physical_page_number();
-                if Self::cow_usage(ppn) == 1 {
-                    Self::cow_free(ppn);
+                if cow_usage(ppn) == 1 {
+                    cow_free(ppn);
                     entry.set(ppn, 0, entry.flags() | PageTableEntryFlag::Writeable);
                     Ok(true)
                 } else {
@@ -101,7 +67,7 @@ impl MemoryUnit {
                                 to.add(i).write(from.add(i).read());
                             }
                         }
-                        Self::cow_free(ppn);
+                        cow_free(ppn);
                         entry.set(frame, 0, entry.flags() | PageTableEntryFlag::Writeable);
                         Ok(true)
                     } else {
@@ -124,15 +90,10 @@ impl MemoryUnit {
                     if let Some(new_entry) = new.entry_mut(i) {
                         if old_entry.is_leaf() {
                             let ppn = old_entry.physical_page_number();
-                            unsafe { TRACKED_LOCK.lock_mut() };
-                            let tracked = unsafe { TRACKED_PAGES.get_mut().unwrap() };
-                            if old_entry.is_cow() {
-                                tracked.entry(ppn).and_modify(|e| *e += 1).or_insert(2);
-                            } else {
+                            cow_track(ppn, 2);
+                            if !old_entry.is_cow() {
                                 old_entry.set_cow();
-                                tracked.insert(ppn, 2);
                             }
-                            unsafe { TRACKED_LOCK.unlock() };
                             new_entry.write(old_entry.read());
                         } else {
                             if let Some(frame) = frame_alloc(1) {

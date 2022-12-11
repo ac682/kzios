@@ -1,5 +1,7 @@
+pub mod mem;
 pub mod sch;
 pub mod service;
+pub mod thread;
 
 use alloc::{borrow::ToOwned, string::String};
 use elf_rs::{Elf, ElfFile, ElfMachine, ElfType, ProgramHeaderFlags, ProgramType};
@@ -9,10 +11,9 @@ use erhino_shared::{
 };
 use flagset::FlagSet;
 
-use crate::{
-    mm::{page::PageTableEntryFlag, unit::MemoryUnit},
-    trap::TrapFrame,
-};
+use crate::{mm::page::PageTableEntryFlag, trap::TrapFrame};
+
+use self::mem::{unit::MemoryUnit, layout::MemoryLayout};
 
 #[derive(Debug)]
 pub enum ProcessSpawnError {
@@ -46,6 +47,7 @@ pub struct Process {
     pub parent: Pid,
     pub permissions: FlagSet<ProcessPermission>,
     pub memory: MemoryUnit,
+    pub layout: MemoryLayout,
     pub trap: TrapFrame,
     pub state: ProcessState,
     pub exit_code: ExitCode,
@@ -61,6 +63,7 @@ impl Process {
                 parent: 0,
                 permissions: ProcessPermission::All.into(),
                 memory: MemoryUnit::new().unwrap(),
+                layout: MemoryLayout::new(0x40_0000_0000),
                 trap: TrapFrame::new(),
                 // ignore all signal
                 signal: SignalControlBlock::default(),
@@ -68,7 +71,7 @@ impl Process {
                 exit_code: 0,
             };
             process.trap.pc = elf.entry_point();
-            process.trap.x[2] = 0x3f_ffff_f000;
+            process.trap.x[2] = 0x40_0000_0000;
             process.trap.satp = (8 << 60) | process.memory.root() as u64;
             let header = elf.elf_header();
             // TODO: validate RV64 from flags parameter
@@ -123,6 +126,7 @@ impl Process {
                 parent: self.pid,
                 permissions: perm_new,
                 memory: self.memory.fork().unwrap(),
+                layout: self.layout.clone(),
                 trap: self.trap.clone(),
                 signal: self.signal,
                 state: self.state,

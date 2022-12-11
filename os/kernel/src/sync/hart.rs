@@ -122,3 +122,11 @@ impl InteriorReadWriteLock for HartReadWriteLock {
         }
     }
 }
+
+impl Clone for HartReadWriteLock {
+    fn clone(&self) -> Self {
+        Self {
+            lock: AtomicU64::new(self.lock.load(Ordering::Relaxed)),
+        }
+    }
+}
