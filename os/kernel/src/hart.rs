@@ -21,7 +21,7 @@ use crate::{
     mm::page::PageTableEntryFlag,
     peripheral, print, println,
     proc::{
-        sch::{flat::FlatScheduler, Scheduler},
+        sch::{smooth::SmoothScheduler, Scheduler},
         Process,
     },
     sync::hart::HartReadWriteLock,
@@ -42,7 +42,7 @@ static mut HARTS: Vec<Hart> = Vec::new();
 static mut SIZE: usize = 0usize;
 static mut SIZE_LOCK: HartReadWriteLock = HartReadWriteLock::new();
 
-type SchedulerImpl = FlatScheduler<HartTimer>;
+type SchedulerImpl = SmoothScheduler;
 
 pub struct Hart {
     id: usize,
@@ -58,7 +58,7 @@ impl Hart {
         Self {
             id: hartid,
             timer: timer.clone(),
-            scheduler: Box::new(SchedulerImpl::new(hartid, timer)),
+            scheduler: Box::new(SchedulerImpl::new(hartid)),
             context: unsafe { &mut KERNEL_TRAP as *mut TrapFrame },
         }
     }

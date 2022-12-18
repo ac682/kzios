@@ -8,14 +8,14 @@ pub mod optimistic;
 
 pub trait InteriorLock {
     fn is_locked(&self) -> bool;
-    fn lock(&mut self);
-    fn try_lock(&mut self) -> bool;
-    fn unlock(&mut self);
+    fn lock(&self);
+    fn try_lock(&self) -> bool;
+    fn unlock(&self);
 }
 
 pub trait InteriorReadWriteLock: InteriorLock {
-    fn lock_mut(&mut self);
-    fn try_lock_mut(&mut self) -> bool;
+    fn lock_mut(&self);
+    fn try_lock_mut(&self) -> bool;
 }
 
 pub struct DataLock<Data: Sized, Lock: InteriorLock> {

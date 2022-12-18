@@ -7,15 +7,15 @@ impl InteriorLock for OptimisticLock {
         false
     }
 
-    fn lock(&mut self) {
+    fn lock(&self) {
         ()
     }
 
-    fn try_lock(&mut self) -> bool {
+    fn try_lock(&self) -> bool {
         true
     }
 
-    fn unlock(&mut self) {
+    fn unlock(&self) {
         ()
     }
 }

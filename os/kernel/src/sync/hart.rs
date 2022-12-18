@@ -26,7 +26,7 @@ impl InteriorLock for HartLock {
         locked != u64::MAX && locked != hartid
     }
 
-    fn lock(&mut self) {
+    fn lock(&self) {
         let hartid = mhartid::read() as u64;
         while self
             .lock
@@ -39,11 +39,11 @@ impl InteriorLock for HartLock {
         }
     }
 
-    fn unlock(&mut self) {
+    fn unlock(&self) {
         self.lock.store(u64::MAX, Ordering::Relaxed);
     }
 
-    fn try_lock(&mut self) -> bool {
+    fn try_lock(&self) -> bool {
         let hartid = mhartid::read() as u64;
         match self
             .lock
@@ -74,7 +74,7 @@ impl InteriorLock for HartReadWriteLock {
         locked != u64::MAX && locked != hartid
     }
 
-    fn lock(&mut self) {
+    fn lock(&self) {
         let hartid = mhartid::read() as u64;
         loop {
             let locked = self.lock.load(Ordering::Relaxed);
@@ -86,19 +86,19 @@ impl InteriorLock for HartReadWriteLock {
         }
     }
 
-    fn try_lock(&mut self) -> bool {
+    fn try_lock(&self) -> bool {
         let hartid = mhartid::read() as u64;
         let locked = self.lock.load(Ordering::Relaxed);
         locked == u64::MAX || locked == hartid
     }
 
-    fn unlock(&mut self) {
+    fn unlock(&self) {
         self.lock.store(u64::MAX, Ordering::Relaxed);
     }
 }
 
 impl InteriorReadWriteLock for HartReadWriteLock {
-    fn lock_mut(&mut self) {
+    fn lock_mut(&self) {
         let hartid = mhartid::read() as u64;
         while self
             .lock
@@ -111,7 +111,7 @@ impl InteriorReadWriteLock for HartReadWriteLock {
         }
     }
 
-    fn try_lock_mut(&mut self) -> bool {
+    fn try_lock_mut(&self) -> bool {
         let hartid = mhartid::read() as u64;
         match self
             .lock

@@ -4,9 +4,9 @@ use erhino_shared::proc::Tid;
 use crate::trap::TrapFrame;
 
 pub struct Thread {
-    name: String,
-    tid: Tid,
-    frame: TrapFrame,
+    pub name: String,
+    pub tid: Tid,
+    pub frame: TrapFrame,
 }
 
 impl Thread {
