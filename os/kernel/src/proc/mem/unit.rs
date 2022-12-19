@@ -38,6 +38,10 @@ impl MemoryUnit {
         self.root.location()
     }
 
+    pub fn satp(&self) -> u64{
+        (8 << 60) | self.root() as u64
+    }
+
     pub fn fork(&mut self) -> Result<Self, MemoryUnitError> {
         let mut unit = MemoryUnit::new()?;
         Self::copy_table(&mut self.root, &mut unit.root)?;

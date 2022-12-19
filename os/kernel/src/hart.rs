@@ -42,7 +42,7 @@ static mut HARTS: Vec<Hart> = Vec::new();
 static mut SIZE: usize = 0usize;
 static mut SIZE_LOCK: HartReadWriteLock = HartReadWriteLock::new();
 
-type SchedulerImpl = SmoothScheduler;
+type SchedulerImpl = SmoothScheduler<HartTimer>;
 
 pub struct Hart {
     id: usize,
@@ -58,7 +58,7 @@ impl Hart {
         Self {
             id: hartid,
             timer: timer.clone(),
-            scheduler: Box::new(SchedulerImpl::new(hartid)),
+            scheduler: Box::new(SchedulerImpl::new(hartid, timer.clone())),
             context: unsafe { &mut KERNEL_TRAP as *mut TrapFrame },
         }
     }
@@ -103,7 +103,7 @@ impl Hart {
                 }
             }
             Trap::Exception(Exception::Breakpoint) => {
-                if let Some(current) = self.scheduler.current() {
+                if let Some((current, _)) = self.scheduler.current() {
                     // panic!("breakpoint: memory={}\nframe={}", current.memory, frame);
                     println!("#{} Pid={} requested a breakpoint", self.id, current.pid);
                     frame.pc += 4;
@@ -115,7 +115,7 @@ impl Hart {
                 panic!("Store/AMO access fault hart#{}: frame=\n{}", self.id, frame);
             }
             Trap::Exception(Exception::StorePageFault) => {
-                if let Some(process) = self.scheduler.current() {
+                if let Some((process, _)) = self.scheduler.current() {
                     if let Ok(success) = process
                         .memory
                         .handle_store_page_fault(val, PageTableEntryFlag::UserReadWrite)
@@ -137,7 +137,7 @@ impl Hart {
                 if let Some(call) = SystemCall::from_u64(call_id) {
                     match call {
                         SystemCall::Debug => {
-                            if let Some(current) = self.scheduler.current() {
+                            if let Some((current, _)) = self.scheduler.current() {
                                 let start = frame.x[10] as usize;
                                 let str = current.memory.read_cstr(start).unwrap();
                                 print!(
@@ -147,7 +147,7 @@ impl Hart {
                             }
                         }
                         SystemCall::Write => {
-                            if let Some(current) = self.scheduler.current() {
+                            if let Some((current, _)) = self.scheduler.current() {
                                 let str_start = frame.x[10];
                                 let str_len = frame.x[11];
                                 let mut bytes = Vec::<u8>::new();
@@ -163,7 +163,7 @@ impl Hart {
                             }
                         }
                         SystemCall::Extend => {
-                            if let Some(process) = self.scheduler.current() {
+                            if let Some((process, _)) = self.scheduler.current() {
                                 let start = frame.x[10];
                                 let end = start + frame.x[11];
                                 let bits = frame.x[12] & 0b111;
@@ -197,19 +197,22 @@ impl Hart {
                             if perm <= u8::MAX as u64 {
                                 if let Ok(perm_into) = FlagSet::<ProcessPermission>::new(perm as u8)
                                 {
-                                    if let Some(current) = self.scheduler.current() {
-                                        if let Ok(mut fork) = current.fork(perm_into) {
-                                            fork.move_to_next_instruction();
-                                            fork.trap.x[10] = 0;
-                                            if fork.state == ProcessState::Running {
-                                                fork.state = ProcessState::Ready;
-                                            }
-                                            let pid = self.scheduler.add(fork);
-                                            ret = pid as i64;
-                                        } else {
-                                            ret = -2;
-                                        }
-                                    }
+                                    // if let Some((current, thread)) = self.scheduler.current() {
+                                    //     if let Ok(mut fork) = current.fork(perm_into) {
+                                    //         fork.move_to_next_instruction();
+                                    //         fork.trap.x[10] = 0;
+                                    //         if fork.state == ProcessState::Running {
+                                    //             fork.state = ProcessState::Ready;
+                                    //         }
+                                    //         let pid = self.scheduler.add(fork);
+                                    //         ret = pid as i64;
+                                    //     } else {
+                                    //         ret = -2;
+                                    //     }
+                                    // }
+
+                                    // fork 应该由 scheduler 处理
+                                    todo!()
                                 } else {
                                     ret = -3;
                                 }
@@ -241,7 +244,7 @@ impl Hart {
                                 ret = -1;
                             }
                             if ret != -1 {
-                                if let Some(current) = self.scheduler.current() {
+                                if let Some((current, _)) = self.scheduler.current() {
                                     let info = info.unwrap();
                                     let mut name_buffer = info.name.as_bytes();
                                     let mut name_len = name_buffer.len();
@@ -287,7 +290,7 @@ impl Hart {
                         SystemCall::InspectMyself => {
                             let address = frame.x[10] as Address;
                             let name_address = frame.x[12] as Address;
-                            if let Some(current) = self.scheduler.current() {
+                            if let Some((current, _)) = self.scheduler.current() {
                                 let info = ProcessInfo {
                                     name: current.name.clone(),
                                     pid: current.pid,
@@ -336,27 +339,27 @@ impl Hart {
                             }
                         }
                         SystemCall::SignalReturn => {
-                            if let Some(current) = self.scheduler.current() {
-                                current.leave_signal();
-                            }
+                            // if let Some((current, thread)) = self.scheduler.current() {
+                            //     current.leave_signal();
+                            // }
                         }
                         SystemCall::SignalSet => {
-                            if let Some(current) = self.scheduler.current() {
-                                let handler = frame.x[10];
-                                let mask = frame.x[11];
-                                current.set_signal_handler(handler as Address, mask);
-                            }
+                            // if let Some((current, thread)) = self.scheduler.current() {
+                            //     let handler = frame.x[10];
+                            //     let mask = frame.x[11];
+                            //     current.set_signal_handler(handler as Address, mask);
+                            // }
                         }
                         SystemCall::SignalSend => {
-                            let pid = frame.x[10] as Pid;
-                            let signal = frame.x[11] as Signal;
-                            if let Some(proc) = self.scheduler.find_mut(pid) {
-                                proc.queue_signal(signal);
-                            }
+                            // let pid = frame.x[10] as Pid;
+                            // let signal = frame.x[11] as Signal;
+                            // if let Some(proc) = self.scheduler.find_mut(pid) {
+                            //     proc.queue_signal(signal);
+                            // }
                         }
                         SystemCall::ServiceRegister => {
                             let sid = frame.x[10] as Sid;
-                            if let Some(current) = self.scheduler.current() {
+                            if let Some((current, _)) = self.scheduler.current() {
                                 let pid = current.pid;
                                 if current.has_permission(ProcessPermission::Service) {
                                     todo!("service_register sys call");
@@ -366,7 +369,7 @@ impl Hart {
                             }
                         }
                         SystemCall::Map => {
-                            if let Some(current) = self.scheduler.current() {
+                            if let Some((current, _)) = self.scheduler.current() {
                                 if current.has_permission(ProcessPermission::Memory) {
                                     todo!("map sys call");
                                 } else {
@@ -391,8 +394,9 @@ impl Hart {
                 frame
             ),
         }
-        self.context = if let Some(proc) = self.scheduler.current() {
-            &mut proc.trap as *mut TrapFrame
+        self.context = if let Some((proc, thread)) = self.scheduler.current() {
+            //println!("Pid: {} Tid: {}", proc.pid, thread.tid);
+            &mut thread.frame as *mut TrapFrame
         } else {
             unsafe { &mut KERNEL_TRAP as *mut TrapFrame }
         }

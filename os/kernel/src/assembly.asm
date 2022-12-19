@@ -149,7 +149,11 @@ _switch_to_user:
 
     # 复原 satp 和 mepc
     ld      t5, 512(t6)
+    csrr    t4, satp
+    # 如果 t5 t4相等就跳过
+    sfence.vma
     csrw    satp, t5
+7:
     ld      t5, 520(t6)
     csrw    mepc, t5
 
@@ -166,19 +170,18 @@ initial:
 
             .set    i,i+1
     .endr
-    j       7f
+    j       8f
 clean:
     .set	i,0
     .rept	NUM_REGS
     		load_fp	0
     		.set	i,i+1
     .endr
-7:
+8:
     .set	i , 0
     .rept	NUM_REGS
         load_gp	%i
         .set	i, i + 1
     .endr
-    sfence.vma
 _enter_user_breakpoint:
     mret

@@ -55,14 +55,17 @@ pub fn kernel_init(info: BoardInfo) {
 }
 
 pub fn kernel_main() {
-    // println!("\x1b[0;34mboot completed, enter user mode\x1b[0m");
-    // if _hart_num as usize > 1 {
-    //     let aclint = peripheral::aclint();
-    //     for i in 1..(_hart_num as usize) {
-    //         aclint.set_msip(i);
-    //     }
-    // }
-    for _ in 0..50000 {}
+    println!("\x1b[0;34mboot completed, enter user mode\x1b[0m");
+    call_other_harts();
     krn_enter_user_space();
     loop {}
+}
+
+fn call_other_harts() {
+    if _hart_num as usize > 1 {
+        let aclint = peripheral::aclint();
+        for i in 1..(_hart_num as usize) {
+            aclint.set_msip(i);
+        }
+    }
 }

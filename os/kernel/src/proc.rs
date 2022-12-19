@@ -22,36 +22,16 @@ pub enum ProcessSpawnError {
     InvalidPermissions,
 }
 
-#[derive(Clone, Copy)]
-pub struct SignalControlBlock {
-    pub mask: Signal,
-    pub pending: Signal,
-    pub handler: Address,
-    pub backup: TrapFrame,
-}
-
-impl Default for SignalControlBlock {
-    fn default() -> Self {
-        Self {
-            mask: Default::default(),
-            pending: Default::default(),
-            handler: Default::default(),
-            backup: TrapFrame::new(),
-        }
-    }
-}
-
 pub struct Process {
     pub name: String,
     pub pid: Pid,
     pub parent: Pid,
     pub permissions: FlagSet<ProcessPermission>,
+    pub entry_point: Address,
     pub memory: MemoryUnit,
     pub layout: MemoryLayout,
-    pub trap: TrapFrame,
     pub state: ProcessState,
     pub exit_code: ExitCode,
-    signal: SignalControlBlock,
 }
 
 impl Process {
@@ -62,17 +42,12 @@ impl Process {
                 pid: 0,
                 parent: 0,
                 permissions: ProcessPermission::All.into(),
+                entry_point: elf.entry_point() as Address,
                 memory: MemoryUnit::new().unwrap(),
                 layout: MemoryLayout::new(0x40_0000_0000),
-                trap: TrapFrame::new(),
-                // ignore all signal
-                signal: SignalControlBlock::default(),
                 state: ProcessState::Ready,
                 exit_code: 0,
             };
-            process.trap.pc = elf.entry_point();
-            process.trap.x[2] = 0x40_0000_0000;
-            process.trap.satp = (8 << 60) | process.memory.root() as u64;
             let header = elf.elf_header();
             // TODO: validate RV64 from flags parameter
             if header.machine() != ElfMachine::RISC_V || header.elftype() != ElfType::ET_EXEC {
@@ -125,14 +100,12 @@ impl Process {
                 pid: 0,
                 parent: self.pid,
                 permissions: perm_new,
+                entry_point: self.entry_point.clone(),
                 memory: self.memory.fork().unwrap(),
                 layout: self.layout.clone(),
-                trap: self.trap.clone(),
-                signal: self.signal,
-                state: self.state,
-                exit_code: self.exit_code,
+                state: self.state.clone(),
+                exit_code: self.exit_code.clone(),
             };
-            proc.trap.satp = (8 << 60 | proc.memory.root()) as u64;
             Ok(proc)
         } else {
             Err(ProcessSpawnError::InvalidPermissions)
@@ -141,47 +114,6 @@ impl Process {
 
     pub fn has_permission(&self, perm: ProcessPermission) -> bool {
         self.permissions.contains(perm)
-    }
-
-    pub fn move_to_next_instruction(&mut self) {
-        self.trap.pc += 4;
-    }
-
-    pub fn has_signals_pending(&self) -> bool {
-        self.signal.pending > 0
-    }
-
-    pub fn queue_signal(&mut self, signal: Signal) {
-        self.signal.pending |= signal as Signal;
-    }
-
-    pub fn set_signal_handler(&mut self, handler: Address, mask: Signal) {
-        self.signal.mask = mask;
-        self.signal.handler = handler;
-    }
-
-    pub fn enter_signal(&mut self) {
-        self.signal.backup = self.trap.clone();
-        let mut signal = 0 as Signal;
-        let mut pending = self.signal.pending;
-        for i in 0..64 {
-            if pending & 2 == 1 {
-                signal = 1 << i;
-                break;
-            } else {
-                pending >>= 1;
-            }
-        }
-
-        self.signal.pending &= !signal;
-        self.signal.backup.x[10] = signal;
-        self.signal.backup.pc = self.signal.handler as u64;
-
-        (self.trap, self.signal.backup) = (self.signal.backup, self.trap);
-    }
-
-    pub fn leave_signal(&mut self) {
-        (self.trap, self.signal.backup) = (self.signal.backup, self.trap);
     }
 }
 
