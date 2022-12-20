@@ -1,12 +1,14 @@
 use core::fmt::{Display, Formatter, Result};
 
 use alloc::string::String;
+use erhino_shared::mem::Address;
 
 pub struct BoardInfo {
     pub name: String,
-    pub base_frequency: usize,
-    pub mswi_address: usize,
-    pub mtimer_address: usize,
+    pub base_frequency: Address,
+    pub mswi_address: Address,
+    pub mtimer_address: Address,
+    pub mtime_address: Address
 }
 
 impl Display for BoardInfo {

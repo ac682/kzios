@@ -16,6 +16,7 @@ fn main() {
         base_frequency,
         mswi_address: clint_base,
         mtimer_address: clint_base + 0x4000,
+        mtime_address: clint_base + 0xbff8,
     };
     kernel_init(info);
 

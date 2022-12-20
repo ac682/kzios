@@ -1,4 +1,4 @@
-use core::{cell::RefCell, mem::size_of, slice::from_raw_parts};
+use core::{arch::asm, cell::RefCell, mem::size_of, slice::from_raw_parts};
 
 use alloc::{boxed::Box, rc::Rc, vec::Vec};
 use erhino_shared::{
@@ -13,6 +13,7 @@ use riscv::register::{
     mcause::{Exception, Interrupt, Mcause, Trap},
     mhartid,
     mstatus::{self, MPP},
+    satp,
 };
 
 use crate::{
@@ -100,6 +101,40 @@ impl Hart {
                 }
                 self.scheduler.begin();
                 frame.pc += 4;
+            }
+            Trap::Exception(Exception::IllegalInstruction) => {
+                let bad_address = frame.pc;
+                let instruction = unsafe { (bad_address as *const u32).read() };
+                // sfence.vma
+                match instruction {
+                    0x12000073 => unsafe {
+                        // sfence.vma instruction
+                        // discard rs2 // let _rs2_asid = ((ins >> 20) & 0b1_1111) as u8;
+                        // let rs1_vaddr = ((ins >> 15) & 0b1_1111) as u8;
+                        // read paging mode from satp (sptbr)
+                        let satp_bits = satp::read().bits();
+                        // bit 63..20 is not readable and writeable on K210, so we cannot
+                        // decide paging type from the 'satp' register.
+                        // that also means that the asid function is not usable on this chip.
+                        // we have to fix it to be Sv39.
+                        let ppn = satp_bits & 0xFFF_FFFF_FFFF; // 43..0 PPN WARL
+                                                               // write to sptbr
+                        let sptbr_bits = ppn & 0x3F_FFFF_FFFF;
+                        asm!("csrw 0x180, {}", in(reg) sptbr_bits); // write to sptbr
+                                                                    // enable paging (in v1.9.1, mstatus: | 28..24 VM[4:0] WARL | ... )
+                        let mut mstatus_bits: usize;
+                        asm!("csrr {}, mstatus", out(reg) mstatus_bits);
+                        mstatus_bits &= !0x1F00_0000;
+                        mstatus_bits |= 9 << 24;
+                        asm!("csrw mstatus, {}", in(reg) mstatus_bits);
+                        // emulate with sfence.vm (declared in privileged spec v1.9)
+                        asm!(".word 0x10400073"); // sfence.vm x0
+                                                  // ::"r"(rs1_vaddr)
+                    },
+                    _ => {
+                        panic!("Illegal instruction hart#{}: frame=\n{}", self.id, frame);
+                    }
+                }
             }
             Trap::Exception(Exception::MachineEnvCall) => {
                 let call_id = frame.x[17];
