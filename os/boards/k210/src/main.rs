@@ -41,7 +41,7 @@ pub fn board_init() {
         // ie auto reset to zero
         SIFIVE_UARTHS.add(4).write(0);
         // div = CLOCK / BAUD_RATE - 1, 3472 for 115200
-        SIFIVE_UARTHS.add(6).write(3472);
+        SIFIVE_UARTHS.add(6).write(3471);
     }
 }
 
@@ -57,8 +57,9 @@ struct UartHs;
 impl Write for UartHs {
     fn write_str(&mut self, s: &str) -> Result {
         unsafe {
-            for i in s.chars() {
-                SIFIVE_UARTHS.add(0).write_volatile(i as u32);
+            for c in s.chars() {
+                while SIFIVE_UARTHS.add(0).read_volatile() & 0x80000000 > 0 {}
+                SIFIVE_UARTHS.add(0).write_volatile(c as u32 & 0b1111_1111);
             }
             Ok(())
         }
