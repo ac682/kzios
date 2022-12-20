@@ -7,7 +7,7 @@ use alloc::{borrow::ToOwned, string::String};
 use elf_rs::{Elf, ElfFile, ElfMachine, ElfType, ProgramHeaderFlags, ProgramType};
 use erhino_shared::{
     mem::Address,
-    proc::{ExitCode, Pid, ProcessPermission, ProcessState, Signal},
+    proc::{ExitCode, Pid, ProcessPermission, ProcessState},
 };
 use flagset::FlagSet;
 
@@ -95,7 +95,7 @@ impl Process {
             }
         };
         if self.permissions.contains(perm_into) {
-            let mut proc = Self {
+            let proc = Self {
                 name: self.name.clone(),
                 pid: 0,
                 parent: self.pid,

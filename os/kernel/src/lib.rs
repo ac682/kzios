@@ -10,15 +10,11 @@
 
 use core::arch::global_asm;
 
-use alloc::string::ToString;
+
 use board::BoardInfo;
-use erhino_shared::proc::ProcessPermission;
+
 pub use erhino_shared::*;
-use proc::{
-    mem::{layout::MemoryLayout, unit::MemoryUnit},
-    sch::{smooth::SmoothScheduler, Scheduler},
-    Process,
-};
+
 
 use crate::{external::_hart_num, krn_call::krn_enter_user_space, mm::frame};
 

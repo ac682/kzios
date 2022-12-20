@@ -13,6 +13,7 @@ use erhino_kernel::{
     proc::Process,
     sync::{hart::HartLock, InteriorLock},
 };
+use riscv::register::{pmpaddr0, pmpaddr1, pmpaddr2, pmpaddr3, pmpcfg0, Permission, Range};
 use tar_no_std::TarArchiveRef;
 
 pub use erhino_kernel::prelude::*;
@@ -77,6 +78,11 @@ pub fn board_init() {
     ns16550a_init();
 }
 
+#[export_name = "board_hart_awake"]
+pub fn board_hart_awake() {
+    set_pmp();
+}
+
 pub struct NS16550a;
 
 impl Write for NS16550a {
@@ -99,5 +105,27 @@ fn ns16550a_init() {
         NS16550A.add(2).write_volatile(0b1);
         // 关闭中断
         NS16550A.add(1).write_volatile(0b0);
+    }
+}
+
+extern "C" {
+    fn _memory_start();
+    fn _kernel_end();
+    fn _memory_end();
+}
+
+fn set_pmp() {
+    unsafe {
+        pmpcfg0::set_pmp(0, Range::OFF, Permission::NONE, false);
+        pmpaddr0::write(0);
+        // 外设
+        pmpcfg0::set_pmp(1, Range::TOR, Permission::RW, false);
+        pmpaddr1::write(_memory_start as usize >> 2);
+        // 内核
+        pmpcfg0::set_pmp(2, Range::TOR, Permission::RWX, false);
+        pmpaddr2::write(_kernel_end as usize >> 2);
+        // RAM
+        pmpcfg0::set_pmp(3, Range::TOR, Permission::RWX, false);
+        pmpaddr3::write(_memory_end as usize >> 2);
     }
 }

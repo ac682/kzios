@@ -4,7 +4,7 @@ use alloc::{boxed::Box, rc::Rc, vec::Vec};
 use erhino_shared::{
     call::{KernelCall, SystemCall},
     mem::{Address, PageNumber},
-    proc::{ExitCode, Pid, ProcessInfo, ProcessPermission, ProcessState, Signal},
+    proc::{ExitCode, Pid, ProcessInfo, ProcessPermission},
     service::Sid,
 };
 use flagset::FlagSet;
@@ -25,9 +25,13 @@ use crate::{
         Process,
     },
     sync::hart::HartReadWriteLock,
-    timer::hart::HartTimer,
+    timer::{hart::HartTimer, Timer},
     trap::TrapFrame,
 };
+
+extern "Rust"{
+    fn board_hart_awake();
+}
 
 // 内核陷入帧只会在第一个陷入时用到，之后大概率用不到，所以第一个陷入帧应该分配在一个垃圾堆(_memory_end - 4096)或者栈上
 // 这么做是为了避免多核同时写入，但寻思了一下，根本不会去读，那多核写就写呗，写坏了也无所谓
@@ -76,11 +80,17 @@ impl Hart {
         match cause.cause() {
             Trap::Interrupt(Interrupt::MachineTimer) => {
                 self.timer.borrow_mut().tick();
+                let start = self.timer.borrow_mut().get_cycles();
                 self.scheduler.tick();
+                let end = self.timer.borrow_mut().get_cycles();
+                let cost = end - start;
+                let all = self.timer.borrow_mut().ms_to_cycles(50);
+                println!("Scheduling cost {}/{}({}%) cycles", cost,all, 100 as f64 * cost as f64 / all as f64);
             }
             Trap::Interrupt(Interrupt::MachineSoft) => {
                 peripheral::aclint().clear_msip(self.id);
                 unsafe {
+                    board_hart_awake();
                     mstatus::set_mpp(MPP::User);
                 }
                 self.scheduler.begin();
@@ -195,7 +205,7 @@ impl Hart {
                         SystemCall::Fork => {
                             let perm = frame.x[11];
                             if perm <= u8::MAX as u64 {
-                                if let Ok(perm_into) = FlagSet::<ProcessPermission>::new(perm as u8)
+                                if let Ok(_perm_into) = FlagSet::<ProcessPermission>::new(perm as u8)
                                 {
                                     // if let Some((current, thread)) = self.scheduler.current() {
                                     //     if let Ok(mut fork) = current.fork(perm_into) {
@@ -358,9 +368,9 @@ impl Hart {
                             // }
                         }
                         SystemCall::ServiceRegister => {
-                            let sid = frame.x[10] as Sid;
+                            let _sid = frame.x[10] as Sid;
                             if let Some((current, _)) = self.scheduler.current() {
-                                let pid = current.pid;
+                                let _pid = current.pid;
                                 if current.has_permission(ProcessPermission::Service) {
                                     todo!("service_register sys call");
                                 } else {
@@ -394,7 +404,7 @@ impl Hart {
                 frame
             ),
         }
-        self.context = if let Some((proc, thread)) = self.scheduler.current() {
+        self.context = if let Some((_proc, thread)) = self.scheduler.current() {
             //println!("Pid: {} Tid: {}", proc.pid, thread.tid);
             &mut thread.frame as *mut TrapFrame
         } else {
@@ -405,6 +415,8 @@ impl Hart {
 
 pub fn init(info: &BoardInfo) {
     unsafe {
+        // self awake
+        board_hart_awake();
         for i in 0..(_hart_num as usize) {
             HARTS.push(Hart::new(i, info.base_frequency))
         }

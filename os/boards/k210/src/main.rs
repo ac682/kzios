@@ -28,8 +28,6 @@ fn main() {
     kernel_main();
 }
 
-// 设备被我换成了 NS16550a 方便写代码
-
 #[export_name = "board_write"]
 pub fn uart_write(args: Arguments) {
     UartHs.write_fmt(args).unwrap();
@@ -45,6 +43,11 @@ pub fn board_init() {
         // div = CLOCK / BAUD_RATE - 1, 3472 for 115200
         SIFIVE_UARTHS.add(6).write(3472);
     }
+}
+
+#[export_name = "board_hart_awake"]
+pub fn board_hart_awake() {
+    // k210 has no pmp
 }
 
 const SIFIVE_UARTHS: *mut u32 = 0x38000000 as *mut u32;

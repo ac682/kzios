@@ -7,7 +7,6 @@ use alloc::{rc::Rc, string::ToString, sync::Arc};
 use erhino_shared::proc::{ExitCode, Pid, ProcessState, Tid};
 
 use crate::{
-    println,
     proc::{thread::Thread, Process},
     sync::{
         hart::{HartLock, HartReadWriteLock},
@@ -150,6 +149,7 @@ impl<T: Timer> SmoothScheduler<T> {
             if table_generation >= proc_generation {
                 if proc_generation >= thread_generation {
                     // do nothing but put them back
+                    thread.generation.fetch_add(1, Ordering::Relaxed);
                     self.current = Some((current_process, current_thread));
                     return (proc.proc.pid, thread.thread.tid);
                 } else {
@@ -293,15 +293,15 @@ impl<T: Timer> Scheduler for SmoothScheduler<T> {
         }
     }
 
-    fn find(&mut self, pid: Pid) -> Option<&Process> {
+    fn find(&mut self, _pid: Pid) -> Option<&Process> {
         todo!()
     }
 
-    fn find_mut(&mut self, pid: Pid) -> Option<&mut Process> {
+    fn find_mut(&mut self, _pid: Pid) -> Option<&mut Process> {
         todo!()
     }
 
-    fn finish(&mut self, code: ExitCode) {
+    fn finish(&mut self, _code: ExitCode) {
         // 这里是错的，线程死亡应该有自己的方式，这里应该标记进程的状态
         if let Some((_, thread_ptr)) = self.current.as_ref() {
             let thread = unsafe { &mut *thread_ptr.get() };
@@ -309,7 +309,7 @@ impl<T: Timer> Scheduler for SmoothScheduler<T> {
         }
     }
 
-    fn kill(&mut self, pid: Pid) {
+    fn kill(&mut self, _pid: Pid) {
         todo!()
     }
 }
