@@ -48,6 +48,7 @@ impl Timer for HartTimer {
     fn get_cycles(&self) -> usize {
         peripheral::aclint().get_time() as usize
     }
+
     fn ms_to_cycles(&self, time: usize) -> usize {
         self.freq * time / 1000
     }

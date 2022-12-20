@@ -29,7 +29,7 @@ use crate::{
     trap::TrapFrame,
 };
 
-extern "Rust"{
+extern "Rust" {
     fn board_hart_awake();
 }
 
@@ -85,7 +85,12 @@ impl Hart {
                 let end = self.timer.borrow_mut().get_cycles();
                 let cost = end - start;
                 let all = self.timer.borrow_mut().ms_to_cycles(50);
-                println!("Scheduling cost {}/{}({}%) cycles", cost,all, 100 as f64 * cost as f64 / all as f64);
+                println!(
+                    "Scheduling cost {}/{}({}%) cycles",
+                    cost,
+                    all,
+                    100 as f64 * cost as f64 / all as f64
+                );
             }
             Trap::Interrupt(Interrupt::MachineSoft) => {
                 peripheral::aclint().clear_msip(self.id);
@@ -205,7 +210,8 @@ impl Hart {
                         SystemCall::Fork => {
                             let perm = frame.x[11];
                             if perm <= u8::MAX as u64 {
-                                if let Ok(_perm_into) = FlagSet::<ProcessPermission>::new(perm as u8)
+                                if let Ok(_perm_into) =
+                                    FlagSet::<ProcessPermission>::new(perm as u8)
                                 {
                                     // if let Some((current, thread)) = self.scheduler.current() {
                                     //     if let Ok(mut fork) = current.fork(perm_into) {
@@ -433,6 +439,6 @@ pub fn of_hart(hartid: usize) -> &'static mut Hart {
     unsafe { &mut HARTS[hartid] }
 }
 
-pub fn add_flat_process(proc: Process) {
+pub fn add_process(proc: Process) {
     my_hart().scheduler.add(proc);
 }

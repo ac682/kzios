@@ -21,7 +21,7 @@ fn main() {
 
     println!("K210 with 6MB ram only supports loading one elf(with debug symbols).");
     if let Ok(process) = Process::from_elf(FIRST, "adam") {
-        add_flat_process(process);
+        add_process(process);
     } else {
         panic!("process from artifacts has wrong format");
     }

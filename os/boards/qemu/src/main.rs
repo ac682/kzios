@@ -59,7 +59,7 @@ fn main() {
         .filter(|f| f.filename().starts_with("system") || f.filename().starts_with("user"));
     for system in systems {
         let process = Process::from_elf(system.data(), system.filename().as_str()).unwrap();
-        add_flat_process(process);
+        add_process(process);
     }
     kernel_main();
 }
