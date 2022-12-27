@@ -1,2 +1,0 @@
-[workspace]
-members = ["rinlib", "systems/init", "systems/fs", "systems/ts", "systems/dr","drivers/sifive_uart"]

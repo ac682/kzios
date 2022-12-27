@@ -1,7 +1,0 @@
-[workspace]
-members = [
-    "kernel",
-    "boards/qemu",
-    "boards/k210",
-    "boards/mq_r"
-]

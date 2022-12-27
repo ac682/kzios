@@ -1,6 +1,0 @@
-[build]
-target = "rinlib/riscv64-unknown-erhino-elf.json"
-
-[unstable]
-build-std = ["core", "alloc"]
-build-std-features = ["compiler-builtins-mem"]
