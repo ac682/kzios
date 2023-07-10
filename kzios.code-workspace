@@ -95,7 +95,8 @@
 		],
 		"cSpell.language": "en,lorem",
 		"rust-analyzer.imports.prefer.no.std": true,
-	},"tasks": {
+	},
+	"tasks": {
 		"version": "2.0.0",
 		"tasks": [
 			{

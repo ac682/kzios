@@ -1,6 +1,6 @@
 use core::{alloc::Layout, panic::PanicInfo};
 
-use buddy_system_allocator::{LockedHeapWithRescue, Heap};
+use buddy_system_allocator::{Heap, LockedHeapWithRescue};
 use erhino_shared::proc::Termination;
 
 const HEAP_ORDER: usize = 64;
@@ -12,8 +12,10 @@ static mut HEAP_ALLOCATOR: LockedHeapWithRescue<HEAP_ORDER> =
 const LOGO: &str = include_str!("../logo.txt");
 
 #[lang = "start"]
-fn rust_start<T: Termination + 'static>(main: fn() -> T, _hartid: usize) -> isize {
-    panic!()
+fn rust_start<T: Termination + 'static>(main: fn() -> T, _hartid: usize, _dtb_addr: usize) -> isize {
+    // hart initialization should be done before rust_start
+    // only #0 can go kernel initialization 
+    panic!();
 }
 
 #[panic_handler]
@@ -32,7 +34,7 @@ fn handle_panic(info: &PanicInfo) -> ! {
     // } else {
     //     println!("no information available.");
     // }
-    panic!()
+    loop {}
 }
 
 #[alloc_error_handler]
