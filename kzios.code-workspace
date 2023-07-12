@@ -95,6 +95,9 @@
 		],
 		"cSpell.language": "en,lorem",
 		"rust-analyzer.imports.prefer.no.std": true,
+		"rust-analyzer.linkedProjects": [
+			"./os/Cargo.toml"
+		],
 	},
 	"tasks": {
 		"version": "2.0.0",

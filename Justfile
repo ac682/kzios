@@ -26,6 +26,7 @@ QEMU_LAUNCH := "qemu-system-riscv64 -smp cores="+QEMU_CORES+" -M "+QEMU_MEMORY+"
 
 alias b := build
 alias c := clean
+alias d := debug
 alias r := run
 
 clean:
