@@ -1,9 +1,12 @@
-use core::{alloc::Layout, panic::PanicInfo, hint::spin_loop};
+use core::{alloc::Layout, hint::spin_loop, panic::PanicInfo};
 
 use buddy_system_allocator::{Heap, LockedHeapWithRescue};
 use erhino_shared::proc::Termination;
 
-use crate::external::{_heap_start, _stack_start};
+use crate::{
+    external::{_heap_start, _stack_start},
+    sbi,
+};
 
 const HEAP_ORDER: usize = 64;
 
@@ -14,16 +17,25 @@ static mut HEAP_ALLOCATOR: LockedHeapWithRescue<HEAP_ORDER> =
 const LOGO: &str = include_str!("../logo.txt");
 
 #[lang = "start"]
-fn rust_start<T: Termination + 'static>(
-    main: fn() -> T,
-    _hartid: usize,
-    _dtb_addr: usize,
-) -> isize {
+fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize, _dtb_addr: usize) -> isize {
     // 流程：汇编中为进入 RUST 做准备，设置栈
     // rust_start 中 #0 核心做 RUST 环境准备，配置 alloc，其他核心等待
-    // 
-
+    //
+    if hartid == 0 {
+        // rust initialization
+        unsafe {
+            let heap_start = _heap_start as usize;
+            let size = _stack_start as usize - heap_start;
+            HEAP_ALLOCATOR.lock().init(heap_start, size);
+        }
+        rust_env_init();
+        main();
+    }
     panic!();
+}
+
+fn rust_env_init() {
+    sbi::init();
 }
 
 #[panic_handler]

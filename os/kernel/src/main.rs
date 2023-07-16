@@ -9,9 +9,12 @@ mod rt;
 mod hart;
 mod external;
 mod trap;
+mod sbi;
+mod console;
 
 global_asm!(include_str!("assembly.asm"));
 
 fn main() {
-    //println!("Hello");
+    // only #0 goes here to kernel init
+    println!("Hello, {}", "World");
 }

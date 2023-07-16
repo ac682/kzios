@@ -67,14 +67,3 @@ pub enum SystemCall {
     /// Discard and tell kernel to reuse a range of virtual addresses mapped before
     Free = 0x52,
 }
-
-/// Predefined kernel calls (aka trap calls)
-///
-/// Not available for userspace
-/// Using service call instead
-#[repr(usize)]
-#[derive(FromPrimitive, ToPrimitive)]
-pub enum KernelCall {
-    /// Enter user mode and begin scheduling
-    EnterUserSpace = 0x0,
-}

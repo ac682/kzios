@@ -98,6 +98,7 @@
 		"rust-analyzer.linkedProjects": [
 			"./os/Cargo.toml"
 		],
+		"rust-analyzer.showUnlinkedFileNotification": false,
 	},
 	"tasks": {
 		"version": "2.0.0",
@@ -141,7 +142,7 @@
 				"request": "launch",
 				"preLaunchTask": "launch_gdb_server",
 				"miDebuggerServerAddress": "localhost:1234",
-				"program": "artifacts/initfs/system_fs",
+				"program": "artifacts/erhino_kernel",
 				"cwd": "${workspaceFolder}",
 				"launchCompleteCommand": "exec-continue",
 				"environment": [],

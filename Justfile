@@ -22,7 +22,7 @@ OS_BIN := OS_ELF+".bin"
 # qemu
 QEMU_CORES := "4"
 QEMU_MEMORY := "128m"
-QEMU_LAUNCH := "qemu-system-riscv64 -smp cores="+QEMU_CORES+" -M "+QEMU_MEMORY+" -machine virt -nographic -bios \""+BOOTLOADER+"\" -device loader,file=\""+OS_ELF+"\",addr=0x80200000"
+QEMU_LAUNCH := "qemu-system-riscv64 -smp cores="+QEMU_CORES+" -M "+QEMU_MEMORY+" -machine virt -nographic -bios \""+BOOTLOADER+"\" -kernel \""+OS_ELF+"\""
 
 alias b := build
 alias c := clean
@@ -50,9 +50,9 @@ build_kernel: artifact_dir
 build: build_kernel
     @echo -e "\033[0;32mBuild Successfully!\033[0m"
 
-run_qemu: build
+run_qemu +EXPOSE="": build
     @echo -e "\033[0;36mQEMU: Simulating\033[0m"
-    @{{QEMU_LAUNCH}}
+    @{{QEMU_LAUNCH}} {{EXPOSE}}
 
 run:
     @just PLATFORM={{PLATFORM}} MODE={{MODE}} run_{{PLATFORM}}
