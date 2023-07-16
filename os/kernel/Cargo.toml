@@ -15,3 +15,4 @@ num-traits = { version = "0.2", default-features = false}
 num-derive = "0.4"
 # will colored supports no_std? https://github.com/colored-rs/colored/issues/140
 # colored = "2.0"
+dtb_parser = "0.1"

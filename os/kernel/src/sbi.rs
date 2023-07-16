@@ -120,6 +120,10 @@ pub fn probe_extension(eid: SbiExtension) -> SbiResult {
     sbi_call(SbiExtension::Base, 3, eid as usize, 0, 0)
 }
 
+pub fn send_ipi(hart_mask: usize) -> SbiResult{
+    sbi_call(SbiExtension::InterProcessInterrupt, 0x0, hart_mask, 0, 0)
+}
+
 pub fn init() {
     if let Ok(res) = probe_extension(SbiExtension::DebugConsole) {
         unsafe {

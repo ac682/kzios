@@ -2,6 +2,8 @@ use core::fmt::Display;
 
 use riscv::register::scause::Scause;
 
+use crate::println;
+
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct TrapFrame {
@@ -14,24 +16,24 @@ pub struct TrapFrame {
     // 520-527
     pub pc: u64,
     // 528
-    pub id: u8
+    pub hartid: u64
 }
 
 impl TrapFrame {
-    pub const fn new(hartid: u8) -> Self {
+    pub const fn new(hartid: usize) -> Self {
         Self {
             x: [0; 32],
             f: [0; 32],
             satp: 0,
             pc: 0,
-            id: hartid
+            hartid: hartid as u64
         }
     }
 }
 
 impl Display for TrapFrame {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        writeln!(f, "Hart {} Registers", self.id)?;
+        writeln!(f, "Hart {} Registers", self.hartid)?;
         writeln!(f, "ra={:#016x}, sp={:#016x}", self.x[1], self.x[2])?;
         writeln!(f, "gp={:#016x}, tp={:#016x}", self.x[3], self.x[4])?;
         writeln!(f, "fp={:#016x}", self.x[8])?;
@@ -44,10 +46,12 @@ impl Display for TrapFrame {
 }
 
 #[no_mangle]
-unsafe fn handle_trap(cause: Scause, val: usize) -> &'static TrapFrame {
+unsafe fn handle_trap(frame: &TrapFrame,cause: Scause, val: usize) -> &'static TrapFrame {
     // 这里要区分 trap，from supervisor 和 from user 区别对待
     // let hart = of_hart(hartid);
     // hart.handle_trap_from_user(cause, val);
     // hart.context()
+    let hartid = frame.hartid;
+    println!("Hart ${} enters trap: {}", hartid, frame);
     todo!()
 }
