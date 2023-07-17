@@ -1,6 +1,12 @@
 use core::fmt::{Arguments, Error, Result, Write};
 
-use crate::sbi;
+use crate::{
+    sbi,
+    sync::{spin::SpinLock, DataLock, InteriorLock},
+};
+
+static mut LOCKED_CONSOLE: DataLock<Console, SpinLock> = DataLock::new(Console, SpinLock::new());
+static mut CONSOLE_LOCK: SpinLock = SpinLock::new();
 
 #[macro_export]
 macro_rules! print
@@ -40,12 +46,15 @@ impl Write for Console {
             for i in s.chars() {
                 sbi::legacy_console_putchar(i as u8);
             }
-
             Ok(())
         }
     }
 }
 
 pub fn console_write(args: Arguments) {
-    Console.write_fmt(args).unwrap();
+    unsafe {
+        CONSOLE_LOCK.lock();
+        Console.write_fmt(args).unwrap();
+        CONSOLE_LOCK.unlock();
+    }
 }

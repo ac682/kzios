@@ -23,9 +23,6 @@ static mut ENV_INIT: bool = false;
 
 #[lang = "start"]
 fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize, dtb_addr: usize) -> isize {
-    // 流程：汇编中为进入 RUST 做准备，设置栈
-    // rust_start 中 #0 核心做 RUST 环境准备，配置 alloc，其他核心等待
-    //
     if hartid == 0 {
         // rust initialization
         unsafe {
@@ -84,16 +81,19 @@ fn early_init(dtb_addr: usize) {
 
 #[panic_handler]
 fn handle_panic(info: &PanicInfo) -> ! {
-    print!("\x1b[0;31mKernel panicking at #{}: \x1b[0m", "UKN");
     if let Some(location) = info.location() {
         println!(
-            "file {}, {}: {}",
+            "\x1b[0;31mKernel panicking at #{}: \x1b[0m\nfile {}, {}: {}",
+            hart::context().hartid,
             location.file(),
             location.line(),
             info.message().unwrap()
         );
     } else {
-        println!("no information available.");
+        println!(
+            "\x1b[0;31mKernel panicking at #{}: no information available.",
+            hart::context().hartid
+        );
     }
     loop {}
 }
@@ -104,16 +104,16 @@ pub fn handle_alloc_error(layout: Layout) -> ! {
 }
 
 fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
-    // let single = 4096;
-    // let mut size = 1;
-    // unsafe {
-    //     while layout.size() > size * single {
-    //         size *= 2;
-    //     }
-    //     if let Some(frame_start) = frame_alloc(size) {
-    //         heap.add_to_heap(frame_start * single, (frame_start + size) * single);
-    //     } else {
-    //         panic!("kernel memory request but ran out of memory");
-    //     }
-    // }
+    let single = 4096;
+    let mut size = 1;
+    unsafe {
+        // while layout.size() > size * single {
+        //     size *= 2;
+        // }
+        // if let Some(frame_start) = frame_alloc(size) {
+        //     heap.add_to_heap(frame_start * single, (frame_start + size) * single);
+        // } else {
+        //     panic!("kernel memory request but ran out of memory");
+        // }
+    }
 }

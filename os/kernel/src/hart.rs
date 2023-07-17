@@ -1,5 +1,5 @@
 use alloc::vec::Vec;
-use riscv::register::{sscratch, sstatus, stvec, utvec::TrapMode};
+use riscv::register::{sscratch, sstatus, stvec, utvec::TrapMode, mcause::Trap};
 
 use crate::{
     external::{_hart_num, _trap_vector},
@@ -66,4 +66,20 @@ pub fn send_ipi(hart_mask: usize) -> bool {
     } else {
         false
     }
+}
+
+pub fn context() -> &'static mut TrapFrame{
+    let addr = sscratch::read();
+    unsafe{
+        let pointer = addr as *mut TrapFrame;
+        if let Some(frame) = pointer.as_mut(){
+            frame
+        }else{
+            panic!("context register sscratch {:#x} contains no TrapFrame", addr);
+        }
+    }
+}
+
+pub fn hart_of_context() -> &'static mut Hart{
+    of_hart(context().hartid as usize)
 }

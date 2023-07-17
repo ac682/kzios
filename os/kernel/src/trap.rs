@@ -33,7 +33,7 @@ impl TrapFrame {
 
 impl Display for TrapFrame {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        writeln!(f, "Hart {} Registers", self.hartid)?;
+        writeln!(f, "Hart #{} Registers", self.hartid)?;
         writeln!(f, "ra={:#016x}, sp={:#016x}", self.x[1], self.x[2])?;
         writeln!(f, "gp={:#016x}, tp={:#016x}", self.x[3], self.x[4])?;
         writeln!(f, "fp={:#016x}", self.x[8])?;
@@ -52,6 +52,6 @@ unsafe fn handle_trap(frame: &TrapFrame,cause: Scause, val: usize) -> &'static T
     // hart.handle_trap_from_user(cause, val);
     // hart.context()
     let hartid = frame.hartid;
-    println!("Hart ${} enters trap: {}", hartid, frame);
+    println!("\x1b[0;33mHart #{} enters trap: \x1b[0m{}", hartid, frame);
     todo!()
 }

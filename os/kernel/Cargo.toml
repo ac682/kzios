@@ -16,3 +16,5 @@ num-derive = "0.4"
 # will colored supports no_std? https://github.com/colored-rs/colored/issues/140
 # colored = "2.0"
 dtb_parser = "0.1"
+spin = "0.9"
+hashbrown = "0.14"
