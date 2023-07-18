@@ -2,15 +2,15 @@ rom: Memory.MappedMemory @ {
         sysbus 0x80000000;
         sysbus 0x0
     }
-    size: 0x2000000
+    size: 0x800000
 
-cpu1: CPU.RiscV64 @ sysbus
+cpu0: CPU.RiscV64 @ sysbus
     cpuType: "rv64imacfd"
     privilegeArchitecture: PrivilegeArchitecture.Priv1_09
     timeProvider: clint
     hartId: 0
 
-cpu2: CPU.RiscV64 @ sysbus
+cpu1: CPU.RiscV64 @ sysbus
     cpuType: "rv64imafdc"
     privilegeArchitecture: PrivilegeArchitecture.Priv1_09
     timeProvider: clint

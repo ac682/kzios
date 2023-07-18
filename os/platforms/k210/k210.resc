@@ -20,7 +20,10 @@ uart WriteDoubleWord 0x8 0x1
 
 macro reset
 """
-    sysbus LoadBinary @artifacts/erhino_kernel.bin_merged.bin 0x80000000
+    sysbus LoadBinary @artifacts/erhino_kernel_merged.bin 0x80000000
+    cpu0 PC 0x80000000
+    cpu1 PC 0x80000000
+    start
 """
 
 runMacro $reset

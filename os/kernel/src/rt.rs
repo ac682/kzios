@@ -1,8 +1,4 @@
-use core::{
-    alloc::Layout,
-    hint::spin_loop,
-    panic::{self, PanicInfo},
-};
+use core::{alloc::Layout, hint::spin_loop, panic::PanicInfo};
 
 use buddy_system_allocator::{Heap, LockedHeapWithRescue};
 use dtb_parser::{prop::PropertyValue, traits::HasNamedProperty};
@@ -10,7 +6,9 @@ use erhino_shared::proc::Termination;
 
 use crate::{
     external::{_heap_start, _park, _stack_start},
-    hart, print, println, sbi, mm::frame::frame_alloc,
+    hart,
+    mm::frame::frame_alloc,
+    print, println, sbi,
 };
 
 const HEAP_ORDER: usize = 64;
@@ -37,7 +35,7 @@ fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize, dtb_addr
         hart::of_hart(hartid).init();
         println!("Hart #{} init completed, go kernel init", hartid);
         main();
-        //hart::send_ipi_all();
+        hart::send_ipi_all();
     } else {
         unsafe {
             while !ENV_INIT {
@@ -56,7 +54,6 @@ fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize, dtb_addr
 fn early_init(dtb_addr: usize) {
     sbi::init();
     let tree = dtb_parser::device_tree::DeviceTree::from_address(dtb_addr).unwrap();
-    // println!("{}", tree);
     let mut clint_base: usize;
     let mut timebase_frequency: usize = 0;
     for node in tree.into_iter() {
@@ -67,6 +64,7 @@ fn early_init(dtb_addr: usize) {
                 }
             }
         } else if node.name() == "cpus" {
+            // qemu 的设备树 cpu
             if let Some(prop) = node.find_prop("timebase-frequency") {
                 if let PropertyValue::Integer(frequency) = prop.value() {
                     timebase_frequency = *frequency as usize;
@@ -75,8 +73,22 @@ fn early_init(dtb_addr: usize) {
         }
     }
     if timebase_frequency == 0 {
-        panic!("device tree provides no cpu information");
+        for node in tree.into_iter() {
+            // k210 的设备树 cpu
+            if node.name().starts_with("cpu@0") {
+                if let Some(prop) = node.find_prop("clock-frequency") {
+                    if let PropertyValue::Integer(frequency) = prop.value() {
+                        timebase_frequency = *frequency as usize;
+                        break;
+                    }
+                }
+            }
+        }
+        if timebase_frequency == 0 {
+            panic!("device tree provides no cpu information");
+        }
     }
+    // TODO: 获取 frequency 的流程应该更通用
     hart::init(timebase_frequency);
 }
 

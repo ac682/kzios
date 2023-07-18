@@ -1,7 +1,5 @@
 use alloc::vec::Vec;
 use riscv::register::{
-    mcause::Trap,
-    sip::{self, Sip},
     sscratch, sstatus, stvec,
     utvec::TrapMode,
 };
@@ -61,7 +59,7 @@ pub fn of_hart(id: usize) -> &'static mut Hart {
     }
 }
 
-pub fn init(freq: usize) {
+pub fn init(_freq: usize) {
     unsafe {
         for i in 0..(_hart_num as usize) {
             HARTS.push(Hart::new(i));

@@ -1,14 +1,12 @@
 use core::{
     fmt::{Arguments, Error, Result, Write},
-    hint::spin_loop,
-    panic,
 };
 
-use spin::Mutex;
+
 
 use crate::{
     sbi,
-    sync::{hart::HartLock, spin::SpinLock, DataLock, InteriorLock},
+    sync::{hart::HartLock, DataLock, InteriorLock},
 };
 
 static mut LOCKED_CONSOLE: DataLock<Console, HartLock> = DataLock::new(Console, HartLock::new());
@@ -44,8 +42,8 @@ impl Write for Console {
     fn write_str(&mut self, s: &str) -> Result {
         if sbi::is_debug_console_supported() {
             match sbi::debug_console_write(s) {
-                Ok(res) => Ok(()),
-                Err(err) => Err(Error::default()),
+                Ok(_res) => Ok(()),
+                Err(_err) => Err(Error::default()),
             }
         } else {
             for i in s.chars() {
@@ -60,7 +58,8 @@ pub fn console_write(args: Arguments) {
     // SpinLock is causing deadlock while trap occurred
     // However HartLock is too expensive
     unsafe {
-        let mut console = LOCKED_CONSOLE.lock();
-        console.write_fmt(args).unwrap();
+        // let mut console = LOCKED_CONSOLE.lock();
+        // console.write_fmt(args).unwrap();
+        Console.write_fmt(args).unwrap();
     }
 }

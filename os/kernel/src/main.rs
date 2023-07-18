@@ -2,7 +2,7 @@
 #![feature(lang_items, alloc_error_handler, panic_info_message, is_some_and)]
 use core::arch::global_asm;
 
-use external::_hart_num;
+
 
 use crate::mm::frame;
 

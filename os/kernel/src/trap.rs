@@ -2,7 +2,7 @@ use core::fmt::Display;
 
 use riscv::register::scause::Scause;
 
-use crate::{println, sbi};
+use crate::println;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -46,7 +46,7 @@ impl Display for TrapFrame {
 }
 
 #[no_mangle]
-unsafe fn handle_trap(frame: &TrapFrame, cause: Scause, val: usize) -> &'static TrapFrame {
+unsafe fn handle_trap(frame: &TrapFrame, cause: Scause, _val: usize) -> &'static TrapFrame {
     // 这里要区分 trap，from supervisor 和 from user 区别对待
     // let hart = of_hart(hartid);
     // hart.handle_trap_from_user(cause, val);
