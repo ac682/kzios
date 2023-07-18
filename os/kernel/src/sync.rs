@@ -3,6 +3,7 @@ use core::ops::{Deref, DerefMut};
 use ::spin::Once;
 
 pub mod spin;
+pub mod hart;
 
 pub trait InteriorLock {
     fn is_locked(&self) -> bool;

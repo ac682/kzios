@@ -40,9 +40,9 @@ SECTIONS
         PROVIDE(_kernel_end = .);
     } > RAM
 
-
-
-
-
+    /DISCARD/ : {
+        *(.eh_frame)
+    }
+    
     PROVIDE(_memory_end = ORIGIN(RAM) + LENGTH(RAM));
 }

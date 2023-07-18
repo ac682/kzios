@@ -84,11 +84,11 @@ _trap_vector:
     csrr	a1, scause
     csrr    a2, stval
     # locate sp
-    ld      t0, 528(a0)
-    la      sp, _stack_size
-    mul     t0, t0, sp
-    la      sp, _kernel_end
-    sub     sp, sp, t0
+    # ld      t0, 528(a0)
+    # la      sp, _stack_size
+    # mul     t0, t0, sp
+    # la      sp, _kernel_end
+    # sub     sp, sp, t0
     # get in
     call    handle_trap
     csrw    sscratch, a0

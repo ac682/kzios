@@ -26,7 +26,7 @@ impl InteriorLock for SpinLock {
     fn lock(&self) {
         while self
             .lock
-            .swap(true, Ordering::Acquire)
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err()
         {
             while self.is_locked() {
                 spin_loop()
@@ -35,7 +35,7 @@ impl InteriorLock for SpinLock {
     }
 
     fn unlock(&self) {
-        self.lock.store(false, Ordering::Release);
+        self.lock.store(false, Ordering::Relaxed);
     }
 
     fn try_lock(&self) -> bool {

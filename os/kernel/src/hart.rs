@@ -1,5 +1,10 @@
 use alloc::vec::Vec;
-use riscv::register::{sscratch, sstatus, stvec, utvec::TrapMode, mcause::Trap};
+use riscv::register::{
+    mcause::Trap,
+    sip::{self, Sip},
+    sscratch, sstatus, stvec,
+    utvec::TrapMode,
+};
 
 use crate::{
     external::{_hart_num, _trap_vector},
@@ -34,11 +39,15 @@ impl Hart {
     }
 
     pub fn send_ipi(&self) -> bool {
-        if let Ok(_) = sbi::send_ipi(1 << self.id) {
+        if let Ok(_) = sbi::send_ipi(1, self.id as isize) {
             true
         } else {
             false
         }
+    }
+
+    pub fn clear_ipi(&self) {
+        // clear sip.SSIP => sip[1] = 0
     }
 }
 
@@ -61,25 +70,36 @@ pub fn init(freq: usize) {
 }
 
 pub fn send_ipi(hart_mask: usize) -> bool {
-    if let Ok(_) = sbi::send_ipi(hart_mask) {
+    if let Ok(_) = sbi::send_ipi(hart_mask, 0) {
         true
     } else {
         false
     }
 }
 
-pub fn context() -> &'static mut TrapFrame{
+pub fn send_ipi_all() -> bool {
+    if let Ok(_) = sbi::send_ipi(0, -1) {
+        true
+    } else {
+        false
+    }
+}
+
+pub fn context() -> &'static mut TrapFrame {
     let addr = sscratch::read();
-    unsafe{
+    unsafe {
         let pointer = addr as *mut TrapFrame;
-        if let Some(frame) = pointer.as_mut(){
+        if let Some(frame) = pointer.as_mut() {
             frame
-        }else{
-            panic!("context register sscratch {:#x} contains no TrapFrame", addr);
+        } else {
+            panic!(
+                "context register sscratch {:#x} contains no TrapFrame",
+                addr
+            );
         }
     }
 }
 
-pub fn hart_of_context() -> &'static mut Hart{
+pub fn hart_of_context() -> &'static mut Hart {
     of_hart(context().hartid as usize)
 }

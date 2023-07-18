@@ -2,7 +2,7 @@ use core::fmt::Display;
 
 use riscv::register::scause::Scause;
 
-use crate::println;
+use crate::{println, sbi};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -16,7 +16,7 @@ pub struct TrapFrame {
     // 520-527
     pub pc: u64,
     // 528
-    pub hartid: u64
+    pub hartid: u64,
 }
 
 impl TrapFrame {
@@ -26,7 +26,7 @@ impl TrapFrame {
             f: [0; 32],
             satp: 0,
             pc: 0,
-            hartid: hartid as u64
+            hartid: hartid as u64,
         }
     }
 }
@@ -41,17 +41,22 @@ impl Display for TrapFrame {
         writeln!(f, "a2={:#016x}, a3={:#016x}", self.x[12], self.x[13])?;
         writeln!(f, "a4={:#016x}, a5={:#016x}", self.x[14], self.x[15])?;
         writeln!(f, "a6={:#016x}, a7={:#016x}", self.x[16], self.x[17])?;
-        writeln!(f, "mepc={:#x}, satp={:#x}", self.pc, self.satp)
+        writeln!(f, "sepc={:#x}, satp={:#x}", self.pc, self.satp)
     }
 }
 
 #[no_mangle]
-unsafe fn handle_trap(frame: &TrapFrame,cause: Scause, val: usize) -> &'static TrapFrame {
+unsafe fn handle_trap(frame: &TrapFrame, cause: Scause, val: usize) -> &'static TrapFrame {
     // 这里要区分 trap，from supervisor 和 from user 区别对待
     // let hart = of_hart(hartid);
     // hart.handle_trap_from_user(cause, val);
     // hart.context()
     let hartid = frame.hartid;
-    println!("\x1b[0;33mHart #{} enters trap: \x1b[0m{}", hartid, frame);
-    todo!()
+    println!(
+        "\x1b[0;33mHart #{} enters trap {:#x}: \x1b[0m{}",
+        hartid,
+        cause.bits(),
+        frame
+    );
+    todo!("trap handler not available")
 }

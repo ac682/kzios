@@ -11,11 +11,11 @@ extern crate alloc;
 mod console;
 mod external;
 mod hart;
+mod mm;
 mod rt;
 mod sbi;
-mod trap;
-mod mm;
 mod sync;
+mod trap;
 
 global_asm!(include_str!("assembly.asm"));
 
@@ -26,10 +26,4 @@ fn main() {
     println!("{}", LOGO);
     frame::init();
     // device
-    awaken_other_harts();
-}
-
-fn awaken_other_harts() {
-    // by sending ipi to all harts except #0
-    hart::send_ipi((1 << _hart_num as usize) - 2);
 }

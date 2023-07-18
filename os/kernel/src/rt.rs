@@ -10,7 +10,7 @@ use erhino_shared::proc::Termination;
 
 use crate::{
     external::{_heap_start, _park, _stack_start},
-    hart, print, println, sbi,
+    hart, print, println, sbi, mm::frame::frame_alloc,
 };
 
 const HEAP_ORDER: usize = 64;
@@ -31,12 +31,13 @@ fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize, dtb_addr
             HEAP_ALLOCATOR.lock().init(heap_start, size);
         }
         early_init(dtb_addr);
-        hart::of_hart(hartid).init();
-        println!("Hart #{} init completed, going to kernel init", hartid);
         unsafe {
             ENV_INIT = true;
         }
+        hart::of_hart(hartid).init();
+        println!("Hart #{} init completed, go kernel init", hartid);
         main();
+        //hart::send_ipi_all();
     } else {
         unsafe {
             while !ENV_INIT {
@@ -107,13 +108,13 @@ fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
     let single = 4096;
     let mut size = 1;
     unsafe {
-        // while layout.size() > size * single {
-        //     size *= 2;
-        // }
-        // if let Some(frame_start) = frame_alloc(size) {
-        //     heap.add_to_heap(frame_start * single, (frame_start + size) * single);
-        // } else {
-        //     panic!("kernel memory request but ran out of memory");
-        // }
+        while layout.size() > size * single {
+            size *= 2;
+        }
+        if let Some(frame_start) = frame_alloc(size) {
+            heap.add_to_heap(frame_start * single, (frame_start + size) * single);
+        } else {
+            panic!("kernel memory request but ran out of memory");
+        }
     }
 }

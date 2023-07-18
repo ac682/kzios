@@ -1,12 +1,17 @@
-use core::fmt::{Arguments, Error, Result, Write};
+use core::{
+    fmt::{Arguments, Error, Result, Write},
+    hint::spin_loop,
+    panic,
+};
+
+use spin::Mutex;
 
 use crate::{
     sbi,
-    sync::{spin::SpinLock, DataLock, InteriorLock},
+    sync::{hart::HartLock, spin::SpinLock, DataLock, InteriorLock},
 };
 
-static mut LOCKED_CONSOLE: DataLock<Console, SpinLock> = DataLock::new(Console, SpinLock::new());
-static mut CONSOLE_LOCK: SpinLock = SpinLock::new();
+static mut LOCKED_CONSOLE: DataLock<Console, HartLock> = DataLock::new(Console, HartLock::new());
 
 #[macro_export]
 macro_rules! print
@@ -52,9 +57,10 @@ impl Write for Console {
 }
 
 pub fn console_write(args: Arguments) {
+    // SpinLock is causing deadlock while trap occurred
+    // However HartLock is too expensive
     unsafe {
-        CONSOLE_LOCK.lock();
-        Console.write_fmt(args).unwrap();
-        CONSOLE_LOCK.unlock();
+        let mut console = LOCKED_CONSOLE.lock();
+        console.write_fmt(args).unwrap();
     }
 }
