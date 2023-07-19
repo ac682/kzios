@@ -1,12 +1,12 @@
+use core::arch::asm;
+
 use alloc::vec::Vec;
-use riscv::register::{
-    sscratch, sstatus, stvec,
-    utvec::TrapMode,
-};
+use riscv::register::{sscratch, sstatus, stvec, utvec::TrapMode};
 
 use crate::{
     external::{_hart_num, _trap_vector},
     sbi,
+    sync::hart,
     trap::TrapFrame,
 };
 
@@ -49,16 +49,6 @@ impl Hart {
     }
 }
 
-pub fn of_hart(id: usize) -> &'static mut Hart {
-    unsafe {
-        if id < HARTS.len() {
-            &mut HARTS[id as usize]
-        } else {
-            panic!("reference to hart id {} is out of bound", id);
-        }
-    }
-}
-
 pub fn init(_freq: usize) {
     unsafe {
         for i in 0..(_hart_num as usize) {
@@ -83,21 +73,24 @@ pub fn send_ipi_all() -> bool {
     }
 }
 
-pub fn context() -> &'static mut TrapFrame {
-    let addr = sscratch::read();
+pub fn get_hart(id: usize) -> &'static mut Hart {
     unsafe {
-        let pointer = addr as *mut TrapFrame;
-        if let Some(frame) = pointer.as_mut() {
-            frame
+        if id < HARTS.len() {
+            &mut HARTS[id as usize]
         } else {
-            panic!(
-                "context register sscratch {:#x} contains no TrapFrame",
-                addr
-            );
+            panic!("reference to hart id {} is out of bound", id);
         }
     }
 }
 
-pub fn hart_of_context() -> &'static mut Hart {
-    of_hart(context().hartid as usize)
+pub fn hartid() -> usize {
+    let mut tp: usize = 0;
+    unsafe {
+        asm!("mv {tmp}, tp", tmp = out(reg) tp);
+    }
+    tp
+}
+
+pub fn this_hart() -> &'static mut Hart {
+    get_hart(hartid())
 }

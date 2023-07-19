@@ -7,10 +7,6 @@ use crate::hart;
 
 use super::{InteriorLock, InteriorReadWriteLock};
 
-fn hartid() -> u64 {
-    hart::context().hartid
-}
-
 pub struct HartLock {
     lock: AtomicU64,
 }
@@ -25,13 +21,13 @@ impl HartLock {
 
 impl InteriorLock for HartLock {
     fn is_locked(&self) -> bool {
-        let hartid = hartid();
+        let hartid = hart::hartid() as u64;
         let locked = self.lock.load(Ordering::Relaxed);
         locked != u64::MAX && locked != hartid
     }
 
     fn lock(&self) {
-        let hartid = hartid();
+        let hartid = hart::hartid() as u64;
         while self
             .lock
             .compare_exchange(u64::MAX, hartid, Ordering::Acquire, Ordering::Relaxed)
@@ -48,7 +44,7 @@ impl InteriorLock for HartLock {
     }
 
     fn try_lock(&self) -> bool {
-        let hartid = hartid();
+        let hartid = hart::hartid() as u64;
         match self
             .lock
             .compare_exchange(u64::MAX, hartid, Ordering::Acquire, Ordering::Relaxed)
@@ -73,13 +69,13 @@ impl HartReadWriteLock {
 
 impl InteriorLock for HartReadWriteLock {
     fn is_locked(&self) -> bool {
-        let hartid = hartid();
+        let hartid = hart::hartid() as u64;
         let locked = self.lock.load(Ordering::Relaxed);
         locked != u64::MAX && locked != hartid
     }
 
     fn lock(&self) {
-        let hartid = hartid();
+        let hartid = hart::hartid() as u64;
         loop {
             let locked = self.lock.load(Ordering::Relaxed);
             if locked == u64::MAX || locked == hartid {
@@ -91,7 +87,7 @@ impl InteriorLock for HartReadWriteLock {
     }
 
     fn try_lock(&self) -> bool {
-        let hartid = hartid();
+        let hartid = hart::hartid() as u64;
         let locked = self.lock.load(Ordering::Relaxed);
         locked == u64::MAX || locked == hartid
     }
@@ -103,7 +99,7 @@ impl InteriorLock for HartReadWriteLock {
 
 impl InteriorReadWriteLock for HartReadWriteLock {
     fn lock_mut(&self) {
-        let hartid = hartid();
+        let hartid = hart::hartid() as u64;
         while self
             .lock
             .compare_exchange(u64::MAX, hartid, Ordering::Acquire, Ordering::Relaxed)
@@ -116,7 +112,7 @@ impl InteriorReadWriteLock for HartReadWriteLock {
     }
 
     fn try_lock_mut(&self) -> bool {
-        let hartid = hartid();
+        let hartid = hart::hartid() as u64;
         match self
             .lock
             .compare_exchange(u64::MAX, hartid, Ordering::Acquire, Ordering::Relaxed)

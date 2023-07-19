@@ -1,8 +1,4 @@
-use core::{
-    fmt::{Arguments, Error, Result, Write},
-};
-
-
+use core::fmt::{Arguments, Error, Result, Write};
 
 use crate::{
     sbi,
@@ -58,8 +54,7 @@ pub fn console_write(args: Arguments) {
     // SpinLock is causing deadlock while trap occurred
     // However HartLock is too expensive
     unsafe {
-        // let mut console = LOCKED_CONSOLE.lock();
-        // console.write_fmt(args).unwrap();
-        Console.write_fmt(args).unwrap();
+        let mut console = LOCKED_CONSOLE.lock();
+        console.write_fmt(args).unwrap();
     }
 }

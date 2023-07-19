@@ -21,6 +21,8 @@
 _start:
 # 0 hart stack pointer & interrupt setup
 0:
+    # store hartid in tp resgister (done by SBI but here just to make sure)
+    mv      tp, a0 
     # locate stack pointer
     mv      t0, a0
     la      sp, _stack_size
@@ -79,16 +81,20 @@ _trap_vector:
 
     csrw	sscratch, t5
 
-    # 进入 rust 环境
+    # go prepare for rust trap handler
     csrr    a0, sscratch
     csrr	a1, scause
     csrr    a2, stval
-    # locate sp
-    # ld      t0, 528(a0)
-    # la      sp, _stack_size
-    # mul     t0, t0, sp
-    # la      sp, _kernel_end
-    # sub     sp, sp, t0
+    # hartid should be restored from 528(TrapFrame) to tp
+    ld      tp, 528(a0)
+    mv      t0, tp
+    la      sp, _stack_size
+    mul     t0, t0, sp
+    la      sp, _kernel_end
+    sub     sp, sp, t0
     # get in
     call    handle_trap
+    # save hartid to the next arranged TrapFrame(pointed to by a0) before enter user space to make sure tp in kernel mode is always referring to the hartid
+    ld      tp, 528(a0)
     csrw    sscratch, a0
+    # TODO: do registers restore and sret

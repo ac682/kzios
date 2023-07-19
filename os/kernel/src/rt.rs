@@ -32,7 +32,7 @@ fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize, dtb_addr
         unsafe {
             ENV_INIT = true;
         }
-        hart::of_hart(hartid).init();
+        hart::get_hart(hartid).init();
         println!("Hart #{} init completed, go kernel init", hartid);
         main();
         hart::send_ipi_all();
@@ -42,7 +42,7 @@ fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize, dtb_addr
                 spin_loop();
             }
         }
-        hart::of_hart(hartid).init();
+        hart::get_hart(hartid).init();
         println!("Hart #{} init completed, sleeping", hartid);
         unsafe {
             _park();
@@ -97,7 +97,7 @@ fn handle_panic(info: &PanicInfo) -> ! {
     if let Some(location) = info.location() {
         println!(
             "\x1b[0;31mKernel panicking at #{}: \x1b[0m\nfile {}, {}: {}",
-            hart::context().hartid,
+            hart::hartid(),
             location.file(),
             location.line(),
             info.message().unwrap()
@@ -105,7 +105,7 @@ fn handle_panic(info: &PanicInfo) -> ! {
     } else {
         println!(
             "\x1b[0;31mKernel panicking at #{}: no information available.",
-            hart::context().hartid
+            hart::hartid()
         );
     }
     loop {}

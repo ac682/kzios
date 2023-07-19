@@ -16,6 +16,7 @@ pub struct TrapFrame {
     // 520-527
     pub pc: u64,
     // 528
+    /// Currently the hart it running in. Guaranteed by trap_vector in assembly.asm
     pub hartid: u64,
 }
 
@@ -33,7 +34,7 @@ impl TrapFrame {
 
 impl Display for TrapFrame {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        writeln!(f, "Hart #{} Registers", self.hartid)?;
+        writeln!(f, "Registers with hartid={}", self.hartid)?;
         writeln!(f, "ra={:#016x}, sp={:#016x}", self.x[1], self.x[2])?;
         writeln!(f, "gp={:#016x}, tp={:#016x}", self.x[3], self.x[4])?;
         writeln!(f, "fp={:#016x}", self.x[8])?;
@@ -53,7 +54,7 @@ unsafe fn handle_trap(frame: &TrapFrame, cause: Scause, _val: usize) -> &'static
     // hart.context()
     let hartid = frame.hartid;
     println!(
-        "\x1b[0;33mHart #{} enters trap {:#x}: \x1b[0m{}",
+        "\x1b[0;33mHart #{} enters trap {:#x}: \x1b[0m\n{}",
         hartid,
         cause.bits(),
         frame
