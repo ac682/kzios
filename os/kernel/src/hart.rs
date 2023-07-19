@@ -6,7 +6,6 @@ use riscv::register::{sscratch, sstatus, stvec, utvec::TrapMode};
 use crate::{
     external::{_hart_num, _trap_vector},
     sbi,
-    sync::hart,
     trap::TrapFrame,
 };
 

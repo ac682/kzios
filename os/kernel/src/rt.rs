@@ -7,7 +7,7 @@ use erhino_shared::proc::Termination;
 use crate::{
     external::{_heap_start, _park, _stack_start},
     hart,
-    mm::frame::frame_alloc,
+    mm::frame::{frame_alloc, self},
     print, println, sbi,
 };
 
@@ -53,6 +53,7 @@ fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize, dtb_addr
 
 fn early_init(dtb_addr: usize) {
     sbi::init();
+    frame::init();
     let tree = dtb_parser::device_tree::DeviceTree::from_address(dtb_addr).unwrap();
     let mut clint_base: usize;
     let mut timebase_frequency: usize = 0;

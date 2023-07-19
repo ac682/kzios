@@ -1,8 +1,7 @@
 #![no_std]
 #![feature(lang_items, alloc_error_handler, panic_info_message, is_some_and)]
+
 use core::arch::global_asm;
-
-
 
 use crate::mm::frame;
 
@@ -24,6 +23,5 @@ const LOGO: &str = include_str!("../logo.txt");
 fn main() {
     // only #0 goes here to kernel init(AKA boot)
     println!("{}", LOGO);
-    frame::init();
     // device
 }

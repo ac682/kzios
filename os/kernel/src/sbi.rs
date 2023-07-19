@@ -95,7 +95,6 @@ fn sbi_call(eid: SbiExtension, fid: usize, arg0: usize, arg1: usize, arg2: usize
     }
 }
 
-#[deprecated]
 pub fn legacy_console_putchar(char: u8) {
     legacy_call(SbiExtension::LegacyConsolePutchar, char as usize, 0, 0);
 }

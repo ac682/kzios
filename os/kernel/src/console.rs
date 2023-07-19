@@ -2,7 +2,7 @@ use core::fmt::{Arguments, Error, Result, Write};
 
 use crate::{
     sbi,
-    sync::{hart::HartLock, DataLock, InteriorLock},
+    sync::{hart::HartLock, DataLock},
 };
 
 static mut LOCKED_CONSOLE: DataLock<Console, HartLock> = DataLock::new(Console, HartLock::new());
