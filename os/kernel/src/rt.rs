@@ -7,7 +7,7 @@ use erhino_shared::proc::Termination;
 use crate::{
     external::{_heap_start, _park, _stack_start},
     hart,
-    mm::frame::{frame_alloc, self},
+    mm::frame::{alloc, self},
     print, println, sbi,
 };
 
@@ -124,7 +124,7 @@ fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
         while layout.size() > size * single {
             size *= 2;
         }
-        if let Some(frame_start) = frame_alloc(size) {
+        if let Some(frame_start) = alloc(size) {
             heap.add_to_heap(frame_start * single, (frame_start + size) * single);
         } else {
             panic!("kernel memory request but ran out of memory");

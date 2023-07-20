@@ -3,7 +3,7 @@
 
 use core::arch::global_asm;
 
-use crate::mm::frame;
+use crate::mm::{frame, page, unit};
 
 extern crate alloc;
 
@@ -23,5 +23,6 @@ const LOGO: &str = include_str!("../logo.txt");
 fn main() {
     // only #0 goes here to kernel init(AKA boot)
     println!("{}", LOGO);
+    unit::init();
     // device
 }
