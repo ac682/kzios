@@ -1,12 +1,12 @@
+use core::alloc::Layout;
+
 use buddy_system_allocator::LockedFrameAllocator;
 use erhino_shared::mem::PageNumber;
 use spin::Once;
 
 use crate::external::{_kernel_end, _memory_end};
 
-const FRAME_ORDER: usize = 64;
-
-static mut FRAME_ALLOCATOR: Once<LockedFrameAllocator<FRAME_ORDER>> = Once::new();
+static mut FRAME_ALLOCATOR: Once<LockedFrameAllocator> = Once::new();
 
 pub struct FrameTracker {
     number: PageNumber,
@@ -21,11 +21,11 @@ impl FrameTracker {
         }
     }
 
-    pub fn len(&self) -> usize{
+    pub fn len(&self) -> usize {
         self.count
     }
 
-    pub fn start(&self) -> PageNumber{
+    pub fn start(&self) -> PageNumber {
         self.number
     }
 }
@@ -40,12 +40,9 @@ pub fn init() {
     let free_start: usize = _kernel_end as usize >> 12;
     let free_end = _memory_end as usize >> 12;
     unsafe {
-        FRAME_ALLOCATOR.call_once(|| LockedFrameAllocator::new());
-        FRAME_ALLOCATOR
-            .get_mut()
-            .unwrap()
-            .lock()
-            .add_frame(free_start, free_end);
+        let allocator = LockedFrameAllocator::new();
+        allocator.lock().add_frame(free_start, free_end);
+        FRAME_ALLOCATOR.call_once(|| allocator);
     }
 }
 

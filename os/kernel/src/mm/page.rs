@@ -15,16 +15,6 @@ use super::frame::{self, FrameTracker};
 
 const PAGE_SIZE: usize = 4096;
 
-pub enum PageTableError {
-    EntryNotFound,
-    EntryDefinitionConflicts,
-    EntryUndefined,
-    EntryNotLeaf,
-    EntryNotBranch,
-    WrongLevel,
-    PhysicalPageNumberUnaligned,
-}
-
 flags! {
     pub enum PageTableEntryFlag: u64{
         Valid = 0b1,
@@ -43,32 +33,30 @@ flags! {
 }
 
 pub struct PageTable<E: PageTableEntry + Sized + 'static> {
-    location: FrameTracker,
+    location: PageNumber,
     entries: &'static mut [E],
-    subs: Vec<PageTable<E>>,
-    managed: HashMap<PageNumber, FrameTracker>,
+    branches: HashMap<usize, PageTable<E>>,
+    // PageTable 必定 managed， leaves 有可能 managed
+    managed: HashMap<usize, FrameTracker>,
 }
 
 impl<E: PageTableEntry + Sized + 'static> PageTable<E> {
-    pub fn from(tracker: FrameTracker) -> Self {
+    pub fn from(location: PageNumber) -> Self {
         let entries = unsafe {
-            core::slice::from_raw_parts_mut(
-                (tracker.start() << 12) as *mut E,
-                PAGE_SIZE / size_of::<E>(),
-            )
-            .try_into()
-            .unwrap()
+            core::slice::from_raw_parts_mut((location << 12) as *mut E, PAGE_SIZE / size_of::<E>())
+                .try_into()
+                .unwrap()
         };
         Self {
-            location: tracker,
+            location,
             entries: entries,
-            subs: Vec::new(),
+            branches: HashMap::new(),
             managed: HashMap::new(),
         }
     }
 
     pub fn page_number(&self) -> PageNumber {
-        self.location.start()
+        self.location
     }
 
     fn entry(&self, index: usize) -> &E {
@@ -83,33 +71,62 @@ impl<E: PageTableEntry + Sized + 'static> PageTable<E> {
         self.entry(index).is_valid()
     }
 
-    // check is_entry_crated before invocation
-    pub fn create_entry<F: Into<FlagSet<PageTableEntryFlag>>>(
+    pub fn create_leaf<F: Into<FlagSet<PageTableEntryFlag>>>(
+        &mut self,
+        index: usize,
+        ppn: PageNumber,
+        flags: F,
+    ) -> Option<&mut E> {
+        let mut entry = self.entry_mut(index);
+        if !entry.is_valid() {
+            entry.set(ppn, flags);
+            Some(entry)
+        } else {
+            None
+        }
+    }
+
+    pub fn create_managed_leaf<F: Into<FlagSet<PageTableEntryFlag>>>(
         &mut self,
         index: usize,
         tracker: FrameTracker,
         flags: F,
-    ) {
-        let number = tracker.start();
+    ) -> Option<FrameTracker> {
         let entry = self.entry_mut(index);
-        entry.set(number, flags);
-        self.managed.insert(number, tracker);
-    }
-
-    // // check is_entry_crated before invocation, too
-    pub fn delete_entry(&mut self, index: usize) {
-        let entry = self.entry_mut(index);
-        let number = entry.physical_page_number();
-        entry.clear_flag(PageTableEntryFlag::Valid);
-        self.managed.remove(&number);
-    }
-
-    pub fn get_entry(&mut self, index: usize) -> Option<&mut E> {
-        let entry = self.entry_mut(index);
-        if entry.is_valid() {
-            Some(entry)
-        } else {
+        let ppn = tracker.start();
+        if !entry.is_valid() {
+            entry.set(ppn, flags);
+            self.managed.insert(index, tracker);
             None
+        } else {
+            Some(tracker)
+        }
+    }
+
+    pub fn ensure_table_created<F: Fn() -> Option<FrameTracker>>(
+        &mut self,
+        index: usize,
+        frame_factory: F,
+    ) -> Option<&mut PageTable<E>> {
+        let entry = self.entry_mut(index);
+
+        if entry.is_valid() {
+            if !entry.is_leaf() {
+                self.branches.get_mut(&index)
+            } else {
+                None
+            }
+        } else {
+            if let Some(frame) = frame_factory() {
+                let ppn = frame.start();
+                entry.set(ppn, PageTableEntryFlag::Valid);
+                let table = PageTable::<E>::from(ppn);
+                self.managed.insert(index, frame);
+                self.branches.insert(index, table);
+                self.branches.get_mut(&index)
+            } else {
+                None
+            }
         }
     }
 
