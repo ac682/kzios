@@ -5,10 +5,11 @@
     panic_info_message,
     is_some_and
 )]
+#![allow(unused)]
 
 use core::arch::global_asm;
 
-use crate::mm::{frame, page, unit};
+use crate::mm::{unit};
 
 extern crate alloc;
 

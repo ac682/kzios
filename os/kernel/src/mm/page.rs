@@ -3,15 +3,14 @@
 use core::{
     fmt::Debug,
     mem::size_of,
-    ops::{BitAnd, BitOr},
 };
 
-use alloc::vec::Vec;
+
 use erhino_shared::mem::PageNumber;
 use flagset::{flags, FlagSet};
 use hashbrown::HashMap;
 
-use super::frame::{self, FrameTracker};
+use super::frame::{FrameTracker};
 
 const PAGE_SIZE: usize = 4096;
 
@@ -77,7 +76,7 @@ impl<E: PageTableEntry + Sized + 'static> PageTable<E> {
         ppn: PageNumber,
         flags: F,
     ) -> Option<&mut E> {
-        let mut entry = self.entry_mut(index);
+        let entry = self.entry_mut(index);
         if !entry.is_valid() {
             entry.set(ppn, flags);
             Some(entry)
@@ -86,6 +85,7 @@ impl<E: PageTableEntry + Sized + 'static> PageTable<E> {
         }
     }
 
+    // return frame tracker if failed
     pub fn create_managed_leaf<F: Into<FlagSet<PageTableEntryFlag>>>(
         &mut self,
         index: usize,
