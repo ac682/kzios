@@ -1,21 +1,19 @@
 // Sv39 only
 
-use core::{
-    fmt::Debug,
-    mem::size_of,
-};
+use core::{cell::UnsafeCell, fmt::Debug, mem::size_of};
 
-
+use alloc::boxed::Box;
 use erhino_shared::mem::PageNumber;
 use flagset::{flags, FlagSet};
 use hashbrown::HashMap;
+use num_traits::Pow;
 
-use super::frame::{FrameTracker};
+use super::frame::FrameTracker;
 
 const PAGE_SIZE: usize = 4096;
 
 flags! {
-    pub enum PageTableEntryFlag: u64{
+    pub enum PageFlag: u64{
         Valid = 0b1,
         Readable = 0b10,
         Writeable = 0b100,
@@ -27,7 +25,7 @@ flags! {
         Cow = 0b1_0000_0000,
         CowWriteable = 0b10_0000_0000,
 
-        UserReadWrite = (PageTableEntryFlag::User | PageTableEntryFlag::Readable | PageTableEntryFlag::Writeable | PageTableEntryFlag::Valid).bits(),
+        UserReadWrite = (PageFlag::User | PageFlag::Readable | PageFlag::Writeable | PageFlag::Valid).bits(),
     }
 }
 
@@ -70,7 +68,7 @@ impl<E: PageTableEntry + Sized + 'static> PageTable<E> {
         self.entry(index).is_valid()
     }
 
-    pub fn create_leaf<F: Into<FlagSet<PageTableEntryFlag>>>(
+    pub fn create_leaf<F: Into<FlagSet<PageFlag>>>(
         &mut self,
         index: usize,
         ppn: PageNumber,
@@ -86,7 +84,7 @@ impl<E: PageTableEntry + Sized + 'static> PageTable<E> {
     }
 
     // return frame tracker if failed
-    pub fn create_managed_leaf<F: Into<FlagSet<PageTableEntryFlag>>>(
+    pub fn create_managed_leaf<F: Into<FlagSet<PageFlag>>>(
         &mut self,
         index: usize,
         tracker: FrameTracker,
@@ -100,6 +98,15 @@ impl<E: PageTableEntry + Sized + 'static> PageTable<E> {
             None
         } else {
             Some(tracker)
+        }
+    }
+
+    pub fn get_table(&self, index: usize) -> Option<&PageTable<E>> {
+        let entry = self.entry(index);
+        if entry.is_valid() && !entry.is_leaf() {
+            self.branches.get(&index)
+        } else {
+            None
         }
     }
 
@@ -119,7 +126,7 @@ impl<E: PageTableEntry + Sized + 'static> PageTable<E> {
         } else {
             if let Some(frame) = frame_factory() {
                 let ppn = frame.start();
-                entry.set(ppn, PageTableEntryFlag::Valid);
+                entry.set(ppn, PageFlag::Valid);
                 let table = PageTable::<E>::from(ppn);
                 self.managed.insert(index, frame);
                 self.branches.insert(index, table);
@@ -141,12 +148,12 @@ pub trait PageTableEntry {
     const SIZE: usize;
     fn is_leaf(&self) -> bool;
     fn is_valid(&self) -> bool;
-    fn has_flag(&self, flag: PageTableEntryFlag) -> bool;
-    fn set_flag(&mut self, flag: PageTableEntryFlag);
-    fn clear_flag(&mut self, flag: PageTableEntryFlag);
-    fn flags(&self) -> FlagSet<PageTableEntryFlag>;
+    fn has_flag(&self, flag: PageFlag) -> bool;
+    fn set_flag(&mut self, flag: PageFlag);
+    fn clear_flag(&mut self, flag: PageFlag);
+    fn flags(&self) -> FlagSet<PageFlag>;
     fn physical_page_number(&self) -> PageNumber;
-    fn set<F: Into<FlagSet<PageTableEntryFlag>>>(&mut self, ppn: PageNumber, flags: F);
+    fn set<F: Into<FlagSet<PageFlag>>>(&mut self, ppn: PageNumber, flags: F);
 }
 
 pub struct PageTableEntryPrimitive<
@@ -176,34 +183,34 @@ impl<
         self.0.into() & 0b1 != 0
     }
 
-    fn set_flag(&mut self, flag: PageTableEntryFlag) {
+    fn set_flag(&mut self, flag: PageFlag) {
         let pre = self.0.into() | flag as u64;
         if let Ok(p) = P::try_from(pre) {
             self.0 = p
         }
     }
 
-    fn clear_flag(&mut self, flag: PageTableEntryFlag) {
+    fn clear_flag(&mut self, flag: PageFlag) {
         let pre = self.0.into() & (!0u64 - flag as u64);
         if let Ok(p) = P::try_from(pre) {
             self.0 = p
         }
     }
 
-    fn has_flag(&self, flag: PageTableEntryFlag) -> bool {
+    fn has_flag(&self, flag: PageFlag) -> bool {
         self.0.into() & flag as u64 != 0
     }
 
-    fn flags(&self) -> FlagSet<PageTableEntryFlag> {
-        FlagSet::new(self.0.into() & FlagSet::<PageTableEntryFlag>::full().bits()).unwrap()
+    fn flags(&self) -> FlagSet<PageFlag> {
+        FlagSet::new(self.0.into() & FlagSet::<PageFlag>::full().bits()).unwrap()
     }
 
     fn physical_page_number(&self) -> PageNumber {
-        ((self.0.into() & (1 << Self::LENGTH - 1)) >> 10) as PageNumber
+        ((self.0.into() & ((1 << Self::LENGTH) - 1)) >> 10) as PageNumber
     }
 
-    fn set<F: Into<FlagSet<PageTableEntryFlag>>>(&mut self, ppn: PageNumber, flags: F) {
-        let pre = (ppn as u64) << 10 + flags.into().bits();
+    fn set<F: Into<FlagSet<PageFlag>>>(&mut self, ppn: PageNumber, flags: F) {
+        let pre = ((ppn as u64) << 10) + flags.into().bits();
         if let Ok(p) = P::try_from(pre) {
             self.0 = p
         }
@@ -214,3 +221,66 @@ pub type PageTableEntry32 = PageTableEntryPrimitive<u32, 34, 2, 10>;
 pub type PageTableEntry39 = PageTableEntryPrimitive<u64, 56, 3, 9>;
 pub type PageTableEntry48 = PageTableEntryPrimitive<u64, 56, 4, 9>;
 pub type PageTableEntry57 = PageTableEntryPrimitive<u64, 56, 5, 9>;
+
+impl<'a, E: PageTableEntry + Sized + 'static> IntoIterator for &'a PageTable<E> {
+    type Item = (PageNumber, PageNumber, usize, FlagSet<PageFlag>);
+
+    type IntoIter = PageTableIter<'a, E>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Self::IntoIter {
+            root: self,
+            level: E::DEPTH - 1,
+            inner: None,
+            base: 0,
+            current: 0,
+        }
+    }
+}
+
+pub struct PageTableIter<'a, E: PageTableEntry + Sized + 'static> {
+    root: &'a PageTable<E>,
+    level: usize,
+    inner: Option<Box<UnsafeCell<PageTableIter<'a, E>>>>,
+    base: usize,
+    current: usize,
+}
+
+impl<'a, E: PageTableEntry + Sized + 'static> Iterator for PageTableIter<'a, E> {
+    type Item = (PageNumber, PageNumber, usize, FlagSet<PageFlag>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(inner) = &mut self.inner {
+            let res = inner.get_mut().next();
+            if res.is_none() {
+                self.inner = None;
+            }
+            res
+        } else {
+            while self.current < self.root.entries.len() {
+                let index = self.current;
+                self.current += 1;
+                let entry = &self.root.entries[index];
+                if entry.is_valid() {
+                    let addr =
+                        self.base + (index * PageTable::<E>::entry_count().pow(self.level as u32));
+                    if entry.is_leaf() {
+                        return Some((
+                            addr,
+                            entry.physical_page_number(),
+                            PageTable::<E>::entry_count().pow(self.level as u32),
+                            entry.flags(),
+                        ));
+                    } else {
+                        let mut iter = self.root.get_table(index).unwrap().into_iter();
+                        iter.base = addr;
+                        iter.level = self.level - 1;
+                        self.inner = Some(Box::new(UnsafeCell::new(iter)));
+                        return self.next();
+                    }
+                }
+            }
+            None
+        }
+    }
+}

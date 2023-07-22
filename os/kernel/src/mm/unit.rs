@@ -1,12 +1,13 @@
+use core::fmt::Display;
 
 use erhino_shared::mem::PageNumber;
 use flagset::FlagSet;
 
-use crate::{external::_memory_end};
+use crate::{external::_memory_end, mm::page::PageTableEntry39, println};
 
 use super::{
     frame::{self, FrameTracker},
-    page::{PageTable, PageTableEntry, PageTableEntry32, PageTableEntryFlag},
+    page::{PageFlag, PageTable, PageTableEntry, PageTableEntry32},
 };
 
 #[derive(Debug)]
@@ -19,7 +20,7 @@ pub enum MemoryUnitError {
 
 pub struct MemoryUnit<E: PageTableEntry + Sized + 'static> {
     root: PageTable<E>,
-    where_put_the_frame_tracker_of_root_for_recycling: FrameTracker
+    where_the_frame_tracker_of_root_for_recycling_put: FrameTracker,
 }
 
 impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
@@ -27,13 +28,13 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         if let Some(frame) = frame::borrow(1) {
             Ok(Self {
                 root: PageTable::<E>::from(frame.start()),
-                where_put_the_frame_tracker_of_root_for_recycling: frame
+                where_the_frame_tracker_of_root_for_recycling_put: frame,
             })
         } else {
             Err(MemoryUnitError::RanOutOfFrames)
         }
     }
-    pub fn map<F: Into<FlagSet<PageTableEntryFlag>> + Copy>(
+    pub fn map<F: Into<FlagSet<PageFlag>> + Copy>(
         &mut self,
         vpn: PageNumber,
         ppn: PageNumber,
@@ -43,7 +44,7 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         Self::map_internal(&mut self.root, vpn, ppn, count, flags, E::DEPTH - 1)
     }
 
-    fn map_internal<F: Into<FlagSet<PageTableEntryFlag>> + Copy>(
+    fn map_internal<F: Into<FlagSet<PageFlag>> + Copy>(
         container: &mut PageTable<E>,
         vpn: PageNumber,
         ppn: PageNumber,
@@ -51,9 +52,15 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         flags: F,
         level: usize,
     ) -> Result<(), MemoryUnitError> {
+        // 标记 _:[N]:..
+        // _ container 所在位置。递归不考虑外围循环，_ 之前可能也存在级别，但当前前轮递归无法考虑故省略
+        // [N] 当前处理级别
+        // .. 省略但存在可能多个级别
         let start = Self::index_of_vpn(vpn, level);
+        let end = Self::index_of_vpn(vpn + count, level);
         if level == 0 {
-            // 只处理 count 中 0 级别的部分，未处理的应该再上轮递归（level = 1）中交给下次递归调用
+            // ..:_:[123]/..:_:[223]
+            // 不需要关心 count 是否存在溢出当前级别的问题。上级会处理好（且对 count 不溢出做检查和保证）。
             for i in 0..count {
                 if container.create_leaf(start + i, ppn + i, flags).is_none() {
                     return Err(MemoryUnitError::EntryOverwrite);
@@ -61,16 +68,75 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
             }
             Ok(())
         } else {
-            let end = Self::index_of_vpn(vpn + count, level);
-            let diff = end - start;
-            if diff > 1 {
-                // 0:123:2 0:125:12 D 0:2:12
-                // 2:45:12 2:47:24 D 0:2:12
-                // 要求 vpn 和 ppn 都对 level 对齐
-                todo!()
-            } else if diff == 1 {
-                todo!()
+            // ..:start:.. 到 ..:end:.. 可能跨越节也可能不跨越
+            if end - start > 0 {
+                // _:[2]:A:../_:[4]:B:..
+                // 这里只取出第一段 [2] 并处理，剩下的段转发给下次同轮递归的这一分支
+                if Self::is_page_number_aligned_to(vpn, level)
+                    && Self::is_page_number_aligned_to(ppn, level)
+                {
+                    // _:[2]:00/_:[4]:B
+                    // 超级页的包含的最小页数量
+                    let size = PageTable::<E>::entry_count().pow(level as u32);
+                    let mut remaining = count;
+                    let mut round = 0usize;
+                    let round_space = PageTable::<E>::entry_count() - start;
+                    // 第一段可以成为超级页
+                    while remaining >= size && round < round_space {
+                        if container
+                            .create_leaf(start + round, ppn + (round * size), flags)
+                            .is_none()
+                        {
+                            return Err(MemoryUnitError::EntryOverwrite);
+                        }
+                        remaining -= size;
+                        round += 1;
+                    }
+
+                    if remaining > 0 {
+                        Self::map_internal(
+                            container,
+                            vpn + (size * round),
+                            ppn + (size * round),
+                            remaining,
+                            flags,
+                            level,
+                        )
+                    } else {
+                        // 没有剩下！
+                        Ok(())
+                    }
+                } else {
+                    // _:[2]:3:../_:[4]:13:..
+                    // [2] 成为表转发给次级
+                    let size = PageTable::<E>::entry_count();
+                    let remaining =
+                        (size - Self::index_of_vpn(vpn, level - 1)) * size.pow(level as u32 - 1);
+                    if let Some(table) = container.ensure_table_created(start, || frame::borrow(1))
+                    {
+                        Self::map_internal(table, vpn, ppn, remaining, flags, level - 1)?;
+                        // vpn + remaining = _:[3]:00
+                        // 虽然末尾都是0但ppn依旧无法对齐，不是超级页，且接下来都不是超级页
+                        if count > remaining {
+                            Self::map_internal(
+                                table,
+                                vpn + remaining,
+                                ppn + remaining,
+                                count - remaining,
+                                flags,
+                                level,
+                            )
+                        } else {
+                            // 没有剩下！
+                            Ok(())
+                        }
+                    } else {
+                        Err(MemoryUnitError::RanOutOfFrames)
+                    }
+                }
             } else {
+                // _:[1]:123/_:[1]:223
+                // 对于不跨越的情况直接转发给 container[1].table() 处理
                 if let Some(table) = container.ensure_table_created(start, || frame::borrow(1)) {
                     Self::map_internal(table, vpn, ppn, count, flags, level - 1)
                 } else {
@@ -82,25 +148,68 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
 
     fn index_of_vpn(vpn: PageNumber, level: usize) -> usize {
         // 9|9|9
-        (vpn >> (level * E::SIZE)) & (1 << E::SIZE - 1)
+        (vpn >> (level * E::SIZE)) & ((1 << E::SIZE) - 1)
     }
 
     fn is_page_number_aligned_to(number: PageNumber, level: usize) -> bool {
-        number & (1 << (level * E::SIZE) - 1) == 0
+        number & ((1 << (level * E::SIZE)) - 1) == 0
+    }
+}
+
+impl<E: PageTableEntry + Sized + 'static> Display for MemoryUnit<E> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        writeln!(
+            f,
+            "Memory Mapping at {:#x}\n   Visual   ->  Physical  (   Length   )=0bDAGUXWRV",
+            self.where_the_frame_tracker_of_root_for_recycling_put
+                .start()
+                << 12
+        )?;
+        let mut start_v = 0usize;
+        let mut start_p = 0usize;
+        let mut aggregated = 0usize;
+        let mut bits = 0u64;
+        let mut dirty = false;
+        for (vpn, ppn, count, flags) in &self.root {
+            let flag_bits = flags.bits();
+            if start_v + aggregated == vpn && start_p + aggregated == ppn && flag_bits == bits {
+                aggregated += count;
+                dirty = true;
+            } else {
+                if (dirty) {
+                    writeln!(
+                        f,
+                        "{:#012x}->{:#012x}({:#012x})={:#010b}",
+                        start_v, start_p, aggregated, bits
+                    )?;
+                    dirty = false;
+                }
+                start_v = vpn;
+                start_p = ppn;
+                aggregated = count;
+                bits = flag_bits;
+                dirty = true;
+            }
+        }
+        if dirty {
+            writeln!(
+                f,
+                "{:#012x}->{:#012x}({:#012x})={:#010b}",
+                start_v, start_p, aggregated, bits
+            )?;
+        }
+        Ok(())
     }
 }
 
 pub fn init() {
-    let mut table = MemoryUnit::<PageTableEntry32>::new().unwrap();
-    table
-        .map(
-            0x0,
-            0x0,
-            _memory_end as usize >> 12,
-            PageTableEntryFlag::Valid
-                | PageTableEntryFlag::Writeable
-                | PageTableEntryFlag::Readable
-                | PageTableEntryFlag::Executable,
-        )
-        .unwrap();
+    let mut unit = MemoryUnit::<PageTableEntry39>::new().unwrap();
+    unit.map(
+        0x0,
+        0,
+        _memory_end as usize >> 12,
+        PageFlag::Valid | PageFlag::Writeable | PageFlag::Readable | PageFlag::Executable,
+    )
+    .unwrap();
+    println!("{}", unit);
 }

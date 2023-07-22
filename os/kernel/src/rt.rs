@@ -35,7 +35,7 @@ fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize, dtb_addr
         hart::get_hart(hartid).init();
         println!("Hart #{} init completed, go kernel init", hartid);
         main();
-        //hart::send_ipi_all();
+        // hart::send_ipi_all();
     } else {
         unsafe {
             while !ENV_INIT {
