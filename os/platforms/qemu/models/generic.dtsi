@@ -1,0 +1,54 @@
+/ {
+    #address-cells = <0x2>;
+    #size-cells = <0x2>;
+    compatible = "riscv,virt";
+    cpus {
+        #address-cells = <0x1>;
+        #size-cells = <0x0>;
+        timebase-frequency = <0x989680>;
+        cpu@0 {
+            device_type = "cpu";
+            phandle = <1>;
+            reg = <0x0>;
+            compatible = "riscv";
+            mmu-type = "riscv,sv39";
+        };
+        cpu@1 {
+            device_type = "cpu";
+            phandle = <2>;
+            reg = <0x1>;
+            compatible = "riscv";
+            mmu-type = "riscv,sv39";
+        };
+        cpu@2 {
+            device_type = "cpu";
+            phandle = <3>;
+            reg = <0x2>;
+            compatible = "riscv";
+            mmu-type = "riscv,sv39";
+        };
+        cpu@3 {
+            device_type = "cpu";
+            phandle = <4>;
+            reg = <0x3>;
+            compatible = "riscv";
+            mmu-type = "riscv,sv39";
+        };
+        cpu-map {
+            cluster0 {
+                core0 {
+                    cpu = <1>;
+                };
+                core1 {
+                    cpu = <2>;
+                };
+                core2 {
+                    cpu = <3>;
+                };
+                core3 {
+                    cpu = <4>;
+                };
+            };
+        };
+    };
+};

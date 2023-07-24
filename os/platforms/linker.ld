@@ -5,7 +5,8 @@ INCLUDE "../artifacts/memory.ld"
 
 SECTIONS
 {
-    PROVIDE(_memory_start = ORIGIN(RAM));
+    PROVIDE(_memory_start = ORIGIN(SBI));
+    PROVIDE(_kernel_start = ORIGIN(RAM));
     PROVIDE(_stack_size = STACK_SIZE);
     PROVIDE(_hart_num = HART_NUM);
 

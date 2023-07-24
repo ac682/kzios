@@ -95,6 +95,10 @@ fn sbi_call(eid: SbiExtension, fid: usize, arg0: usize, arg1: usize, arg2: usize
     }
 }
 
+pub fn legacy_set_timer(time: usize) {
+    legacy_call(SbiExtension::LegacySetTimer, time, 0, 0);
+}
+
 pub fn legacy_console_putchar(char: u8) {
     legacy_call(SbiExtension::LegacyConsolePutchar, char as usize, 0, 0);
 }
@@ -119,8 +123,14 @@ pub fn probe_extension(eid: SbiExtension) -> SbiResult {
     sbi_call(SbiExtension::Base, 3, eid as usize, 0, 0)
 }
 
-pub fn send_ipi(hart_mask: usize, hart_mask_base: isize) -> SbiResult{
-    sbi_call(SbiExtension::InterProcessInterrupt, 0x0, hart_mask, hart_mask_base as usize, 0)
+pub fn send_ipi(hart_mask: usize, hart_mask_base: isize) -> SbiResult {
+    sbi_call(
+        SbiExtension::InterProcessInterrupt,
+        0x0,
+        hart_mask,
+        hart_mask_base as usize,
+        0,
+    )
 }
 
 pub fn init() {

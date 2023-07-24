@@ -4,8 +4,10 @@ RELEASE := if MODE == "release" { "--release" } else { "" }
 
 # platform
 PLATFORM := "qemu"
+MODEL := "virt"
 SBI := "rustsbi"
 BOOTLOADER := invocation_directory()/"os/platforms"/PLATFORM/SBI+"-"+PLATFORM
+DTS := invocation_directory()/"os/platforms"/PLATFORM/"models"/MODEL+".dts"
 LINKER_SCRIPT := invocation_directory()/"os/platforms"/PLATFORM/"memory.ld"
 
 # compile
@@ -19,10 +21,12 @@ TARGET_DIR := invocation_directory()/"artifacts"
 KERNEL_ELF := TARGET_DIR/"erhino_kernel"
 KERNEL_BIN := KERNEL_ELF+".bin"
 
+DTB := TARGET_DIR/"device.dtb"
+
 # qemu
 QEMU_CORES := "4"
 QEMU_MEMORY := "128m"
-QEMU_LAUNCH := "qemu-system-riscv64 -smp cores="+QEMU_CORES+" -M "+QEMU_MEMORY+" -machine virt -nographic -bios \""+BOOTLOADER+"\" -kernel \""+KERNEL_ELF+"\""
+QEMU_LAUNCH := "qemu-system-riscv64 -smp cores="+QEMU_CORES+" -M "+QEMU_MEMORY+" -machine virt -nographic -bios \""+BOOTLOADER+"\" -kernel \""+KERNEL_ELF+"\" -dtb \""+DTB+"\""
 
 alias b := build_kernel
 alias c := clean
@@ -43,7 +47,11 @@ artifact_dir:
     	mkdir artifacts
     fi
 
-build_kernel: artifact_dir
+make_dtb: artifact_dir
+    @echo Selected DTS {{PLATFORM}}/{{MODEL}}.dts
+    @dtc -O dtb -o "{{DTB}}" "{{DTS}}"
+
+build_kernel: make_dtb
     @echo -e "\033[0;36mBuild: {{PLATFORM}}\033[0m"
     @cp "{{LINKER_SCRIPT}}" "{{TARGET_DIR}}"
     @cd os && RUSTFLAGS="{{RUSTFLAGS_OS}}" cargo build --bin erhino_kernel {{RELEASE}} -Z unstable-options --out-dir {{TARGET_DIR}}

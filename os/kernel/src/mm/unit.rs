@@ -2,13 +2,26 @@ use core::fmt::Display;
 
 use erhino_shared::mem::PageNumber;
 use flagset::FlagSet;
+use spin::Once;
 
-use crate::{external::_memory_end, mm::page::PageTableEntry39, println};
+use crate::{
+    external::{_kernel_start, _memory_end, _memory_start},
+    mm::page::PageTableEntry39,
+    println, trap::TrapFrame,
+};
 
 use super::{
     frame::{self, FrameTracker},
     page::{PageFlag, PageTable, PageTableEntry, PageTableEntry32},
 };
+
+static mut KERNEL_UNIT: Once<MemoryUnit<PageTableEntry39>> = Once::new();
+
+
+// 提供 kernel trap 执行环境
+// 进入 kernel 时会从 frame.satp 切换到 kernel_satp，退出时再切换回去
+#[export_name = "_kernel_satp"]
+static mut KERNEL_SATP: u64 = 0;
 
 #[derive(Debug)]
 pub enum MemoryUnitError {
@@ -34,6 +47,22 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
             Err(MemoryUnitError::RanOutOfFrames)
         }
     }
+
+    pub fn satp(&self) -> usize {
+        let mode = 12 + E::SIZE * E::LENGTH;
+        let mode_code = match mode {
+            32 => 1,
+            39 => 8,
+            47 => 9,
+            56 => 10,
+            _ => 0,
+        };
+        (mode_code << 60)
+            + self
+                .where_the_frame_tracker_of_root_for_recycling_put
+                .start()
+    }
+
     pub fn map<F: Into<FlagSet<PageFlag>> + Copy>(
         &mut self,
         vpn: PageNumber,
@@ -203,13 +232,29 @@ impl<E: PageTableEntry + Sized + 'static> Display for MemoryUnit<E> {
 }
 
 pub fn init() {
+    let memory_start = _memory_start as usize >> 12;
+    let memory_end = _memory_end as usize >> 12;
     let mut unit = MemoryUnit::<PageTableEntry39>::new().unwrap();
+    // mmio device space
     unit.map(
         0x0,
-        0,
-        _memory_end as usize >> 12,
+        0x0,
+        memory_start,
+        PageFlag::Valid | PageFlag::Writeable | PageFlag::Readable,
+    )
+    .unwrap();
+    // sbi + kernel space
+    unit.map(
+        memory_start,
+        memory_start,
+        memory_end - memory_start,
         PageFlag::Valid | PageFlag::Writeable | PageFlag::Readable | PageFlag::Executable,
     )
     .unwrap();
     println!("{}", unit);
+    unsafe {
+        let satp = unit.satp();
+        KERNEL_UNIT.call_once(|| unit);
+        KERNEL_SATP = satp as u64;
+    }
 }

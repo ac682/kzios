@@ -1,25 +1,31 @@
 use core::arch::asm;
 
 use alloc::vec::Vec;
-use riscv::register::{sscratch, sstatus, stvec, utvec::TrapMode};
+use riscv::register::{scause::Scause, sip, sscratch, sstatus, stvec, utvec::TrapMode};
 
 use crate::{
     external::{_hart_num, _trap_vector},
-    sbi,
-    trap::TrapFrame,
+    println, sbi,
+    trap::{TrapCause, TrapFrame},
 };
+
+use self::timer::HartTimer;
+
+pub mod timer;
 
 static mut HARTS: Vec<Hart> = Vec::new();
 
 pub struct Hart {
     id: usize,
+    timer: HartTimer,
     frame: TrapFrame,
 }
 
 impl Hart {
-    pub const fn new(hartid: usize) -> Self {
+    pub const fn new(hartid: usize, freq: usize) -> Self {
         Self {
             id: hartid,
+            timer: HartTimer::new(hartid, freq),
             frame: TrapFrame::new(hartid),
         }
     }
@@ -45,13 +51,34 @@ impl Hart {
 
     pub fn clear_ipi(&self) {
         // clear sip.SSIP => sip[1] = 0
+        let mut sip = 0usize;
+        unsafe { asm!("csrr {o}, sip", "csrw sip, {i}", o = out(reg) sip, i = in(reg) sip & !2) }
+    }
+
+    pub fn handle_user_trap(&mut self, cause: TrapCause) -> &TrapFrame {
+        match cause {
+            TrapCause::Breakpoint => {
+                println!("#{} Pid={} requested a breakpoint", self.id, "unimp");
+                &self.frame
+            },
+            _ => {
+                todo!("unimplemented trap cause {:?}", cause)
+            }
+        }
     }
 }
 
-pub fn init(_freq: usize) {
+pub fn init(freq: &[usize]) {
     unsafe {
         for i in 0..(_hart_num as usize) {
-            HARTS.push(Hart::new(i));
+            HARTS.push(Hart::new(
+                i,
+                if i < freq.len() {
+                    freq[i]
+                } else {
+                    freq[freq.len() - 1]
+                },
+            ));
         }
     }
 }

@@ -9,7 +9,7 @@
 
 use core::arch::global_asm;
 
-use crate::mm::{unit};
+use crate::mm::unit;
 
 extern crate alloc;
 
@@ -21,6 +21,7 @@ mod rt;
 mod sbi;
 mod sync;
 mod trap;
+mod task;
 
 global_asm!(include_str!("assembly.asm"));
 

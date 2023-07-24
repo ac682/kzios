@@ -1,8 +1,18 @@
 use core::fmt::Display;
 
-use riscv::register::scause::Scause;
+use riscv::register::scause::{Exception, Interrupt, Scause, Trap};
 
-use crate::println;
+use crate::{hart, println};
+
+#[derive(Debug)]
+pub enum TrapCause {
+    Unknown,
+    SoftwareInterrupt,
+    ExternalInterrupt,
+    TimerInterrupt,
+    EnvironmentCall,
+    Breakpoint,
+}
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -47,17 +57,26 @@ impl Display for TrapFrame {
 }
 
 #[no_mangle]
-unsafe fn handle_trap(frame: &TrapFrame, cause: Scause, _val: usize) -> &'static TrapFrame {
-    // 这里要区分 trap，from supervisor 和 from user 区别对待
-    // let hart = of_hart(hartid);
-    // hart.handle_trap_from_user(cause, val);
-    // hart.context()
-    let hartid = frame.hartid;
-    println!(
-        "\x1b[0;33mHart #{} enters trap {:#x}: \x1b[0m\n{}",
-        hartid,
-        cause.bits(),
-        frame
-    );
-    todo!("trap handler not available")
+unsafe fn handle_trap(frame: &mut TrapFrame, cause: Scause, _val: usize) -> &TrapFrame {
+    let hart = hart::this_hart();
+    match cause.cause() {
+        Trap::Interrupt(Interrupt::UserTimer) => hart.handle_user_trap(TrapCause::TimerInterrupt),
+        Trap::Interrupt(Interrupt::SupervisorTimer) => todo!("nested interrupt: timer"),
+        Trap::Interrupt(Interrupt::UserSoft) => todo!("impossible user soft interrupt"),
+        Trap::Interrupt(Interrupt::SupervisorSoft) => {
+            hart.clear_ipi();
+            todo!()
+        }
+        Trap::Exception(exception) => {
+            frame.pc += 4;
+            match exception {
+                Exception::Breakpoint => hart.handle_user_trap(TrapCause::Breakpoint),
+                Exception::UserEnvCall => hart.handle_user_trap(TrapCause::EnvironmentCall),
+                _ => todo!("Unknown exception: {}", cause.bits()),
+            }
+        }
+        _ => {
+            todo!("Unknown trap: {}", cause.bits())
+        }
+    }
 }

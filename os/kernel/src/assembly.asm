@@ -72,7 +72,7 @@ _trap_vector:
     slliw   t1, t1, 13
     not     t1, t1
     and     t0, t0, t1
-    csrw    mstatus, t0
+    csrw    sstatus, t0
 6:
     csrr    t6, satp
     sd      t6, 512(t5)
@@ -80,18 +80,20 @@ _trap_vector:
     sd      t6, 520(t5)
 
     csrw	sscratch, t5
-
-    # go prepare for rust trap handler
-    csrr    a0, sscratch
-    csrr	a1, scause
-    csrr    a2, stval
-    # hartid should be restored from 528(TrapFrame) to tp
+    # load kernel memory page table
+    ld      t0, _kernel_satp
+    csrw    satp, t0
+    # setup sp, hartid should be restored from 528(TrapFrame) to tp
     ld      tp, 528(a0)
     mv      t0, tp
     la      sp, _stack_size
     mul     t0, t0, sp
     la      sp, _kernel_end
     sub     sp, sp, t0
+    # go prepare for rust trap handler
+    csrr    a0, sscratch
+    csrr	a1, scause
+    csrr    a2, stval
     # get in
     call    handle_trap
     # save hartid to the next arranged TrapFrame(pointed to by a0) before enter user space to make sure tp in kernel mode is always referring to the hartid
