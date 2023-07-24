@@ -84,7 +84,7 @@ _trap_vector:
     ld      t0, _kernel_satp
     csrw    satp, t0
     # setup sp, hartid should be restored from 528(TrapFrame) to tp
-    ld      tp, 528(a0)
+    ld      tp, 528(t5)
     mv      t0, tp
     la      sp, _stack_size
     mul     t0, t0, sp

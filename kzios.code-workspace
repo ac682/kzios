@@ -5,7 +5,6 @@
 		}
 	],
 	"settings": {
-		"rust-analyzer.checkOnSave.allTargets": false,
 		"rust-analyzer.cargo.target": "riscv64gc-unknown-none-elf",
 		"cSpell.words": [
 			"abiname",
@@ -99,7 +98,8 @@
 		"cSpell.language": "en,lorem",
 		"rust-analyzer.imports.prefer.no.std": true,
 		"rust-analyzer.linkedProjects": [
-			"./os/Cargo.toml"
+			"./os/Cargo.toml",
+			"./user/Cargo.toml"
 		],
 		"rust-analyzer.showUnlinkedFileNotification": false,
 	},

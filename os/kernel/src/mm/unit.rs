@@ -189,7 +189,7 @@ impl<E: PageTableEntry + Sized + 'static> Display for MemoryUnit<E> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         writeln!(
             f,
-            "Memory Mapping at {:#x}\n   Visual   ->  Physical  (   Length   )=0bDAGUXWRV",
+            "Memory Mapping at {:#x}\n  Visual  -> Physical (  Length  )=0bDAGUXWRV",
             self.where_the_frame_tracker_of_root_for_recycling_put
                 .start()
                 << 12
@@ -208,7 +208,7 @@ impl<E: PageTableEntry + Sized + 'static> Display for MemoryUnit<E> {
                 if (dirty) {
                     writeln!(
                         f,
-                        "{:#012x}->{:#012x}({:#012x})={:#010b}",
+                        "{:#010x}->{:#010x}({:#010x})={:#010b}",
                         start_v, start_p, aggregated, bits
                     )?;
                     dirty = false;
@@ -223,7 +223,7 @@ impl<E: PageTableEntry + Sized + 'static> Display for MemoryUnit<E> {
         if dirty {
             writeln!(
                 f,
-                "{:#012x}->{:#012x}({:#012x})={:#010b}",
+                "{:#010x}->{:#010x}({:#010x})={:#010b}",
                 start_v, start_p, aggregated, bits
             )?;
         }

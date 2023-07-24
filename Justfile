@@ -12,7 +12,7 @@ LINKER_SCRIPT := invocation_directory()/"os/platforms"/PLATFORM/"memory.ld"
 
 # compile
 RUSTFLAGS_OS := "-Clink-arg=-Tplatforms/linker.ld -Clinker=riscv64-elf-ld"
-RUSTFLAGS_USR := ""
+RUSTFLAGS_USER := ""
 
 TARGET_OS := "riscv64gc-unknown-none-elf"
 TARGET_USER := "riscv64gc-unknown-erhino-elf"
@@ -40,25 +40,38 @@ clean:
     if [ -d "artifacts" ]; then
     	rm -r artifacts
     fi
+    if [ -d "artifacts/initfs" ]; then
+    	rm -r artifacts/initfs
+    fi
 
 artifact_dir: 
     #!/usr/bin/env bash
     if [ ! -d "artifacts" ]; then
     	mkdir artifacts
     fi
+    if [ ! -d "artifacts/initfs" ]; then
+    	mkdir artifacts/initfs
+    fi
 
 make_dtb: artifact_dir
     @echo Selected DTS {{PLATFORM}}/{{MODEL}}.dts
     @dtc -O dtb -o "{{DTB}}" "{{DTS}}"
 
-build_kernel: make_dtb
+build_user: artifact_dir
+    @cd user && RUSTFLAGS="{{RUSTFLAGS_USER}}" cargo build --bins {{RELEASE}} -Z unstable-options --out-dir "{{TARGET_DIR}}/initfs"
+    @echo -e "\033[0;32mUser space programs build successfully!\033[0m"
+
+build_initfs: build_user
+    @cd "{{TARGET_DIR}}/initfs" && tar -cf ../initfs.tar *
+
+build_kernel: build_initfs make_dtb
     @echo -e "\033[0;36mBuild: {{PLATFORM}}\033[0m"
     @cp "{{LINKER_SCRIPT}}" "{{TARGET_DIR}}"
     @cd os && RUSTFLAGS="{{RUSTFLAGS_OS}}" cargo build --bin erhino_kernel {{RELEASE}} -Z unstable-options --out-dir {{TARGET_DIR}}
     @rust-objcopy {{KERNEL_ELF}} -S -O binary {{KERNEL_BIN}} -B=riscv64
-    @echo -e "\033[0;32mKernel Build Successfully!\033[0m"
+    @echo -e "\033[0;32mKernel build successfully!\033[0m"
 
-build_k210: build_kernel
+build_k210: build_kernel 
     @rust-objcopy "{{BOOTLOADER}}" -S -O binary "{{KERNEL_ELF}}_merged.bin"
     @dd if="{{KERNEL_BIN}}" of="{{KERNEL_ELF}}_merged.bin" bs=128k seek=1
 

@@ -65,7 +65,8 @@ unsafe fn handle_trap(frame: &mut TrapFrame, cause: Scause, _val: usize) -> &Tra
         Trap::Interrupt(Interrupt::UserSoft) => todo!("impossible user soft interrupt"),
         Trap::Interrupt(Interrupt::SupervisorSoft) => {
             hart.clear_ipi();
-            todo!()
+
+            todo!("setup to enter userspace")
         }
         Trap::Exception(exception) => {
             frame.pc += 4;
