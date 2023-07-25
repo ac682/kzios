@@ -10,9 +10,9 @@ pub enum SystemCall {
     // System reserved
     /// Undefined behavior in release environment
     Debug = 0x00,
-    /// Write to board defined output stream
+    /// Write to defined output stream
     Write = 0x01,
-    /// Read from board defined input stream
+    /// Read from defined input stream
     Read = 0x02,
     // Process control
     /// Finalized process notifies kernel to cleanup
@@ -63,7 +63,8 @@ pub enum SystemCall {
     /// Map a range of virtual addresses for the process with kernel served pages
     Extend = 0x60,
     /// Map a range of virtual addresses for the process with specific range of physical addresses
+    /// Aka. IOMap, Memory permission required
     Map = 0x51,
-    /// Discard and tell kernel to reuse a range of virtual addresses mapped before
+    /// Discard and tell kernel to reuse a range of virtual addresses
     Free = 0x52,
 }

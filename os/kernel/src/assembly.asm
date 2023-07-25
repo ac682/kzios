@@ -83,6 +83,7 @@ _trap_vector:
     # load kernel memory page table
     ld      t0, _kernel_satp
     csrw    satp, t0
+    sfence.vma
     # setup sp, hartid should be restored from 528(TrapFrame) to tp
     ld      tp, 528(t5)
     mv      t0, tp

@@ -4,7 +4,9 @@
 
 use core::arch::global_asm;
 
-use crate::mm::unit;
+use tar_no_std::TarArchiveRef;
+
+use crate::{mm::unit, task::proc::Process};
 
 extern crate alloc;
 
@@ -17,6 +19,7 @@ mod sbi;
 mod sync;
 mod task;
 mod trap;
+mod timer;
 
 global_asm!(include_str!("assembly.asm"));
 
@@ -30,4 +33,12 @@ fn main() {
     unit::init();
     // device
     // load program with tar-no-std
+    let archive = TarArchiveRef::new(INITFS);
+    let systems = archive
+        .entries()
+        .filter(|f| f.filename().starts_with("init"));
+    for system in systems {
+        let process = Process::from_elf(system.data(), system.filename().as_str()).unwrap();
+        //add_process(process);
+    }
 }

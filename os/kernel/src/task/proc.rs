@@ -5,7 +5,10 @@ use erhino_shared::{
 };
 use flagset::FlagSet;
 
-pub enum ProcessSpawnError {}
+#[derive(Debug)]
+pub enum ProcessSpawnError {
+
+}
 
 pub struct Process {
     name: String,

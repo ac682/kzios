@@ -6,26 +6,27 @@ use riscv::register::{scause::Scause, sip, sscratch, sstatus, stvec, utvec::Trap
 use crate::{
     external::{_hart_num, _trap_vector},
     println, sbi,
+    task::sched::{smooth::SmoothScheduler, Scheduler},
+    timer::{hart::HartTimer, Timer},
     trap::{TrapCause, TrapFrame},
 };
 
-use self::timer::HartTimer;
+type TimerImpl = HartTimer;
+type SchedulerImpl = SmoothScheduler<TimerImpl>;
 
-pub mod timer;
+static mut HARTS: Vec<Hart<SchedulerImpl>> = Vec::new();
 
-static mut HARTS: Vec<Hart> = Vec::new();
-
-pub struct Hart {
+pub struct Hart<S: Scheduler> {
     id: usize,
-    timer: HartTimer,
+    scheduler: S,
     frame: TrapFrame,
 }
 
-impl Hart {
-    pub const fn new(hartid: usize, freq: usize) -> Self {
+impl<S: Scheduler> Hart<S> {
+    pub const fn new(hartid: usize, scheduler: S) -> Self {
         Self {
             id: hartid,
-            timer: HartTimer::new(hartid, freq),
+            scheduler,
             frame: TrapFrame::new(hartid),
         }
     }
@@ -60,7 +61,7 @@ impl Hart {
             TrapCause::Breakpoint => {
                 println!("#{} Pid={} requested a breakpoint", self.id, "unimp");
                 &self.frame
-            },
+            }
             _ => {
                 todo!("unimplemented trap cause {:?}", cause)
             }
@@ -73,11 +74,17 @@ pub fn init(freq: &[usize]) {
         for i in 0..(_hart_num as usize) {
             HARTS.push(Hart::new(
                 i,
-                if i < freq.len() {
-                    freq[i]
-                } else {
-                    freq[freq.len() - 1]
-                },
+                SchedulerImpl::new(
+                    i,
+                    TimerImpl::new(
+                        i,
+                        if i < freq.len() {
+                            freq[i]
+                        } else {
+                            freq[freq.len() - 1]
+                        },
+                    ),
+                ),
             ));
         }
     }
@@ -99,7 +106,7 @@ pub fn send_ipi_all() -> bool {
     }
 }
 
-pub fn get_hart(id: usize) -> &'static mut Hart {
+pub fn get_hart(id: usize) -> &'static mut Hart<SchedulerImpl> {
     unsafe {
         if id < HARTS.len() {
             &mut HARTS[id as usize]
@@ -117,6 +124,6 @@ pub fn hartid() -> usize {
     tp
 }
 
-pub fn this_hart() -> &'static mut Hart {
+pub fn this_hart() -> &'static mut Hart<SchedulerImpl> {
     get_hart(hartid())
 }

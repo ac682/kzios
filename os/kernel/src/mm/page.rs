@@ -29,7 +29,7 @@ flags! {
     }
 }
 
-pub struct PageTable<E: PageTableEntry + Sized + 'static> {
+pub struct PageTable<E: PageTableEntry + 'static> {
     location: PageNumber,
     entries: &'static mut [E],
     branches: HashMap<usize, PageTable<E>>,
@@ -37,7 +37,7 @@ pub struct PageTable<E: PageTableEntry + Sized + 'static> {
     managed: HashMap<usize, FrameTracker>,
 }
 
-impl<E: PageTableEntry + Sized + 'static> PageTable<E> {
+impl<E: PageTableEntry + 'static> PageTable<E> {
     pub fn from(location: PageNumber) -> Self {
         let entries = unsafe {
             core::slice::from_raw_parts_mut((location << 12) as *mut E, PAGE_SIZE / size_of::<E>())
@@ -142,7 +142,7 @@ impl<E: PageTableEntry + Sized + 'static> PageTable<E> {
     }
 }
 
-pub trait PageTableEntry {
+pub trait PageTableEntry: Sized {
     const LENGTH: usize;
     const DEPTH: usize;
     const SIZE: usize;
@@ -222,7 +222,7 @@ pub type PageTableEntry39 = PageTableEntryPrimitive<u64, 56, 3, 9>;
 pub type PageTableEntry48 = PageTableEntryPrimitive<u64, 56, 4, 9>;
 pub type PageTableEntry57 = PageTableEntryPrimitive<u64, 56, 5, 9>;
 
-impl<'a, E: PageTableEntry + Sized + 'static> IntoIterator for &'a PageTable<E> {
+impl<'a, E: PageTableEntry + 'static> IntoIterator for &'a PageTable<E> {
     type Item = (PageNumber, PageNumber, usize, FlagSet<PageFlag>);
 
     type IntoIter = PageTableIter<'a, E>;
@@ -238,7 +238,7 @@ impl<'a, E: PageTableEntry + Sized + 'static> IntoIterator for &'a PageTable<E> 
     }
 }
 
-pub struct PageTableIter<'a, E: PageTableEntry + Sized + 'static> {
+pub struct PageTableIter<'a, E: PageTableEntry + 'static> {
     root: &'a PageTable<E>,
     level: usize,
     inner: Option<Box<UnsafeCell<PageTableIter<'a, E>>>>,
@@ -246,7 +246,7 @@ pub struct PageTableIter<'a, E: PageTableEntry + Sized + 'static> {
     current: usize,
 }
 
-impl<'a, E: PageTableEntry + Sized + 'static> Iterator for PageTableIter<'a, E> {
+impl<'a, E: PageTableEntry + 'static> Iterator for PageTableIter<'a, E> {
     type Item = (PageNumber, PageNumber, usize, FlagSet<PageFlag>);
 
     fn next(&mut self) -> Option<Self::Item> {

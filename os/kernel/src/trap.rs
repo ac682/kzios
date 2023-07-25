@@ -1,5 +1,6 @@
 use core::fmt::Display;
 
+use erhino_shared::call::SystemCall;
 use riscv::register::scause::{Exception, Interrupt, Scause, Trap};
 
 use crate::{hart, println};
@@ -54,6 +55,16 @@ impl Display for TrapFrame {
         writeln!(f, "a6={:#016x}, a7={:#016x}", self.x[16], self.x[17])?;
         writeln!(f, "sepc={:#x}, satp={:#x}", self.pc, self.satp)
     }
+}
+
+pub struct UserTrapContext{
+    // process reference
+    // thread reference
+}
+
+pub struct EnvironmentCallBody{
+    pub function: SystemCall,
+
 }
 
 #[no_mangle]

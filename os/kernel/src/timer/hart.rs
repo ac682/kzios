@@ -1,16 +1,18 @@
 use crate::sbi;
 
+use super::Timer;
+
 // every tick event is based on TICKS rather than MS
 const TICKS_PER_SEC: usize = 100;
-
-pub struct HartTimer {
-    hartid: usize,
-    frequency: usize,
-}
 
 fn time() -> usize {
     // time refers to mtime, RustSBI will redirect and return the right value
     riscv::register::time::read()
+}
+
+pub struct HartTimer {
+    hartid: usize,
+    frequency: usize,
 }
 
 impl HartTimer {
@@ -20,17 +22,18 @@ impl HartTimer {
             frequency: freq,
         }
     }
+}
 
-    // in ticks
-    pub fn uptime(&self) -> usize {
+impl Timer for HartTimer {
+    fn uptime(&self) -> usize {
         time() * TICKS_PER_SEC / self.frequency
     }
 
-    pub fn tick_freq(&self) -> usize {
+    fn tick_freq(&self) -> usize {
         TICKS_PER_SEC
     }
 
-    pub fn set_next_event(&self, ticks: usize) {
+    fn schedule_next(&mut self, ticks: usize) {
         let interval = ticks * self.frequency / TICKS_PER_SEC;
         if sbi::is_time_supported() {
             sbi::set_timer(interval);
