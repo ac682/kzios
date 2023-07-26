@@ -15,3 +15,5 @@ pub mod mem;
 pub mod proc;
 /// Service
 pub mod service;
+/// Locks
+pub mod sync;

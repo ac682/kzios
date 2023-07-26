@@ -3,9 +3,9 @@ use core::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use crate::hart;
+use erhino_shared::sync::{InteriorLock, InteriorReadWriteLock};
 
-use super::{InteriorLock, InteriorReadWriteLock};
+use crate::hart;
 
 pub struct HartLock {
     lock: AtomicU64,
@@ -119,14 +119,6 @@ impl InteriorReadWriteLock for HartReadWriteLock {
         {
             Ok(_) => true,
             Err(current) => current == hartid,
-        }
-    }
-}
-
-impl Clone for HartReadWriteLock {
-    fn clone(&self) -> Self {
-        Self {
-            lock: AtomicU64::new(self.lock.load(Ordering::Relaxed)),
         }
     }
 }

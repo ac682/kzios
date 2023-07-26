@@ -99,6 +99,7 @@
 		"cSpell.language": "en,lorem",
 		"rust-analyzer.imports.prefer.no.std": true,
 		"rust-analyzer.linkedProjects": [
+			"./shared/Cargo.toml",
 			"./os/Cargo.toml",
 			"./user/Cargo.toml"
 		],

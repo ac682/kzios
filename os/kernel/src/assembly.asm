@@ -41,7 +41,9 @@ _park:
 .section .text
 .global _trap_vector
 _trap_vector:
-     csrrw	t6, sscratch, t6
+    csrrw	t6, sscratch, t6
+    # wont save registers if sscratch == 0
+    beqz    t6, 7f
 
     .set	i, 0
     .rept	NUM_REGS - 1
@@ -74,18 +76,21 @@ _trap_vector:
     and     t0, t0, t1
     csrw    sstatus, t0
 6:
+    # save satp and sepc
     csrr    t6, satp
     sd      t6, 512(t5)
     csrr    t6, sepc
     sd      t6, 520(t5)
+    # hartid should be restored from 528(TrapFrame) to tp
+    ld      tp, 528(t5)
 
     csrw	sscratch, t5
+7:
     # load kernel memory page table
     ld      t0, _kernel_satp
     csrw    satp, t0
     sfence.vma
-    # setup sp, hartid should be restored from 528(TrapFrame) to tp
-    ld      tp, 528(t5)
+    # setup sp
     mv      t0, tp
     la      sp, _stack_size
     mul     t0, t0, sp

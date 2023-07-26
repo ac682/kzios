@@ -11,13 +11,13 @@ pub enum ProcessSpawnError {
 }
 
 pub struct Process {
-    name: String,
-    pid: Pid,
-    parent: Pid,
-    entry_point: Address,
-    permissions: FlagSet<ProcessPermission>,
-    state: ProcessState,
-    exit_code: ExitCode,
+    pub pid: Pid,
+    pub parent: Pid,
+    pub name: String,
+    pub entry_point: Address,
+    pub permissions: FlagSet<ProcessPermission>,
+    pub state: ProcessState,
+    pub exit_code: ExitCode,
 }
 
 impl Process {

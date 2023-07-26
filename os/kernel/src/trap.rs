@@ -76,8 +76,7 @@ unsafe fn handle_trap(frame: &mut TrapFrame, cause: Scause, _val: usize) -> &Tra
         Trap::Interrupt(Interrupt::UserSoft) => todo!("impossible user soft interrupt"),
         Trap::Interrupt(Interrupt::SupervisorSoft) => {
             hart.clear_ipi();
-
-            todo!("setup to enter userspace")
+            hart.handle_ipi();
         }
         Trap::Exception(exception) => {
             frame.pc += 4;
@@ -91,4 +90,5 @@ unsafe fn handle_trap(frame: &mut TrapFrame, cause: Scause, _val: usize) -> &Tra
             todo!("Unknown trap: {}", cause.bits())
         }
     }
+    hart.context()
 }

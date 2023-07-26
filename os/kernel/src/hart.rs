@@ -6,20 +6,19 @@ use riscv::register::{scause::Scause, sip, sscratch, sstatus, stvec, utvec::Trap
 use crate::{
     external::{_hart_num, _trap_vector},
     println, sbi,
-    task::sched::{smooth::SmoothScheduler, Scheduler},
+    task::sched::{unfair::FairEnoughScheduler, Scheduler},
     timer::{hart::HartTimer, Timer},
     trap::{TrapCause, TrapFrame},
 };
 
 type TimerImpl = HartTimer;
-type SchedulerImpl = SmoothScheduler<TimerImpl>;
+type SchedulerImpl = FairEnoughScheduler<TimerImpl>;
 
 static mut HARTS: Vec<Hart<SchedulerImpl>> = Vec::new();
 
 pub struct Hart<S: Scheduler> {
     id: usize,
     scheduler: S,
-    frame: TrapFrame,
 }
 
 impl<S: Scheduler> Hart<S> {
@@ -27,7 +26,6 @@ impl<S: Scheduler> Hart<S> {
         Self {
             id: hartid,
             scheduler,
-            frame: TrapFrame::new(hartid),
         }
     }
 
@@ -36,10 +34,13 @@ impl<S: Scheduler> Hart<S> {
         // setup trap & interrupts
         unsafe {
             stvec::write(_trap_vector as usize, TrapMode::Direct);
-            sscratch::write(&self.frame as *const TrapFrame as usize);
             sstatus::set_fs(sstatus::FS::Initial);
             sstatus::set_sie();
         }
+    }
+
+    pub fn context(&self) -> &TrapFrame{
+        todo!()
     }
 
     pub fn send_ipi(&self) -> bool {
@@ -56,11 +57,14 @@ impl<S: Scheduler> Hart<S> {
         unsafe { asm!("csrr {o}, sip", "csrw sip, {i}", o = out(reg) sip, i = in(reg) sip & !2) }
     }
 
-    pub fn handle_user_trap(&mut self, cause: TrapCause) -> &TrapFrame {
+    pub fn handle_ipi(&mut self){
+        self.scheduler.schedule();
+    }
+
+    pub fn handle_user_trap(&mut self, cause: TrapCause){
         match cause {
             TrapCause::Breakpoint => {
                 println!("#{} Pid={} requested a breakpoint", self.id, "unimp");
-                &self.frame
             }
             _ => {
                 todo!("unimplemented trap cause {:?}", cause)
