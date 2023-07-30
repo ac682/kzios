@@ -21,7 +21,16 @@ static mut HEAP_ALLOCATOR: LockedHeapWithRescue<HEAP_ORDER> =
 static mut ENV_INIT: bool = false;
 
 #[lang = "start"]
-fn rust_start<T: Termination + 'static>(main: fn() -> T, hartid: usize, dtb_addr: usize) -> isize {
+fn rust_start<T: Termination + 'static>(
+    main: fn() -> T,
+    argc: isize,
+    argv: *const *const u8,
+    _sigpipe: u8,
+) -> isize {
+    // rust 1.73
+    // ruins my code!
+    let hartid = argc as usize;
+    let dtb_addr = argv as usize;
     if hartid == 0 {
         // rust initialization
         unsafe {

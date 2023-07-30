@@ -17,7 +17,12 @@ extern "C" {
 }
 
 #[lang = "start"]
-fn lang_start<T: Termination + 'static>(main: fn() -> T, _: isize, _: *const *const u8) -> ! {
+fn lang_start<T: Termination + 'static>(
+    main: fn() -> T,
+    _: isize,
+    _: *const *const u8,
+    _: u8,
+) -> isize {
     let single = 0x1000;
     unsafe {
         //sys_extend(_segment_break as usize, single, 0b011);

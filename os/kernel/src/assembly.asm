@@ -24,7 +24,7 @@ _start:
     # store hartid in tp resgister (done by SBI but here just to make sure)
     mv      tp, a0 
     # locate stack pointer
-    mv      t0, a0
+    mv      t0, tp
     la      sp, _stack_size
     mul     t0, t0, sp
     la      sp, _kernel_end

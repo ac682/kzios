@@ -9,7 +9,7 @@ pub trait InteriorLock {
     fn unlock(&self);
 }
 
-pub trait InteriorReadWriteLock: InteriorLock {
+pub trait InteriorLockMut: InteriorLock {
     fn lock_mut(&self);
     fn try_lock_mut(&self) -> bool;
 }
@@ -32,7 +32,7 @@ impl<Data: Sized + Send + Sync, Lock: InteriorLock> DataLock<Data, Lock> {
         Self { inner: lock, data }
     }
 
-    pub fn lock(&'static mut self) -> DataLockGuard<Data, Lock> {
+    pub fn lock(&mut self) -> DataLockGuard<Data, Lock> {
         self.inner.lock();
         DataLockGuard {
             locked: &mut self.inner,
@@ -66,3 +66,30 @@ impl<'lock, Data: Sized + Send + Sync, Lock: InteriorLock> Drop
         self.locked.unlock();
     }
 }
+
+// pub struct ReadWriteDataLock<Data: Sized + Send + Sync, Lock: InteriorLockMut> {
+//     inner: Lock,
+//     data: Data,
+// }
+
+// impl<Data: Sized + Send + Sync, Lock: InteriorLockMut> ReadWriteDataLock<Data, Lock> {
+//     pub const fn new(data: Data, lock: Lock) -> Self {
+//         Self {
+//             inner: lock,
+//             data: data,
+//         }
+//     }
+//     pub fn lock(&mut self) -> ReadDataLockGuard<Data, Lock> {
+        
+//     }
+// }
+
+// pub struct ReadDataLockGuard<'lock, Data: Sized + Send + Sync, Lock: InteriorLockMut> {
+//     lock: &'lock Lock,
+//     data: *const Data,
+// }
+
+// pub struct WriteDataLockGuard<'lock, Data: Sized + Send + Sync, Lock: InteriorLockMut> {
+//     lock: &'lock Lock,
+//     data: *mut Data,
+// }

@@ -11,9 +11,7 @@ use erhino_shared::{
 use spin::mutex::SpinMutex;
 
 use crate::{
-    sync::{
-        hart::{HartLock, HartReadWriteLock},
-        spin::{SpinLock, SpinReadWriteLock},
+    sync::{spin::SpinLock
     },
     task::{proc::Process, thread::Thread},
     timer::Timer,
@@ -23,14 +21,14 @@ use crate::{
 use super::Scheduler;
 
 // 使用非 hart lock 意味着不支持嵌套中断，内核期间不可被打断
-static mut IDLE_HART_MASK: DataLock<usize, SpinReadWriteLock> =
-    DataLock::new(0, SpinReadWriteLock::new());
+static mut IDLE_HART_MASK: DataLock<usize, SpinLock> =
+    DataLock::new(0, SpinLock::new());
 
 static mut PROC_TABLE: ProcessTable = ProcessTable::new();
 
 pub struct ProcessTable {
     processes: Vec<ProcessCell>,
-    processes_lock: SpinReadWriteLock,
+    processes_lock: SpinLock,
     generation: AtomicUsize,
     pid_generator: AtomicUsize,
 }
@@ -39,7 +37,7 @@ impl ProcessTable {
     pub const fn new() -> Self {
         Self {
             processes: Vec::new(),
-            processes_lock: SpinReadWriteLock::new(),
+            processes_lock: SpinLock::new(),
             generation: AtomicUsize::new(0),
             pid_generator: AtomicUsize::new(0),
         }
@@ -54,6 +52,7 @@ pub struct ThreadCell {
     inner: Thread,
     generation: AtomicUsize,
 }
+
 
 pub struct ProcessCell {
     inner: Process,
