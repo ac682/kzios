@@ -40,7 +40,7 @@ impl<S: Scheduler> Hart<S> {
     }
 
     pub fn context(&self) -> &TrapFrame{
-        todo!()
+        self.scheduler.context()
     }
 
     pub fn send_ipi(&self) -> bool {

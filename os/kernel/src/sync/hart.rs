@@ -1,6 +1,6 @@
 use core::{
     hint::spin_loop,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::atomic::{AtomicUsize, Ordering},
 };
 
 use erhino_shared::sync::{InteriorLock, InteriorLockMut};
@@ -8,29 +8,29 @@ use erhino_shared::sync::{InteriorLock, InteriorLockMut};
 use crate::hart;
 
 pub struct HartLock {
-    lock: AtomicU64,
+    lock: AtomicUsize,
 }
 
 impl HartLock {
     pub const fn new() -> Self {
         Self {
-            lock: AtomicU64::new(u64::MAX),
+            lock: AtomicUsize::new(usize::MAX),
         }
     }
 }
 
 impl InteriorLock for HartLock {
     fn is_locked(&self) -> bool {
-        let hartid = hart::hartid() as u64;
+        let hartid = hart::hartid();
         let locked = self.lock.load(Ordering::Relaxed);
-        locked != u64::MAX && locked != hartid
+        locked != usize::MAX && locked != hartid
     }
 
     fn lock(&self) {
-        let hartid = hart::hartid() as u64;
+        let hartid = hart::hartid();
         while self
             .lock
-            .compare_exchange(u64::MAX, hartid, Ordering::Acquire, Ordering::Relaxed)
+            .compare_exchange(usize::MAX, hartid, Ordering::Acquire, Ordering::Relaxed)
             .is_err_and(|c| c != hartid)
         {
             while self.is_locked() {
@@ -40,14 +40,14 @@ impl InteriorLock for HartLock {
     }
 
     fn unlock(&self) {
-        self.lock.store(u64::MAX, Ordering::Relaxed);
+        self.lock.store(usize::MAX, Ordering::Relaxed);
     }
 
     fn try_lock(&self) -> bool {
-        let hartid = hart::hartid() as u64;
+        let hartid = hart::hartid() ;
         match self
             .lock
-            .compare_exchange(u64::MAX, hartid, Ordering::Acquire, Ordering::Relaxed)
+            .compare_exchange(usize::MAX, hartid, Ordering::Acquire, Ordering::Relaxed)
         {
             Ok(_) => true,
             Err(current) => current == hartid,

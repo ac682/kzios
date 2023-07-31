@@ -1,6 +1,6 @@
 use core::{
     hint::spin_loop,
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, AtomicIsize, Ordering},
 };
 
 use erhino_shared::sync::{InteriorLock, InteriorLockMut};
@@ -47,5 +47,65 @@ impl InteriorLock for SpinLock {
             Ok(_) => true,
             Err(_) => false,
         }
+    }
+}
+
+pub struct ReadWriteSpinLock {
+    lock: AtomicIsize,
+}
+
+impl ReadWriteSpinLock {
+    pub const fn new() -> Self {
+        Self {
+            lock: AtomicIsize::new(0),
+        }
+    }
+}
+
+impl InteriorLock for ReadWriteSpinLock {
+    fn is_locked(&self) -> bool {
+        self.lock.fetch_max(0, Ordering::Relaxed) == 0
+    }
+
+    fn lock(&self) {
+        // 一旦有一把锁尝试 isize::MAX 次就会导致逻辑失效。但是放心 writer 会在 unlock_mut 时恢复状态到初始 isize::MIN 重置重试次数
+        while self.lock.fetch_add(1, Ordering::Relaxed) < 0 {
+            while self.is_locked() {
+                spin_loop()
+            }
+        }
+    }
+
+    fn try_lock(&self) -> bool {
+        self.lock.fetch_add(1, Ordering::Relaxed) >= 0
+    }
+
+    fn unlock(&self) {
+        // 当其他线程持有 writer 锁时调用会炸掉，但是放心，unlock 和 lock_mut 互斥，除非持有者自己调用 lock_mut 然后 unlock
+        self.lock.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
+impl InteriorLockMut for ReadWriteSpinLock {
+    fn lock_mut(&self) {
+        while self
+            .lock
+            .compare_exchange_weak(0, isize::MIN, Ordering::Acquire, Ordering::Relaxed)
+            .is_err()
+        {
+            while self.is_locked() {
+                spin_loop()
+            }
+        }
+    }
+
+    fn try_lock_mut(&self) -> bool {
+        self.lock
+            .compare_exchange_weak(0, isize::MIN, Ordering::Acquire, Ordering::Relaxed)
+            .is_ok()
+    }
+
+    fn unlock_mut(&self) {
+        self.lock.store(0, Ordering::Relaxed);
     }
 }
