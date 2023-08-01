@@ -4,8 +4,8 @@ use erhino_shared::proc::{Tid, ProcessState};
 use crate::trap::TrapFrame;
 
 pub struct Thread{
-    name: String,
-    tid: Tid,
-    frame: TrapFrame,
-    state: ProcessState,
+    pub tid: Tid,
+    pub name: String,
+    pub frame: TrapFrame,
+    pub state: ProcessState,
 }

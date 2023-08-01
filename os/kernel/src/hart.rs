@@ -6,13 +6,13 @@ use riscv::register::{scause::Scause, sip, sscratch, sstatus, stvec, utvec::Trap
 use crate::{
     external::{_hart_num, _trap_vector},
     println, sbi,
-    task::sched::{unfair::FairEnoughScheduler, Scheduler},
+    task::sched::{smooth::SmoothScheduler, Scheduler},
     timer::{hart::HartTimer, Timer},
     trap::{TrapCause, TrapFrame},
 };
 
 type TimerImpl = HartTimer;
-type SchedulerImpl = FairEnoughScheduler<TimerImpl>;
+type SchedulerImpl = SmoothScheduler<TimerImpl>;
 
 static mut HARTS: Vec<Hart<SchedulerImpl>> = Vec::new();
 

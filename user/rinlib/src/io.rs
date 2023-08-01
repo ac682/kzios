@@ -13,7 +13,7 @@ macro_rules! dbg
 }
 pub fn debug(args: Arguments) {
     let str = format(args);
-    let cstr = CString::new(str).unwrap();
+    let _cstr = CString::new(str).unwrap();
     unsafe {
         // sys_debug(&cstr)
         asm!("ebreak")

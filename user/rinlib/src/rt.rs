@@ -28,7 +28,7 @@ fn lang_start<T: Termination + 'static>(
         //sys_extend(_segment_break as usize, single, 0b011);
         HEAP_ALLOCATOR.lock().init(_segment_break as usize, single);
     }
-    let code = main().to_exit_code();
+    let _code = main().to_exit_code();
     unsafe {
         loop {
             // sys_exit(code);
