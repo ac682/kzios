@@ -52,13 +52,27 @@ impl InteriorLock for SpinLock {
 
 pub struct ReadWriteSpinLock {
     lock: AtomicIsize,
+    wait: AtomicBool,
 }
 
 impl ReadWriteSpinLock {
     pub const fn new() -> Self {
         Self {
             lock: AtomicIsize::new(0),
+            wait: AtomicBool::new(false),
         }
+    }
+
+    fn is_waiting(&self) -> bool {
+        self.wait.load(Ordering::Relaxed)
+    }
+
+    fn set_waiting(&self) {
+        self.wait.store(true, Ordering::Relaxed);
+    }
+
+    fn clear_waiting(&self) {
+        self.wait.store(false, Ordering::Relaxed);
     }
 }
 
@@ -69,6 +83,9 @@ impl InteriorLock for ReadWriteSpinLock {
 
     fn lock(&self) {
         // 一旦有一把锁尝试 isize::MAX 次就会导致逻辑失效。但是放心 writer 会在 unlock_mut 时恢复状态到初始 isize::MIN 重置重试次数
+        while self.is_waiting() {
+            spin_loop();
+        }
         while self.lock.fetch_add(1, Ordering::Relaxed) < 0 {
             while self.is_locked() {
                 spin_loop()
@@ -77,7 +94,7 @@ impl InteriorLock for ReadWriteSpinLock {
     }
 
     fn try_lock(&self) -> bool {
-        self.lock.fetch_add(1, Ordering::Relaxed) >= 0
+        !self.is_waiting() && self.lock.fetch_add(1, Ordering::Relaxed) >= 0
     }
 
     fn unlock(&self) {
@@ -88,6 +105,10 @@ impl InteriorLock for ReadWriteSpinLock {
 
 impl InteriorLockMut for ReadWriteSpinLock {
     fn lock_mut(&self) {
+        while self.is_waiting() {
+            spin_loop()
+        }
+        self.set_waiting();
         while self
             .lock
             .compare_exchange_weak(0, isize::MIN, Ordering::Acquire, Ordering::Relaxed)
@@ -97,12 +118,15 @@ impl InteriorLockMut for ReadWriteSpinLock {
                 spin_loop()
             }
         }
+        self.clear_waiting();
     }
 
     fn try_lock_mut(&self) -> bool {
-        self.lock
-            .compare_exchange_weak(0, isize::MIN, Ordering::Acquire, Ordering::Relaxed)
-            .is_ok()
+        !self.is_waiting()
+            && self
+                .lock
+                .compare_exchange_weak(0, isize::MIN, Ordering::Acquire, Ordering::Relaxed)
+                .is_ok()
     }
 
     fn unlock_mut(&self) {

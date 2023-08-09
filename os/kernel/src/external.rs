@@ -10,6 +10,8 @@ extern "C" {
     pub fn _kernel_end();
     pub fn _memory_end();
 
-    pub fn _trap_vector();
+    pub fn _kernel_trap();
+    pub fn _user_trap();
+    pub fn _trampoline();
     pub fn _park();
 }

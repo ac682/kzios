@@ -5,9 +5,10 @@ use flagset::FlagSet;
 use spin::Once;
 
 use crate::{
-    external::{_kernel_start, _memory_end, _memory_start},
+    external::{_kernel_start, _memory_end, _memory_start, _trampoline},
     mm::page::PageTableEntry39,
-    println, trap::TrapFrame,
+    println,
+    trap::TrapFrame,
 };
 
 use super::{
@@ -15,13 +16,9 @@ use super::{
     page::{PageFlag, PageTable, PageTableEntry, PageTableEntry32},
 };
 
-static mut KERNEL_UNIT: Once<MemoryUnit<PageTableEntry39>> = Once::new();
+type KernelUnit = MemoryUnit<PageTableEntry39>;
 
-
-// 提供 kernel trap 执行环境
-// 进入 kernel 时会从 frame.satp 切换到 kernel_satp，退出时再切换回去
-#[export_name = "_kernel_satp"]
-static mut KERNEL_SATP: u64 = 0;
+static mut KERNEL_UNIT: Once<KernelUnit> = Once::new();
 
 #[derive(Debug)]
 pub enum MemoryUnitError {
@@ -46,6 +43,10 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         } else {
             Err(MemoryUnitError::RanOutOfFrames)
         }
+    }
+
+    pub fn top_page_number() -> usize {
+        1usize << ((E::DEPTH * E::SIZE + 12) - 1) >> 12
     }
 
     pub fn satp(&self) -> usize {
@@ -251,10 +252,18 @@ pub fn init() {
         PageFlag::Valid | PageFlag::Writeable | PageFlag::Readable | PageFlag::Executable,
     )
     .unwrap();
+    let top_number = KernelUnit::top_page_number();
+    // trampoline code page
+    unit.map(
+        top_number,
+        _trampoline as usize >> 12,
+        1,
+        PageFlag::Valid | PageFlag::Writeable | PageFlag::Readable | PageFlag::Executable,
+    )
+    .unwrap();
+    // kernel has no trap frame so it has no trap frame mapped
     println!("{}", unit);
     unsafe {
-        let satp = unit.satp();
         KERNEL_UNIT.call_once(|| unit);
-        KERNEL_SATP = satp as u64;
     }
 }

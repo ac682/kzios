@@ -87,6 +87,8 @@
 			"sysbus",
 			"syscall",
 			"timebase",
+			"timeslice",
+			"trapframe",
 			"tval",
 			"uart",
 			"UARTHS",

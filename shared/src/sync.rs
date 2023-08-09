@@ -1,4 +1,7 @@
-use core::ops::{Deref, DerefMut};
+use core::{
+    cell::UnsafeCell,
+    ops::{Deref, DerefMut},
+};
 
 /// Lock trait that locks
 pub trait InteriorLock {
@@ -26,7 +29,7 @@ pub trait InteriorLockMut: InteriorLock {
 /// RAII
 pub struct DataLock<Data: Sized + Send + Sync, Lock: InteriorLock> {
     inner: Lock,
-    data: Data,
+    data: UnsafeCell<Data>,
 }
 
 unsafe impl<Data: Sized + Send + Sync, Lock: InteriorLock> Sync for DataLock<Data, Lock> {}
@@ -35,22 +38,25 @@ unsafe impl<Data: Sized + Send + Sync, Lock: InteriorLock> Send for DataLock<Dat
 impl<Data: Sized + Send + Sync, Lock: InteriorLock> DataLock<Data, Lock> {
     /// Create a new DataLock with the specific lock and data type
     pub const fn new(data: Data, lock: Lock) -> Self {
-        Self { inner: lock, data }
+        Self {
+            inner: lock,
+            data: UnsafeCell::new(data),
+        }
     }
 
     /// Wraps data and returns a container unlocks when dropped
-    pub fn lock(&mut self) -> DataLockGuard<Data, Lock> {
+    pub fn lock(&self) -> DataLockGuard<Data, Lock> {
         self.inner.lock();
         DataLockGuard {
-            locked: &mut self.inner,
-            data: &mut self.data as *mut Data,
+            locked: &self.inner,
+            data: self.data.get(),
         }
     }
 }
 
 /// Guard for DataLock
 pub struct DataLockGuard<'lock, Data: Sized + Send + Sync, Lock: InteriorLock> {
-    locked: &'lock mut Lock,
+    locked: &'lock Lock,
     data: *mut Data,
 }
 
@@ -123,7 +129,7 @@ impl<Data: Sized + Send + Sync, Lock: InteriorLockMut> ReadWriteDataLock<Data, L
     }
 
     /// Get data without lock check
-    pub unsafe fn access_unsafe(&self) -> &Data{
+    pub unsafe fn access_unsafe(&self) -> &Data {
         &self.data
     }
 }

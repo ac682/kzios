@@ -13,6 +13,11 @@ SECTIONS
     .text : ALIGN(8) {
         *(.text.init)
         *(.text .text.*)
+        . = ALIGN(0x1000);
+        PROVIDE(_trampoline = .);
+        *(.trampoline)
+        . = ALIGN(0x1000);
+        ASSERT(. - _trampoline == 0x1000, "error: _trampoline code larger than 4k")
     } > RAM
 
     .rodata : ALIGN(8) {

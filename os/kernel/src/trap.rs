@@ -26,9 +26,10 @@ pub struct TrapFrame {
     pub satp: u64,
     // 520-527
     pub pc: u64,
-    // 528
-    /// Currently the hart it running in. Guaranteed by trap_vector in assembly.asm
-    pub hartid: u64,
+    // 以下是临时数据，与 TrapFrame 所属的进程无关
+    // 528 Currently the hart it running in. Guaranteed by trap_vector in assembly.asm
+    hartid: u64,
+
 }
 
 impl TrapFrame {
@@ -57,7 +58,7 @@ impl Display for TrapFrame {
     }
 }
 
-pub struct UserTrapContext{
+pub struct TrapContext{
     // process reference
     // thread reference
 }
@@ -69,20 +70,21 @@ pub struct EnvironmentCallBody{
 
 #[no_mangle]
 unsafe fn handle_trap(frame: &mut TrapFrame, cause: Scause, _val: usize) -> &TrapFrame {
+    // NOTE: frame 指针有可能是 0，但这种情况只出现在每个 hart 的第一次 trap 中，也就是 SupervisorSoft 中，故不必检查 frame 有效性（但这么做挺冒险
     let hart = hart::this_hart();
     match cause.cause() {
-        Trap::Interrupt(Interrupt::UserTimer) => hart.handle_user_trap(TrapCause::TimerInterrupt),
+        Trap::Interrupt(Interrupt::UserTimer) => hart.trap(TrapCause::TimerInterrupt),
         Trap::Interrupt(Interrupt::SupervisorTimer) => todo!("nested interrupt: timer"),
         Trap::Interrupt(Interrupt::UserSoft) => todo!("impossible user soft interrupt"),
         Trap::Interrupt(Interrupt::SupervisorSoft) => {
             hart.clear_ipi();
-            hart.handle_ipi();
+            hart.trap(TrapCause::SoftwareInterrupt);
         }
         Trap::Exception(exception) => {
             frame.pc += 4;
             match exception {
-                Exception::Breakpoint => hart.handle_user_trap(TrapCause::Breakpoint),
-                Exception::UserEnvCall => hart.handle_user_trap(TrapCause::EnvironmentCall),
+                Exception::Breakpoint => hart.trap(TrapCause::Breakpoint),
+                Exception::UserEnvCall => hart.trap(TrapCause::EnvironmentCall),
                 _ => todo!("Unknown exception: {}", cause.bits()),
             }
         }
@@ -90,5 +92,5 @@ unsafe fn handle_trap(frame: &mut TrapFrame, cause: Scause, _val: usize) -> &Tra
             todo!("Unknown trap: {}", cause.bits())
         }
     }
-    hart.context()
+    hart.arranged_frame()
 }

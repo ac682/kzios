@@ -39,8 +39,8 @@ _park:
     j       _park
 
 .section .text
-.global _trap_vector
-_trap_vector:
+.global _kernel_trap
+_kernel_trap:
     csrrw	t6, sscratch, t6
     # wont save registers if sscratch == 0
     beqz    t6, 7f
@@ -53,7 +53,7 @@ _trap_vector:
 
     mv		t5, t6
     csrr	t6, sscratch
-    save_gp 31, t5
+    save_gp 31, t6
 
     # save floating registers
     csrr    t0, sstatus
@@ -105,4 +105,95 @@ _trap_vector:
     # save hartid to the next arranged TrapFrame(pointed to by a0) before enter user space to make sure tp in kernel mode is always referring to the hartid
     ld      tp, 528(a0)
     csrw    sscratch, a0
+    
+.section .text
+.global _switch_to_user
+.global _enter_user_breakpoint
+_switch_to_user:
     # TODO: do registers restore and sret
+    mv      t6, a0
+
+    # restore satp and mepc
+    ld      t5, 512(t6)
+    csrr    t4, satp
+    # 如果 t5 t4相等就跳过
+    sfence.vma
+    csrw    satp, t5
+8:
+    ld      t5, 520(t6)
+    csrw    sepc, t5
+
+    csrr    t0, sstatus
+    srliw   t0, t0, 13
+    andi    t0, t0, 3
+    li      t1, 1
+    li      t2, 2
+    bne     t0, t1, initial
+    bne     t0, t2, clean
+initial:
+    .set    i, 0
+    .rept   NUM_REGS
+
+            .set    i,i+1
+    .endr
+    j       9f
+clean:
+    .set	i,0
+    .rept	NUM_REGS
+    		load_fp	0
+    		.set	i,i+1
+    .endr
+9:
+    .set	i , 0
+    .rept	NUM_REGS
+        load_gp	%i
+        .set	i, i + 1
+    .endr
+_enter_userspace_breakpoin:
+    sret
+
+.section .trampoline
+.global _user_trap:
+
+    # sscratch holds the trapframe address: (top_number - 1) << 12
+    csrrw	t6, sscratch, t6
+
+    .set	i, 0
+    .rept	NUM_REGS - 1
+            save_gp	%i, t6
+            .set	i, i + 1
+    .endr
+
+    mv		a0, t6
+    csrr	t6, sscratch
+    save_gp 31, t6
+
+    # save floating registers
+    csrr    t0, sstatus
+    srliw   t0, t0, 13
+    andi    t0, t0, 3
+    li      t1, 3
+    bne     t0, t1, 10f
+
+    .set	i,0
+    .rept	NUM_REGS
+            save_fp	%i,a0
+            .set	i,i+1
+    .endr
+
+    # clear floating dirty bit
+    csrr    t0, sstatus
+    li      t1, 1
+    slliw   t1, t1, 13
+    not     t1, t1
+    and     t0, t0, t1
+    csrw    sstatus, t0
+10:
+    # save special register
+    csrr    t6, satp
+    sd      t6, 512(a0)
+    csrr    t6, sepc
+    sd      t6, 520(a0)
+    # hartid should be restored from 528(TrapFrame) to tp
+    ld      tp, 528(a0)
+    sret

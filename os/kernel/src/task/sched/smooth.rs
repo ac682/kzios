@@ -5,8 +5,8 @@ use core::{
 
 use alloc::{sync::Arc, vec::Vec};
 use erhino_shared::{
-    proc::Pid,
-    sync::{DataLock, InteriorLock, ReadDataLockGuard, ReadWriteDataLock, InteriorLockMut},
+    proc::{ExecutionState, Pid},
+    sync::{DataLock, InteriorLock, InteriorLockMut, ReadDataLockGuard, ReadWriteDataLock},
 };
 use spin::mutex::SpinMutex;
 
@@ -38,7 +38,7 @@ impl ProcessTable {
             generation: AtomicUsize::new(0),
             pid_generator: AtomicUsize::new(0),
             head: None,
-            head_lock: ReadWriteSpinLock::new()
+            head_lock: ReadWriteSpinLock::new(),
         }
     }
 
@@ -46,7 +46,7 @@ impl ProcessTable {
         self.pid_generator.fetch_add(1, Ordering::Relaxed) as Pid
     }
 
-    pub fn gen(&self) -> usize{
+    pub fn gen(&self) -> usize {
         self.generation.load(Ordering::Relaxed)
     }
 
@@ -124,7 +124,7 @@ impl ProcessCell {
             head: Some(Arc::new(UnsafeCell::new(cell))),
             head_lock: ReadWriteSpinLock::new(),
             next: None,
-            next_lock: ReadWriteSpinLock::new()
+            next_lock: ReadWriteSpinLock::new(),
         }
     }
 
@@ -148,7 +148,7 @@ impl<T: Timer> SmoothScheduler<T> {
         Self {
             hartid: id,
             timer,
-            current: None
+            current: None,
         }
     }
 
@@ -204,7 +204,7 @@ impl<T: Timer> SmoothScheduler<T> {
                 let thread = unsafe { &*thread_ptr.get() };
                 let thread_generation = thread.generation.load(Ordering::Relaxed);
                 if thread_generation <= proc_generation && thread.state_lock.try_lock() {
-                    if thread.thread.state == ProcessState::Ready {
+                    if thread.inner.state == ExecutionState::Ready {
                         thread.generation.fetch_add(1, Ordering::Relaxed);
                         // println!(
                         //     "TID: {} picked for {}",
@@ -232,8 +232,8 @@ impl<T: Timer> SmoothScheduler<T> {
 }
 
 impl<T: Timer> Scheduler for SmoothScheduler<T> {
-    fn add(&mut self, proc: Process) -> Pid {
-        unsafe { PROC_TABLE.add(proc) }
+    fn add(&mut self, proc: Process) {
+        unsafe { PROC_TABLE.add(proc) };
     }
 
     fn schedule(&mut self) {
@@ -255,25 +255,25 @@ impl<T: Timer> Scheduler for SmoothScheduler<T> {
                     self.current = Some((current_process, current_thread));
                     //return (proc.inner.pid, thread.inner.tid);
                 } else {
-                    thread.inner.state = ProcessState::Ready;
+                    thread.inner.state = ExecutionState::Ready;
                     thread.state_lock.unlock();
                     let new_thread_ptr = self.pick_thread(proc);
                     let new_thread = unsafe { &mut *new_thread_ptr.get() };
-                    new_thread.inner.state = ProcessState::Running;
+                    new_thread.inner.state = ExecutionState::Running;
                     let pid = proc.inner.pid;
                     let tid = new_thread.inner.tid;
                     self.current = Some((current_process, new_thread_ptr));
                     //return (pid, tid);
                 }
             } else {
-                thread.inner.state = ProcessState::Ready;
+                thread.inner.state = ExecutionState::Ready;
                 thread.state_lock.unlock();
                 let proc_ptr = self.pick_process();
                 let proc = unsafe { &mut *proc_ptr.get() };
                 let pid = proc.inner.pid;
                 let new_thread_ptr = self.pick_thread(proc);
                 let new_thread = unsafe { &mut *new_thread_ptr.get() };
-                new_thread.inner.state = ProcessState::Running;
+                new_thread.inner.state = ExecutionState::Running;
                 let tid = new_thread.inner.tid;
                 self.current = Some((proc_ptr, new_thread_ptr));
                 //return (pid, tid);
@@ -284,18 +284,23 @@ impl<T: Timer> Scheduler for SmoothScheduler<T> {
             let pid = proc.inner.pid;
             let new_thread_ptr = self.pick_thread(proc);
             let new_thread = unsafe { &mut *new_thread_ptr.get() };
-            new_thread.inner.state = ProcessState::Running;
+            new_thread.inner.state = ExecutionState::Running;
             let tid = new_thread.inner.tid;
             self.current = Some((proc_ptr, new_thread_ptr));
             //return (pid, tid);
         }
     }
 
-    fn context(&self) -> &TrapFrame {
-        if let Some((_,thread_ptr)) = self.current.as_ref(){
+    fn next_timeslice(&self) -> usize {
+        3
+    }
+
+    fn context(&self) -> (&Process, &Thread, &TrapFrame) {
+        if let Some((process_ptr, thread_ptr)) = self.current.as_ref() {
+            let process = unsafe { &mut *process_ptr.get() };
             let thread = unsafe { &mut *thread_ptr.get() };
-            &thread.inner.frame
-        }else{
+            (&process.inner, &thread.inner, &thread.inner.frame)
+        } else {
             panic!("no process selected")
         }
     }

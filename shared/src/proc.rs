@@ -49,15 +49,15 @@ flags! {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-/// States of process
-pub enum ProcessState {
-    /// Can be picked as running process
+/// States of process execution unit
+pub enum ExecutionState {
+    /// Can be picked as running
     Ready,
     /// Code is being executed
     Running,
     /// Waiting for some signal and need to be waked up
     Waiting(WaitingReason),
-    /// Finished, process would be cleaned up and pid put into recycling
+    /// Finished, thread would be cleaned up
     Dead,
 }
 
@@ -116,7 +116,7 @@ pub struct ProcessInfo {
     /// Pid of the parent process of the process
     pub parent: Pid,
     /// State of the process
-    pub state: ProcessState,
+    pub state: ExecutionState,
     /// Permission of the process
     pub permissions: FlagSet<ProcessPermission>,
 }

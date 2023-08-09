@@ -4,27 +4,30 @@ use alloc::vec::Vec;
 use riscv::register::{scause::Scause, sip, sscratch, sstatus, stvec, utvec::TrapMode};
 
 use crate::{
-    external::{_hart_num, _trap_vector},
+    external::{_hart_num, _kernel_trap},
     println, sbi,
-    task::sched::{smooth::SmoothScheduler, Scheduler},
+    sync::hart,
+    task::sched::{unfair::UnfairScheduler, Scheduler},
     timer::{hart::HartTimer, Timer},
     trap::{TrapCause, TrapFrame},
 };
 
 type TimerImpl = HartTimer;
-type SchedulerImpl = SmoothScheduler<TimerImpl>;
+type SchedulerImpl = UnfairScheduler;
 
-static mut HARTS: Vec<Hart<SchedulerImpl>> = Vec::new();
+static mut HARTS: Vec<Hart<TimerImpl, SchedulerImpl>> = Vec::new();
 
-pub struct Hart<S: Scheduler> {
+pub struct Hart<T: Timer, S: Scheduler> {
     id: usize,
+    timer: T,
     scheduler: S,
 }
 
-impl<S: Scheduler> Hart<S> {
-    pub const fn new(hartid: usize, scheduler: S) -> Self {
+impl<T: Timer, S: Scheduler> Hart<T, S> {
+    pub const fn new(hartid: usize, timer: T, scheduler: S) -> Self {
         Self {
             id: hartid,
+            timer,
             scheduler,
         }
     }
@@ -33,14 +36,14 @@ impl<S: Scheduler> Hart<S> {
         // call on boot by current hart
         // setup trap & interrupts
         unsafe {
-            stvec::write(_trap_vector as usize, TrapMode::Direct);
+            stvec::write(_kernel_trap as usize, TrapMode::Direct);
             sstatus::set_fs(sstatus::FS::Initial);
             sstatus::set_sie();
         }
     }
 
-    pub fn context(&self) -> &TrapFrame{
-        self.scheduler.context()
+    pub fn arranged_frame(&self) -> &TrapFrame {
+        self.scheduler.context().2
     }
 
     pub fn send_ipi(&self) -> bool {
@@ -57,14 +60,16 @@ impl<S: Scheduler> Hart<S> {
         unsafe { asm!("csrr {o}, sip", "csrw sip, {i}", o = out(reg) sip, i = in(reg) sip & !2) }
     }
 
-    pub fn handle_ipi(&mut self){
-        self.scheduler.schedule();
-    }
-
-    pub fn handle_user_trap(&mut self, cause: TrapCause){
+    pub fn trap(&mut self, cause: TrapCause) {
         match cause {
             TrapCause::Breakpoint => {
                 println!("#{} Pid={} requested a breakpoint", self.id, "unimp");
+            }
+            TrapCause::SoftwareInterrupt | TrapCause::TimerInterrupt => {
+                self.scheduler.schedule();
+                self.timer.schedule_next(self.scheduler.next_timeslice());
+                let (p, t, f) = self.scheduler.context();
+                println!("{}:{}", p.pid, t.tid);
             }
             _ => {
                 todo!("unimplemented trap cause {:?}", cause)
@@ -78,17 +83,15 @@ pub fn init(freq: &[usize]) {
         for i in 0..(_hart_num as usize) {
             HARTS.push(Hart::new(
                 i,
-                SchedulerImpl::new(
+                TimerImpl::new(
                     i,
-                    TimerImpl::new(
-                        i,
-                        if i < freq.len() {
-                            freq[i]
-                        } else {
-                            freq[freq.len() - 1]
-                        },
-                    ),
+                    if i < freq.len() {
+                        freq[i]
+                    } else {
+                        freq[freq.len() - 1]
+                    },
                 ),
+                SchedulerImpl::new(),
             ));
         }
     }
@@ -110,7 +113,7 @@ pub fn send_ipi_all() -> bool {
     }
 }
 
-pub fn get_hart(id: usize) -> &'static mut Hart<SchedulerImpl> {
+pub fn get_hart(id: usize) -> &'static mut Hart<TimerImpl, SchedulerImpl> {
     unsafe {
         if id < HARTS.len() {
             &mut HARTS[id as usize]
@@ -128,6 +131,6 @@ pub fn hartid() -> usize {
     tp
 }
 
-pub fn this_hart() -> &'static mut Hart<SchedulerImpl> {
+pub fn this_hart() -> &'static mut Hart<TimerImpl, SchedulerImpl> {
     get_hart(hartid())
 }
