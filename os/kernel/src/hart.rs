@@ -42,8 +42,8 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
         }
     }
 
-    pub fn arranged_frame(&self) -> &TrapFrame {
-        self.scheduler.context().2
+    pub fn arranged_memory_space_satp(&self) -> usize {
+        self.scheduler.context().0.memory.satp()
     }
 
     pub fn send_ipi(&self) -> bool {
@@ -68,7 +68,7 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
             TrapCause::SoftwareInterrupt | TrapCause::TimerInterrupt => {
                 self.scheduler.schedule();
                 self.timer.schedule_next(self.scheduler.next_timeslice());
-                let (p, t, f) = self.scheduler.context();
+                let (p, t) = self.scheduler.context();
                 println!("{}:{}", p.pid, t.tid);
             }
             _ => {

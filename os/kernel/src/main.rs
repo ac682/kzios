@@ -4,6 +4,7 @@
 
 use core::arch::global_asm;
 
+use external::{_kernel_end, _stack_size};
 use tar_no_std::TarArchiveRef;
 
 use crate::{mm::unit, task::proc::Process};
@@ -18,8 +19,8 @@ mod rt;
 mod sbi;
 mod sync;
 mod task;
-mod trap;
 mod timer;
+mod trap;
 
 global_asm!(include_str!("assembly.asm"));
 

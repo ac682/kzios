@@ -295,11 +295,11 @@ impl<T: Timer> Scheduler for SmoothScheduler<T> {
         3
     }
 
-    fn context(&self) -> (&Process, &Thread, &TrapFrame) {
+    fn context(&self) -> (&Process, &Thread) {
         if let Some((process_ptr, thread_ptr)) = self.current.as_ref() {
             let process = unsafe { &mut *process_ptr.get() };
             let thread = unsafe { &mut *thread_ptr.get() };
-            (&process.inner, &thread.inner, &thread.inner.frame)
+            (&process.inner, &thread.inner)
         } else {
             panic!("no process selected")
         }

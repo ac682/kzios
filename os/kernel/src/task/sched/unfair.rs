@@ -268,12 +268,11 @@ impl Scheduler for UnfairScheduler {
         QUANTUM
     }
 
-    fn context(&self) -> (&Process, &Thread, &TrapFrame) {
+    fn context(&self) -> (&Process, &Thread) {
         if let Some(current) = &self.current {
             (
                 &unsafe { current.proc.access_unsafe() }.inner,
-                &current.inner,
-                &current.inner.frame,
+                &current.inner
             )
         } else {
             panic!("hart is not scheduling-prepared yet")

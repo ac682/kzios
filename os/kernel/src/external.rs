@@ -14,4 +14,5 @@ extern "C" {
     pub fn _user_trap();
     pub fn _trampoline();
     pub fn _park();
+    pub fn _stack_size();
 }

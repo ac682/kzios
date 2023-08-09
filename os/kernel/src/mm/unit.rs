@@ -19,6 +19,8 @@ use super::{
 type KernelUnit = MemoryUnit<PageTableEntry39>;
 
 static mut KERNEL_UNIT: Once<KernelUnit> = Once::new();
+#[export_name = "_kernel_satp"]
+static mut KERNEL_SATP: usize = 0;
 
 #[derive(Debug)]
 pub enum MemoryUnitError {
@@ -264,6 +266,8 @@ pub fn init() {
     // kernel has no trap frame so it has no trap frame mapped
     println!("{}", unit);
     unsafe {
+        let satp = unit.satp();
         KERNEL_UNIT.call_once(|| unit);
+        KERNEL_SATP = satp;
     }
 }

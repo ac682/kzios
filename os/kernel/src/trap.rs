@@ -3,7 +3,10 @@ use core::fmt::Display;
 use erhino_shared::call::SystemCall;
 use riscv::register::scause::{Exception, Interrupt, Scause, Trap};
 
-use crate::{hart, println};
+use crate::{
+    external::{_kernel_end, _stack_size},
+    hart, println,
+};
 
 #[derive(Debug)]
 pub enum TrapCause {
@@ -22,14 +25,13 @@ pub struct TrapFrame {
     pub x: [u64; 32],
     // 256 - 511
     pub f: [u64; 32],
-    // 512-519
-    pub satp: u64,
-    // 520-527
+    // 512
     pub pc: u64,
     // 以下是临时数据，与 TrapFrame 所属的进程无关
-    // 528 Currently the hart it running in. Guaranteed by trap_vector in assembly.asm
-    hartid: u64,
-
+    // 520 Currently the hart it running in. Guaranteed by trap_vector in assembly.asm
+    kernel_tp: u64,
+    // 528
+    kernel_sp: u64
 }
 
 impl TrapFrame {
@@ -37,16 +39,17 @@ impl TrapFrame {
         Self {
             x: [0; 32],
             f: [0; 32],
-            satp: 0,
             pc: 0,
-            hartid: hartid as u64,
+            kernel_tp: hartid as u64,
+            // init later on
+            kernel_sp: todo!()
         }
     }
 }
 
 impl Display for TrapFrame {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        writeln!(f, "Registers with hartid={}", self.hartid)?;
+        writeln!(f, "Registers with hartid={}", self.kernel_tp)?;
         writeln!(f, "ra={:#016x}, sp={:#016x}", self.x[1], self.x[2])?;
         writeln!(f, "gp={:#016x}, tp={:#016x}", self.x[3], self.x[4])?;
         writeln!(f, "fp={:#016x}", self.x[8])?;
@@ -58,19 +61,17 @@ impl Display for TrapFrame {
     }
 }
 
-pub struct TrapContext{
+pub struct TrapContext {
     // process reference
     // thread reference
 }
 
-pub struct EnvironmentCallBody{
+pub struct EnvironmentCallBody {
     pub function: SystemCall,
-
 }
 
 #[no_mangle]
-unsafe fn handle_trap(frame: &mut TrapFrame, cause: Scause, _val: usize) -> &TrapFrame {
-    // NOTE: frame 指针有可能是 0，但这种情况只出现在每个 hart 的第一次 trap 中，也就是 SupervisorSoft 中，故不必检查 frame 有效性（但这么做挺冒险
+unsafe fn handle_user_trap(frame: &mut TrapFrame, cause: Scause, _val: usize) -> usize {
     let hart = hart::this_hart();
     match cause.cause() {
         Trap::Interrupt(Interrupt::UserTimer) => hart.trap(TrapCause::TimerInterrupt),
@@ -92,5 +93,8 @@ unsafe fn handle_trap(frame: &mut TrapFrame, cause: Scause, _val: usize) -> &Tra
             todo!("Unknown trap: {}", cause.bits())
         }
     }
-    hart.arranged_frame()
+    hart.arranged_memory_space_satp()
 }
+
+#[no_mangle]
+unsafe fn handle_kernel_trap(cause: Scause, val: usize) {}
