@@ -42,7 +42,7 @@ fn rust_start<T: Termination + 'static>(
         unsafe {
             ENV_INIT = true;
         }
-        hart::get_hart(hartid).init();
+        // hart::get_hart(hartid).init();
         println!("Hart #{} init completed, go kernel init", hartid);
         main();
         hart::send_ipi_all();
@@ -52,7 +52,7 @@ fn rust_start<T: Termination + 'static>(
                 spin_loop();
             }
         }
-        hart::get_hart(hartid).init();
+        // hart::get_hart(hartid).init();
         println!("Hart #{} init completed, sleeping", hartid);
         unsafe {
             _park();

@@ -12,6 +12,13 @@ _start:
     mul     t0, t0, sp
     la      sp, _kernel_end
     sub     sp, sp, t0
+    # setup hart, sstatus.fs, sie = 1, stvec = Direct, _kernel_trap
+    la      t0, _kernel_trap
+    srliw   t0, t0, 2
+    addi    t0, t0, 0b01
+    csrw    stvec, t0
+    li      t0, (1 << 13) | (1 << 1)
+    csrw    sstatus, t0
     # jump into rust_start
     call    main
 
@@ -62,7 +69,7 @@ _kernel_trap:
     # check if need to save floating registers
     csrr    t0, sstatus
     srliw   t0, t0, 13
-    andi    t0, t0, 3
+    andi    t0, t0, 0b11
     li      t1, 3
     bne     t0, t1, 1f
 0:
@@ -110,48 +117,23 @@ _kernel_trap:
     csrr	a0, scause
     csrr    a1, stval
     call    handle_kernel_trap
-    # restore generic registers
-    ld      x0, 0(sp)
-    ld      x1, 8(sp)
-    // sp is always the same
-    ld      x2, 16(sp)
-    ld      x3, 24(sp)
-    # no need to restore tp
-    # ld      x4, 32(sp)
-    ld      x5, 40(sp)
-    ld      x6, 48(sp)
-    ld      x7, 56(sp)
-    ld      x8, 64(sp)
-    ld      x9, 72(sp)
-    ld      x10, 80(sp)
-    ld      x11, 88(sp)
-    ld      x12, 96(sp)
-    ld      x13, 104(sp)
-    ld      x14, 112(sp)
-    ld      x15, 120(sp)
-    ld      x16, 128(sp)
-    ld      x17, 136(sp)
-    ld      x18, 144(sp)
-    ld      x19, 152(sp)
-    ld      x20, 160(sp)
-    ld      x21, 168(sp)
-    ld      x22, 176(sp)
-    ld      x23, 184(sp)
-    ld      x24, 192(sp)
-    ld      x25, 200(sp)
-    ld      x26, 208(sp)
-    ld      x27, 216(sp)
-    ld      x28, 224(sp)
-    ld      x29, 232(sp)
-    ld      x30, 240(sp)
-    ld      x31, 248(sp)
+    # check if enter user
+    add     t0, a0, a1
+    bnez    t0, 2f
+    # modify sstatus.spie .spp to 1
+    csrr    t0, sstatus
+    li      t1, 0b10010000
+    or      t0, t0, t1
+    csrw    sstatus, t0
+    call    _enter_user
+2:
     # check if need to restore floating registers
     csrr    t0, sstatus
     srliw   t0, t0, 13
-    andi    t0, t0, 3
+    andi    t0, t0, 0b11
     li      t1, 3
-    bne     t0, t1, 3f
-2:
+    bne     t0, t1, 4f
+3:
     fld      f0, 256(sp)
     fld      f1, 264(sp)
     fld      f2, 272(sp)
@@ -191,14 +173,49 @@ _kernel_trap:
     not     t1, t1
     and     t0, t0, t1
     csrw    sstatus, t0
-3:
+4:
+    # restore generic registers
+    # no need to restroe sp, tp, they are always the same
+    ld      x0, 0(sp)
+    ld      x1, 8(sp)
+    ld      x3, 24(sp)
+    ld      x5, 40(sp)
+    ld      x6, 48(sp)
+    ld      x7, 56(sp)
+    ld      x8, 64(sp)
+    ld      x9, 72(sp)
+    ld      x10, 80(sp)
+    ld      x11, 88(sp)
+    ld      x12, 96(sp)
+    ld      x13, 104(sp)
+    ld      x14, 112(sp)
+    ld      x15, 120(sp)
+    ld      x16, 128(sp)
+    ld      x17, 136(sp)
+    ld      x18, 144(sp)
+    ld      x19, 152(sp)
+    ld      x20, 160(sp)
+    ld      x21, 168(sp)
+    ld      x22, 176(sp)
+    ld      x23, 184(sp)
+    ld      x24, 192(sp)
+    ld      x25, 200(sp)
+    ld      x26, 208(sp)
+    ld      x27, 216(sp)
+    ld      x28, 224(sp)
+    ld      x29, 232(sp)
+    ld      x30, 240(sp)
+    ld      x31, 248(sp)
+
     addi sp, sp, 512
     sret
     
 .section .trampoline
+.align 4
 .global _user_trap
+.global _enter_user
 _user_trap:
-    # sscratch holds the trapframe address: (top_number - 1) << 12
+    # sscratch holds the trapframe address
     csrrw	t6, sscratch, t6
     # save generic registers to t6
     sd      x0, 0(t6)
@@ -238,7 +255,7 @@ _user_trap:
     # save floating registers
     csrr    t0, sstatus
     srliw   t0, t0, 13
-    andi    t0, t0, 3
+    andi    t0, t0, 0b11
     li      t1, 3
     bne     t0, t1, 1f
 0:
@@ -288,60 +305,78 @@ _user_trap:
     # load tp and sp
     ld      tp, 520(a0)
     ld      sp, 528(a0)
+    # install kernel page table
+    ld      t6, 536(a0)
+    csrw    satp, t6
     sfence.vma
+    # traps here redirect to kernel trap
+    la      t6, _kernel_trap
+    srliw   t6, t6, 2
+    addi    t6, t6, 0b01
+    csrw    stvec, t6
+    # prepare arguments
     csrr    a1, scause
     csrr    a2, stval
     call handle_user_trap
-    # set memory page table
+# enter_user(satp, Address)
+_enter_user:
+    # traps here redirect to user trap
+    la      t6, _user_trap
+    srliw   t6, t6, 2
+    addi    t6, t6, 0b01
+    csrw    stvec, t6
+    # a0 -> satp
+    # a1 -> &trapframe(inaccessible before satp install)
+    # install context
     csrw    satp, a0
+    csrw    sscratch, a1
     sfence.vma
-    csrr    a0, sscratch
     # restore special registers
-    ld      t6, 512(a0)
+    ld      t6, 512(a1)
     csrw    sepc, t6
     # save tp and sp
-    sd      tp, 520(a0)
-    sd      sp, 528(a0)
+    sd      tp, 520(a1)
+    sd      sp, 528(a1)
     sfence.vma
     # restore floating registers
     csrr    t0, sstatus
     srliw   t0, t0, 13
-    andi    t0, t0, 3
+    andi    t0, t0, 0b11
     li      t1, 3
     bne     t0, t1, 3f
 2:
-    fld      f0, 256(a0)
-    fld      f1, 264(a0)
-    fld      f2, 272(a0)
-    fld      f3, 280(a0)
-    fld      f4, 288(a0)
-    fld      f5, 296(a0)
-    fld      f6, 304(a0)
-    fld      f7, 312(a0)
-    fld      f8, 320(a0)
-    fld      f9, 328(a0)
-    fld      f10, 336(a0)
-    fld      f11, 344(a0)
-    fld      f12, 352(a0)
-    fld      f13, 360(a0)
-    fld      f14, 368(a0)
-    fld      f15, 376(a0)
-    fld      f16, 384(a0)
-    fld      f17, 392(a0)
-    fld      f18, 400(a0)
-    fld      f19, 408(a0)
-    fld      f20, 416(a0)
-    fld      f21, 424(a0)
-    fld      f22, 432(a0)
-    fld      f23, 440(a0)
-    fld      f24, 448(a0)
-    fld      f25, 456(a0)
-    fld      f26, 464(a0)
-    fld      f27, 472(a0)
-    fld      f28, 480(a0)
-    fld      f29, 488(a0)
-    fld      f30, 496(a0)
-    fld      f31, 504(a0)
+    fld      f0, 256(a1)
+    fld      f1, 264(a1)
+    fld      f2, 272(a1)
+    fld      f3, 280(a1)
+    fld      f4, 288(a1)
+    fld      f5, 296(a1)
+    fld      f6, 304(a1)
+    fld      f7, 312(a1)
+    fld      f8, 320(a1)
+    fld      f9, 328(a1)
+    fld      f10, 336(a1)
+    fld      f11, 344(a1)
+    fld      f12, 352(a1)
+    fld      f13, 360(a1)
+    fld      f14, 368(a1)
+    fld      f15, 376(a1)
+    fld      f16, 384(a1)
+    fld      f17, 392(a1)
+    fld      f18, 400(a1)
+    fld      f19, 408(a1)
+    fld      f20, 416(a1)
+    fld      f21, 424(a1)
+    fld      f22, 432(a1)
+    fld      f23, 440(a1)
+    fld      f24, 448(a1)
+    fld      f25, 456(a1)
+    fld      f26, 464(a1)
+    fld      f27, 472(a1)
+    fld      f28, 480(a1)
+    fld      f29, 488(a1)
+    fld      f30, 496(a1)
+    fld      f31, 504(a1)
     # make floating dirty bit clean
     csrr    t0, sstatus
     li      t1, 2
@@ -351,7 +386,7 @@ _user_trap:
     csrw    sstatus, t0
 3:
     # restore generic registers
-    mv      t6, a0
+    mv      t6, a1
     ld      x0, 0(t6)
     ld      x1, 8(t6)
     ld      x2, 16(t6)

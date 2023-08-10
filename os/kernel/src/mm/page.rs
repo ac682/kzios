@@ -1,9 +1,9 @@
 // Sv39 only
 
-use core::{cell::UnsafeCell, fmt::Debug, mem::size_of};
+use core::{cell::UnsafeCell, fmt::Debug, mem::size_of, ops::Not};
 
 use alloc::boxed::Box;
-use erhino_shared::mem::PageNumber;
+use erhino_shared::mem::{Address, PageNumber};
 use flagset::{flags, FlagSet};
 use hashbrown::HashMap;
 use num_traits::Pow;
@@ -146,6 +146,8 @@ pub trait PageTableEntry: Sized {
     const LENGTH: usize;
     const DEPTH: usize;
     const SIZE: usize;
+    fn space_size() -> usize;
+    fn top_address() -> Address;
     fn is_leaf(&self) -> bool;
     fn is_valid(&self) -> bool;
     fn has_flag(&self, flag: PageFlag) -> bool;
@@ -157,14 +159,14 @@ pub trait PageTableEntry: Sized {
 }
 
 pub struct PageTableEntryPrimitive<
-    P: Clone + Copy + Into<u64> + TryFrom<u64>,
+    P: Clone + Copy + Into<u64> + TryFrom<u64> + From<u8> + Not,
     const LENGTH: usize,
     const DEPTH: usize,
     const SIZE: usize,
 >(P);
 
 impl<
-        P: Clone + Copy + Into<u64> + TryFrom<u64>,
+        P: Clone + Copy + Into<u64> + TryFrom<u64> + From<u8> + Not,
         const LENGTH: usize,
         const DEPTH: usize,
         const SIZE: usize,
@@ -175,6 +177,18 @@ impl<
     const DEPTH: usize = DEPTH;
 
     const SIZE: usize = SIZE;
+
+    fn space_size() -> usize {
+        1usize << ((DEPTH * SIZE + 12) - 1)
+    }
+    // 以 Sv39 为例，其虚拟地址空间大小为 2^64
+    // 但是 有效位为 (0){25}0(x){38} 或 (1){25}1(x){38}
+    // 空间大小为 2^38，为上下各 0+2^38 和 2^64-2^38
+    fn top_address() -> Address {
+        let zero: u64 = P::from(0u8).into();
+        !zero as Address
+    }
+
     fn is_leaf(&self) -> bool {
         self.0.into() & 0b1110 != 0
     }
@@ -221,6 +235,7 @@ pub type PageTableEntry32 = PageTableEntryPrimitive<u32, 34, 2, 10>;
 pub type PageTableEntry39 = PageTableEntryPrimitive<u64, 56, 3, 9>;
 pub type PageTableEntry48 = PageTableEntryPrimitive<u64, 56, 4, 9>;
 pub type PageTableEntry57 = PageTableEntryPrimitive<u64, 56, 5, 9>;
+pub type PageEntryImpl = PageTableEntry39;
 
 impl<'a, E: PageTableEntry + 'static> IntoIterator for &'a PageTable<E> {
     type Item = (PageNumber, PageNumber, usize, FlagSet<PageFlag>);

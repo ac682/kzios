@@ -13,14 +13,14 @@ use crate::{
 
 use super::{
     frame::{self, FrameTracker},
-    page::{PageFlag, PageTable, PageTableEntry, PageTableEntry32},
+    page::{PageFlag, PageTable, PageTableEntry, PageTableEntry32, PageEntryImpl},
 };
 
-type KernelUnit = MemoryUnit<PageTableEntry39>;
+type KernelUnit = MemoryUnit<PageEntryImpl>;
 
 static mut KERNEL_UNIT: Once<KernelUnit> = Once::new();
 #[export_name = "_kernel_satp"]
-static mut KERNEL_SATP: usize = 0;
+pub static mut KERNEL_SATP: usize = 0;
 
 #[derive(Debug)]
 pub enum MemoryUnitError {
@@ -45,10 +45,6 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         } else {
             Err(MemoryUnitError::RanOutOfFrames)
         }
-    }
-
-    pub fn top_page_number() -> usize {
-        1usize << ((E::DEPTH * E::SIZE + 12) - 1) >> 12
     }
 
     pub fn satp(&self) -> usize {
@@ -254,10 +250,10 @@ pub fn init() {
         PageFlag::Valid | PageFlag::Writeable | PageFlag::Readable | PageFlag::Executable,
     )
     .unwrap();
-    let top_number = KernelUnit::top_page_number();
+    let top_address = PageEntryImpl::top_address();
     // trampoline code page
     unit.map(
-        top_number,
+        top_address >> 12,
         _trampoline as usize >> 12,
         1,
         PageFlag::Valid | PageFlag::Writeable | PageFlag::Readable | PageFlag::Executable,

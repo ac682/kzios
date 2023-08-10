@@ -1,15 +1,14 @@
-use erhino_shared::proc::Pid;
+use erhino_shared::{proc::Pid, mem::Address};
 
 use crate::trap::TrapFrame;
 
 use super::{proc::Process, thread::Thread};
 
-pub mod smooth;
 pub mod unfair;
 
 pub trait Scheduler {
-    fn add(&mut self, proc: Process);
+    fn add(&mut self, proc: Process, parent: Option<Pid>) -> Pid;
     fn schedule(&mut self);
     fn next_timeslice(&self) -> usize;
-    fn context(&self) -> (&Process, &Thread);
+    fn context(&self) -> (&Process, &Thread, Address);
 }

@@ -1,11 +1,13 @@
 use core::fmt::Display;
 
-use erhino_shared::call::SystemCall;
+use erhino_shared::{call::SystemCall, mem::Address};
 use riscv::register::scause::{Exception, Interrupt, Scause, Trap};
 
 use crate::{
     external::{_kernel_end, _stack_size},
-    hart, println,
+    hart,
+    mm::unit::KERNEL_SATP,
+    println,
 };
 
 #[derive(Debug)]
@@ -31,18 +33,20 @@ pub struct TrapFrame {
     // 520 Currently the hart it running in. Guaranteed by trap_vector in assembly.asm
     kernel_tp: u64,
     // 528
-    kernel_sp: u64
+    kernel_sp: u64,
+    // 536
+    kernel_satp: u64,
 }
 
 impl TrapFrame {
-    pub const fn new(hartid: usize) -> Self {
+    pub fn new(hartid: usize) -> Self {
         Self {
             x: [0; 32],
             f: [0; 32],
             pc: 0,
             kernel_tp: hartid as u64,
-            // init later on
-            kernel_sp: todo!()
+            kernel_sp: _kernel_end as u64 - (_stack_size as u64 * hartid as u64),
+            kernel_satp: unsafe { KERNEL_SATP } as u64,
         }
     }
 }
@@ -57,7 +61,21 @@ impl Display for TrapFrame {
         writeln!(f, "a2={:#016x}, a3={:#016x}", self.x[12], self.x[13])?;
         writeln!(f, "a4={:#016x}, a5={:#016x}", self.x[14], self.x[15])?;
         writeln!(f, "a6={:#016x}, a7={:#016x}", self.x[16], self.x[17])?;
-        writeln!(f, "sepc={:#x}, satp={:#x}", self.pc, self.satp)
+        writeln!(f, "sepc={:#x}", self.pc)
+        // writeln!(
+        //     f,
+        //     "sepc={:#x}, satp({})={:#x}",
+        //     self.pc,
+        //     match (self.satp >> 60) {
+        //         0 => "Bare",
+        //         8 => "Sv39",
+        //         9 => "Sv48",
+        //         10 => "Sv57",
+        //         11 => "Sv64",
+        //         _ => "unimp",
+        //     },
+        //     self.satp & ((1 << 44) - 1)
+        // )
     }
 }
 
@@ -71,16 +89,12 @@ pub struct EnvironmentCallBody {
 }
 
 #[no_mangle]
-unsafe fn handle_user_trap(frame: &mut TrapFrame, cause: Scause, _val: usize) -> usize {
+unsafe fn handle_user_trap(frame: &mut TrapFrame, cause: Scause, _val: usize) -> (usize, Address) {
     let hart = hart::this_hart();
     match cause.cause() {
         Trap::Interrupt(Interrupt::UserTimer) => hart.trap(TrapCause::TimerInterrupt),
         Trap::Interrupt(Interrupt::SupervisorTimer) => todo!("nested interrupt: timer"),
         Trap::Interrupt(Interrupt::UserSoft) => todo!("impossible user soft interrupt"),
-        Trap::Interrupt(Interrupt::SupervisorSoft) => {
-            hart.clear_ipi();
-            hart.trap(TrapCause::SoftwareInterrupt);
-        }
         Trap::Exception(exception) => {
             frame.pc += 4;
             match exception {
@@ -90,11 +104,23 @@ unsafe fn handle_user_trap(frame: &mut TrapFrame, cause: Scause, _val: usize) ->
             }
         }
         _ => {
-            todo!("Unknown trap: {}", cause.bits())
+            unimplemented!("Unknown trap from user: {}", cause.bits())
         }
     }
-    hart.arranged_memory_space_satp()
+    hart.arranged_context()
 }
 
 #[no_mangle]
-unsafe fn handle_kernel_trap(cause: Scause, val: usize) {}
+unsafe fn handle_kernel_trap(cause: Scause, val: usize) -> (usize, Address){
+    // (a0, a1)
+    // a0 + a1 > 0 表示跳转到对应的用户空间，否则跳出 kernel trap
+    let hart = hart::this_hart();
+    match cause.cause() {
+        Trap::Interrupt(Interrupt::SupervisorSoft) => {
+            // 从 kernel 进入 user
+            hart.clear_ipi();
+            return hart.enter_user()
+        }
+        _ => unimplemented!("Unknown trap from kernel: {}", cause.bits()),
+    }
+}

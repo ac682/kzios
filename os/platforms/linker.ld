@@ -12,26 +12,30 @@ SECTIONS
 
     .text : ALIGN(8) {
         *(.text.init)
-        *(.text .text.*)
+        *(.text.*)
         . = ALIGN(0x1000);
         PROVIDE(_trampoline = .);
         *(.trampoline)
         . = ALIGN(0x1000);
-        ASSERT(. - _trampoline == 0x1000, "error: _trampoline code larger than 4k");
+        ASSERT(. - _trampoline == 0x1000, "error: _trampoline code larger than one page");
+        _text_end = .;
     } > RAM
 
     .rodata : ALIGN(8) {
+        *(.srodata)
         *(.rodata)
     } > RAM
 
 
     .data : ALIGN(8) {
+        *(.sdata)
         *(.data)
     } > RAM
 
 
     .bss (NOLOAD) : ALIGN(8) {
         PROVIDE(_bss_start = .);
+        *(.sbss)
         *(.bss)
         PROVIDE(_bss_end = .);
     } > RAM

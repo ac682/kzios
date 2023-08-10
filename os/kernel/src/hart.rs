@@ -1,6 +1,7 @@
 use core::arch::asm;
 
 use alloc::vec::Vec;
+use erhino_shared::mem::Address;
 use riscv::register::{scause::Scause, sip, sscratch, sstatus, stvec, utvec::TrapMode};
 
 use crate::{
@@ -32,18 +33,19 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
         }
     }
 
-    pub fn init(&mut self) {
-        // call on boot by current hart
-        // setup trap & interrupts
-        unsafe {
-            stvec::write(_kernel_trap as usize, TrapMode::Direct);
-            sstatus::set_fs(sstatus::FS::Initial);
-            sstatus::set_sie();
-        }
-    }
+    // pub fn init(&mut self) {
+    //     // call on boot by current hart
+    //     // setup trap & interrupts
+    //     unsafe {
+    //         stvec::write(_kernel_trap as usize, TrapMode::Direct);
+    //         sstatus::set_fs(sstatus::FS::Initial);
+    //         sstatus::set_sie();
+    //     }
+    // }
 
-    pub fn arranged_memory_space_satp(&self) -> usize {
-        self.scheduler.context().0.memory.satp()
+    pub fn arranged_context(&self) -> (usize, Address) {
+        let (p, _, address) = self.scheduler.context();
+        (p.memory.satp(), address)
     }
 
     pub fn send_ipi(&self) -> bool {
@@ -60,16 +62,19 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
         unsafe { asm!("csrr {o}, sip", "csrw sip, {i}", o = out(reg) sip, i = in(reg) sip & !2) }
     }
 
+    pub fn enter_user(&mut self) -> (usize, Address){
+        self.scheduler.schedule();
+        self.arranged_context()
+    }
+
     pub fn trap(&mut self, cause: TrapCause) {
         match cause {
             TrapCause::Breakpoint => {
                 println!("#{} Pid={} requested a breakpoint", self.id, "unimp");
             }
-            TrapCause::SoftwareInterrupt | TrapCause::TimerInterrupt => {
+            TrapCause::TimerInterrupt => {
                 self.scheduler.schedule();
                 self.timer.schedule_next(self.scheduler.next_timeslice());
-                let (p, t) = self.scheduler.context();
-                println!("{}:{}", p.pid, t.tid);
             }
             _ => {
                 todo!("unimplemented trap cause {:?}", cause)
