@@ -1,14 +1,17 @@
 use core::arch::asm;
 
 use alloc::vec::Vec;
-use erhino_shared::mem::Address;
+use erhino_shared::{mem::Address, proc::Tid};
 use riscv::register::{scause::Scause, sip, sscratch, sstatus, stvec, utvec::TrapMode};
 
 use crate::{
-    external::{_hart_num, _kernel_trap},
+    external::{_hart_num, _switch},
     println, sbi,
     sync::hart,
-    task::sched::{unfair::UnfairScheduler, Scheduler},
+    task::{
+        proc::Process,
+        sched::{unfair::UnfairScheduler, Scheduler},
+    },
     timer::{hart::HartTimer, Timer},
     trap::{TrapCause, TrapFrame},
 };
@@ -33,19 +36,13 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
         }
     }
 
-    // pub fn init(&mut self) {
-    //     // call on boot by current hart
-    //     // setup trap & interrupts
-    //     unsafe {
-    //         stvec::write(_kernel_trap as usize, TrapMode::Direct);
-    //         sstatus::set_fs(sstatus::FS::Initial);
-    //         sstatus::set_sie();
-    //     }
-    // }
+    pub fn id(&self) -> usize {
+        self.id
+    }
 
     pub fn arranged_context(&self) -> (usize, Address) {
-        let (p, _, address) = self.scheduler.context();
-        (p.memory.satp(), address)
+        let (p, _, trapframe, _) = self.scheduler.context();
+        (p.memory.satp(), trapframe)
     }
 
     pub fn send_ipi(&self) -> bool {
@@ -62,9 +59,12 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
         unsafe { asm!("csrr {o}, sip", "csrw sip, {i}", o = out(reg) sip, i = in(reg) sip & !2) }
     }
 
-    pub fn enter_user(&mut self) -> (usize, Address){
+    pub fn enter_user(&mut self) -> ! {
         self.scheduler.schedule();
-        self.arranged_context()
+        let (p,_, trapframe, trampoline) = self.scheduler.context();
+        unsafe{
+            _switch(trampoline, p.memory.satp(), trapframe)
+        }
     }
 
     pub fn trap(&mut self, cause: TrapCause) {
@@ -96,7 +96,7 @@ pub fn init(freq: &[usize]) {
                         freq[freq.len() - 1]
                     },
                 ),
-                SchedulerImpl::new(),
+                SchedulerImpl::new(i),
             ));
         }
     }
@@ -138,4 +138,9 @@ pub fn hartid() -> usize {
 
 pub fn this_hart() -> &'static mut Hart<TimerImpl, SchedulerImpl> {
     get_hart(hartid())
+}
+
+pub fn add_process(proc: Process) {
+    println!("kernel process added: {}", proc.name);
+    this_hart().scheduler.add(proc, None);
 }

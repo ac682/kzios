@@ -6,8 +6,7 @@ use riscv::register::scause::{Exception, Interrupt, Scause, Trap};
 use crate::{
     external::{_kernel_end, _stack_size},
     hart,
-    mm::unit::KERNEL_SATP,
-    println,
+    println, mm::KERNEL_SATP,
 };
 
 #[derive(Debug)]
@@ -29,25 +28,24 @@ pub struct TrapFrame {
     pub f: [u64; 32],
     // 512
     pub pc: u64,
-    // 以下是临时数据，与 TrapFrame 所属的进程无关
+    // 以下是临时数据，与 TrapFrame 所属的进程无关，只读
     // 520 Currently the hart it running in. Guaranteed by trap_vector in assembly.asm
     kernel_tp: u64,
     // 528
     kernel_sp: u64,
     // 536
     kernel_satp: u64,
+    // 544
+    user_trap: u64,
 }
 
 impl TrapFrame {
-    pub fn new(hartid: usize) -> Self {
-        Self {
-            x: [0; 32],
-            f: [0; 32],
-            pc: 0,
-            kernel_tp: hartid as u64,
-            kernel_sp: _kernel_end as u64 - (_stack_size as u64 * hartid as u64),
-            kernel_satp: unsafe { KERNEL_SATP } as u64,
-        }
+    pub fn init(&mut self, hartid: usize, entry_point: Address, user_trap: Address) {
+        self.pc = entry_point as u64;
+        self.kernel_tp = hartid as u64;
+        self.kernel_sp = _kernel_end as u64 - (_stack_size as u64 * hartid as u64);
+        self.kernel_satp = unsafe { KERNEL_SATP } as u64;
+        self.user_trap = user_trap as u64;
     }
 }
 
@@ -89,6 +87,19 @@ pub struct EnvironmentCallBody {
 }
 
 #[no_mangle]
+unsafe fn handle_kernel_trap(cause: Scause, val: usize) {
+    let hart = hart::this_hart();
+    match cause.cause() {
+        Trap::Interrupt(Interrupt::SupervisorSoft) => {
+            // 从 kernel 进入 user
+            hart.clear_ipi();
+            hart.enter_user();
+        }
+        _ => unimplemented!("Unknown trap from kernel: {}", cause.bits()),
+    }
+}
+
+#[no_mangle]
 unsafe fn handle_user_trap(frame: &mut TrapFrame, cause: Scause, _val: usize) -> (usize, Address) {
     let hart = hart::this_hart();
     match cause.cause() {
@@ -108,19 +119,4 @@ unsafe fn handle_user_trap(frame: &mut TrapFrame, cause: Scause, _val: usize) ->
         }
     }
     hart.arranged_context()
-}
-
-#[no_mangle]
-unsafe fn handle_kernel_trap(cause: Scause, val: usize) -> (usize, Address){
-    // (a0, a1)
-    // a0 + a1 > 0 表示跳转到对应的用户空间，否则跳出 kernel trap
-    let hart = hart::this_hart();
-    match cause.cause() {
-        Trap::Interrupt(Interrupt::SupervisorSoft) => {
-            // 从 kernel 进入 user
-            hart.clear_ipi();
-            return hart.enter_user()
-        }
-        _ => unimplemented!("Unknown trap from kernel: {}", cause.bits()),
-    }
 }

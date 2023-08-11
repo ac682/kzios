@@ -160,7 +160,7 @@
 					"engineLogging": false
 				},
 				"MIMode": "gdb",
-				"miDebuggerPath": "riscv64-elf-gdb",
+				"miDebuggerPath": "gdb-multiarch",
 				"miDebuggerArgs": "-ex 'set arch riscv:rv64'",
 			}
 		]

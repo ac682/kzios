@@ -12,12 +12,10 @@ _start:
     mul     t0, t0, sp
     la      sp, _kernel_end
     sub     sp, sp, t0
-    # setup hart, sstatus.fs, sie = 1, stvec = Direct, _kernel_trap
+    # setup hart, sstatus.fs = 1(Initial), stvec = _kernel_trap(Direct)
     la      t0, _kernel_trap
-    srliw   t0, t0, 2
-    addi    t0, t0, 0b01
     csrw    stvec, t0
-    li      t0, (1 << 13) | (1 << 1)
+    li      t0, 0b01 << 13
     csrw    sstatus, t0
     # jump into rust_start
     call    main
@@ -25,11 +23,19 @@ _start:
 .section .text
 .global _park
 _park:
+    # set sstatus.sie = 1
+    csrr    t0, sstatus
+    li      t1, 0b10
+    or      t0, t0, t1
+    csrw    sstatus, t0
+0:
     wfi
-    j       _park
+    j       0b
 
 .section .text
+.align 4
 .global _kernel_trap
+.global _from_kernel
 _kernel_trap:
     # make room for gp and sp
     addi    sp, sp, -512
@@ -68,7 +74,7 @@ _kernel_trap:
     sd      x31, 248(sp)
     # check if need to save floating registers
     csrr    t0, sstatus
-    srliw   t0, t0, 13
+    srli   t0, t0, 13
     andi    t0, t0, 0b11
     li      t1, 3
     bne     t0, t1, 1f
@@ -108,7 +114,7 @@ _kernel_trap:
     # make floating dirty bit clean
     csrr    t0, sstatus
     li      t1, 2
-    slliw   t1, t1, 13
+    slli    t1, t1, 13
     not     t1, t1
     and     t0, t0, t1
     csrw    sstatus, t0
@@ -117,23 +123,13 @@ _kernel_trap:
     csrr	a0, scause
     csrr    a1, stval
     call    handle_kernel_trap
-    # check if enter user
-    add     t0, a0, a1
-    bnez    t0, 2f
-    # modify sstatus.spie .spp to 1
-    csrr    t0, sstatus
-    li      t1, 0b10010000
-    or      t0, t0, t1
-    csrw    sstatus, t0
-    call    _enter_user
-2:
     # check if need to restore floating registers
     csrr    t0, sstatus
-    srliw   t0, t0, 13
+    srli    t0, t0, 13
     andi    t0, t0, 0b11
     li      t1, 3
-    bne     t0, t1, 4f
-3:
+    bne     t0, t1, 3f
+2:
     fld      f0, 256(sp)
     fld      f1, 264(sp)
     fld      f2, 272(sp)
@@ -169,11 +165,11 @@ _kernel_trap:
     # make floating dirty bit clean
     csrr    t0, sstatus
     li      t1, 2
-    slliw   t1, t1, 13
+    slli    t1, t1, 13
     not     t1, t1
     and     t0, t0, t1
     csrw    sstatus, t0
-4:
+3:
     # restore generic registers
     # no need to restroe sp, tp, they are always the same
     ld      x0, 0(sp)
@@ -210,10 +206,11 @@ _kernel_trap:
     addi sp, sp, 512
     sret
     
-.section .trampoline
+.section .trampoline.user_trap
 .align 4
+.global _trampoline
+_trampoline:
 .global _user_trap
-.global _enter_user
 _user_trap:
     # sscratch holds the trapframe address
     csrrw	t6, sscratch, t6
@@ -254,7 +251,7 @@ _user_trap:
     sd      t6, 248(a0)
     # save floating registers
     csrr    t0, sstatus
-    srliw   t0, t0, 13
+    srli    t0, t0, 13
     andi    t0, t0, 0b11
     li      t1, 3
     bne     t0, t1, 1f
@@ -294,7 +291,7 @@ _user_trap:
     # make floating dirty bit clean
     csrr    t0, sstatus
     li      t1, 2
-    slliw   t1, t1, 13
+    slli    t1, t1, 13
     not     t1, t1
     and     t0, t0, t1
     csrw    sstatus, t0
@@ -311,27 +308,21 @@ _user_trap:
     sfence.vma
     # traps here redirect to kernel trap
     la      t6, _kernel_trap
-    srliw   t6, t6, 2
-    addi    t6, t6, 0b01
     csrw    stvec, t6
     # prepare arguments
     csrr    a1, scause
     csrr    a2, stval
     call handle_user_trap
-# enter_user(satp, Address)
-_enter_user:
-    # traps here redirect to user trap
-    la      t6, _user_trap
-    srliw   t6, t6, 2
-    addi    t6, t6, 0b01
-    csrw    stvec, t6
     # a0 -> satp
     # a1 -> &trapframe(inaccessible before satp install)
     # install context
     csrw    satp, a0
     csrw    sscratch, a1
     sfence.vma
+    # traps here redirect to user trap
     # restore special registers
+    ld      t6, 544(a1)
+    csrw    stvec, t6
     ld      t6, 512(a1)
     csrw    sepc, t6
     # save tp and sp
@@ -340,7 +331,7 @@ _enter_user:
     sfence.vma
     # restore floating registers
     csrr    t0, sstatus
-    srliw   t0, t0, 13
+    srli    t0, t0, 13
     andi    t0, t0, 0b11
     li      t1, 3
     bne     t0, t1, 3f
@@ -380,7 +371,7 @@ _enter_user:
     # make floating dirty bit clean
     csrr    t0, sstatus
     li      t1, 2
-    slliw   t1, t1, 13
+    slli    t1, t1, 13
     not     t1, t1
     and     t0, t0, t1
     csrw    sstatus, t0
@@ -418,4 +409,37 @@ _enter_user:
     ld      x28, 224(t6)
     ld      x29, 232(t6)
     ld      x30, 240(t6)
+_enter_user_breakpoint:
+    sret
+
+.section .text
+.global _switch
+# _switch(trampoline: Address, satp: usize, trapframe: &TrapFrame)
+_switch:
+    la      t0, _switch_internal
+    li      t1, 0xfff
+    and     t0, t0, t1
+    add     ra, a0, t0
+    ret
+
+.section .trampoline.switch
+.global _switch_internal
+# _jump(trampoline: Address, satp: usize, trapframe: &TrapFrame)
+_switch_internal:
+    # modify sstatus.spie to 1 .spp to 0
+    csrr    t0, sstatus
+    li      t1, 0b10000
+    or      t0, t0, t1
+    li      t1, (1 << 8)
+    not     t1, t1
+    and     t0, t0, t1
+    csrw    sstatus, t0
+    # redirect trap to _user_trap
+    csrw    stvec, a0
+    # install page table
+    csrw    satp, a1
+    sfence.vma
+    ld      t0, 512(a2)
+    csrw    sepc, t0
+    li      t0, 0
     sret

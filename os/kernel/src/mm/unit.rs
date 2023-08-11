@@ -1,11 +1,11 @@
 use core::fmt::Display;
 
-use erhino_shared::mem::PageNumber;
+use erhino_shared::mem::{Address, PageNumber};
 use flagset::FlagSet;
 use spin::Once;
 
 use crate::{
-    external::{_kernel_start, _memory_end, _memory_start, _trampoline},
+    external::{_kernel_start, _memory_end, _memory_start},
     mm::page::PageTableEntry39,
     println,
     trap::TrapFrame,
@@ -13,21 +13,48 @@ use crate::{
 
 use super::{
     frame::{self, FrameTracker},
-    page::{PageFlag, PageTable, PageTableEntry, PageTableEntry32, PageEntryImpl},
+    page::{
+        PageEntryFlag, PageEntryImpl, PageEntryType, PageTable, PageTableEntry, PageTableEntry32,
+        PAGE_SIZE,
+    },
 };
-
-type KernelUnit = MemoryUnit<PageEntryImpl>;
-
-static mut KERNEL_UNIT: Once<KernelUnit> = Once::new();
-#[export_name = "_kernel_satp"]
-pub static mut KERNEL_SATP: usize = 0;
 
 #[derive(Debug)]
 pub enum MemoryUnitError {
     EntryNotFound,
     RanOutOfFrames,
     EntryOverwrite,
+    RanOutOfFramesOrEntryOverwrite,
     BufferOverflow,
+}
+
+pub struct PageAttributes {
+    readable: bool,
+    writeable: bool,
+    executable: bool,
+    cow: bool,
+}
+
+pub enum AddressSpace{
+    User,
+    Invalid,
+    Kernel
+}
+
+impl From<&FlagSet<PageEntryFlag>> for PageAttributes {
+    fn from(flagset: &FlagSet<PageEntryFlag>) -> Self {
+        let cow = flagset.contains(PageEntryFlag::Cow);
+        Self {
+            cow,
+            executable: flagset.contains(PageEntryFlag::Executable),
+            readable: flagset.contains(PageEntryFlag::Readable),
+            writeable: if cow {
+                flagset.contains(PageEntryFlag::CowWriteable)
+            } else {
+                flagset.contains(PageEntryFlag::Writeable)
+            },
+        }
+    }
 }
 
 pub struct MemoryUnit<E: PageTableEntry + Sized + 'static> {
@@ -48,7 +75,7 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
     }
 
     pub fn satp(&self) -> usize {
-        let mode = 12 + E::SIZE * E::LENGTH;
+        let mode = 12 + E::DEPTH * E::SIZE;
         let mode_code = match mode {
             32 => 1,
             39 => 8,
@@ -62,20 +89,96 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
                 .start()
     }
 
-    pub fn map<F: Into<FlagSet<PageFlag>> + Copy>(
+    pub fn is_address_in(addr: Address) -> AddressSpace {
+        let top = E::top_address();
+        let size = E::space_size();
+        if addr < size{
+            AddressSpace::User
+        }else if addr <= top && addr > top - size{
+            AddressSpace::Kernel
+        }else{
+            AddressSpace::Invalid
+        }
+    }
+
+    pub fn write<F: Into<FlagSet<PageEntryFlag>> + Copy>(
+        &mut self,
+        addr: Address,
+        data: &[u8],
+        length: usize,
+        flags: F,
+    ) -> Result<(), MemoryUnitError> {
+        let real_length = if length == 0 { data.len() } else { length };
+        let vpn = addr >> 12;
+        self.fill(
+            vpn,
+            ((addr + real_length + PAGE_SIZE - 1) >> 12) - vpn,
+            flags,
+        )
+        .expect("create process memory before write failed");
+        let mut offset = addr & 0xFFF;
+        let mut copied = 0usize;
+        let mut page_count = 0usize;
+        unsafe {
+            while copied < real_length {
+                if let Some((ppn, _)) = self.locate(vpn + page_count) {
+                    let start = (ppn << 12) + offset;
+                    let end = if (real_length - copied) > (0x1000 - offset) {
+                        (ppn + 1) << 12
+                    } else {
+                        start + real_length - copied
+                    };
+                    let ptr = start as *mut u8;
+                    for i in 0..(end - start) {
+                        ptr.add(i).write(if copied + i >= data.len() {
+                            0
+                        } else {
+                            data[copied + i]
+                        });
+                    }
+                    offset = 0;
+                    copied += (end - start) as usize;
+                    page_count += 1;
+                } else {
+                    return Err(MemoryUnitError::EntryNotFound);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn fill<F: Into<FlagSet<PageEntryFlag>> + Copy>(
+        &mut self,
+        vpn: PageNumber,
+        count: usize,
+        flags: F,
+    ) -> Result<(), MemoryUnitError> {
+        Self::map_internal(&mut self.root, vpn, None, count, flags, E::DEPTH - 1)
+    }
+
+    pub fn map<F: Into<FlagSet<PageEntryFlag>> + Copy>(
         &mut self,
         vpn: PageNumber,
         ppn: PageNumber,
         count: usize,
         flags: F,
     ) -> Result<(), MemoryUnitError> {
-        Self::map_internal(&mut self.root, vpn, ppn, count, flags, E::DEPTH - 1)
+        Self::map_internal(&mut self.root, vpn, Some(ppn), count, flags, E::DEPTH - 1)
     }
 
-    fn map_internal<F: Into<FlagSet<PageFlag>> + Copy>(
+    pub fn translate(&self, addr: Address) -> Option<(Address, PageAttributes)> {
+        let offset = addr & 0xFFF;
+        if let Some((ppn, attributes)) = self.locate(addr >> 12) {
+            Some(((ppn << 12) + offset, attributes))
+        } else {
+            None
+        }
+    }
+
+    fn map_internal<F: Into<FlagSet<PageEntryFlag>> + Copy>(
         container: &mut PageTable<E>,
         vpn: PageNumber,
-        ppn: PageNumber,
+        ppn: Option<PageNumber>,
         count: usize,
         flags: F,
         level: usize,
@@ -89,18 +192,31 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         if level == 0 {
             // ..:_:[123]/..:_:[223]
             // 不需要关心 count 是否存在溢出当前级别的问题。上级会处理好（且对 count 不溢出做检查和保证）。
-            for i in 0..count {
-                if container.create_leaf(start + i, ppn + i, flags).is_none() {
-                    return Err(MemoryUnitError::EntryOverwrite);
+            if let Some(number) = ppn {
+                for i in 0..count {
+                    if container
+                        .create_leaf(start + i, number + i, flags)
+                        .is_none()
+                    {
+                        return Err(MemoryUnitError::EntryOverwrite);
+                    }
+                }
+            } else {
+                for i in 0..count {
+                    if !container.ensure_managed_leaf_created(start + i, || frame::borrow(1), flags)
+                    {
+                        return Err(MemoryUnitError::RanOutOfFramesOrEntryOverwrite);
+                    }
                 }
             }
+
             Ok(())
         } else {
             // ..:start:.. 到 ..:end:.. 可能跨越节也可能不跨越
-            if end - start > 0 {
+            if end > start {
                 // _:[2]:A:../_:[4]:B:..
                 // 这里只取出第一段 [2] 并处理，剩下的段转发给下次同轮递归的这一分支
-                if Self::is_page_number_aligned_to(vpn, level)
+                if Self::is_page_number_aligned_to(Some(vpn), level)
                     && Self::is_page_number_aligned_to(ppn, level)
                 {
                     // _:[2]:00/_:[4]:B
@@ -111,21 +227,37 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
                     let round_space = PageTable::<E>::entry_count() - start;
                     // 第一段可以成为超级页
                     while remaining >= size && round < round_space {
-                        if container
-                            .create_leaf(start + round, ppn + (round * size), flags)
-                            .is_none()
-                        {
-                            return Err(MemoryUnitError::EntryOverwrite);
+                        if let Some(number) = ppn {
+                            if container
+                                .create_leaf(start + round, number + (round * size), flags)
+                                .is_none()
+                            {
+                                return Err(MemoryUnitError::EntryOverwrite);
+                            }
+                        } else {
+                            if container.ensure_managed_leaf_created(
+                                start + round,
+                                || frame::borrow(size),
+                                flags,
+                            ) {
+                                return Err(MemoryUnitError::RanOutOfFramesOrEntryOverwrite);
+                            }
                         }
+
                         remaining -= size;
                         round += 1;
                     }
 
                     if remaining > 0 {
+                        let next = if let Some(number) = ppn {
+                            Some(number + (size * round))
+                        } else {
+                            None
+                        };
                         Self::map_internal(
                             container,
                             vpn + (size * round),
-                            ppn + (size * round),
+                            next,
                             remaining,
                             flags,
                             level,
@@ -145,11 +277,16 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
                         Self::map_internal(table, vpn, ppn, remaining, flags, level - 1)?;
                         // vpn + remaining = _:[3]:00
                         // 虽然末尾都是0但ppn依旧无法对齐，不是超级页，且接下来都不是超级页
+                        let next = if let Some(number) = ppn {
+                            Some(number + remaining)
+                        } else {
+                            None
+                        };
                         if count > remaining {
                             Self::map_internal(
                                 table,
                                 vpn + remaining,
-                                ppn + remaining,
+                                next,
                                 count - remaining,
                                 flags,
                                 level,
@@ -174,13 +311,42 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         }
     }
 
+    fn locate(&self, vpn: PageNumber) -> Option<(PageNumber, PageAttributes)> {
+        Self::locate_internal(&self.root, vpn, E::DEPTH - 1)
+    }
+
+    fn locate_internal(
+        container: &PageTable<E>,
+        vpn: PageNumber,
+        level: usize,
+    ) -> Option<(PageNumber, PageAttributes)> {
+        let index = Self::index_of_vpn(vpn, level);
+        match container.get_entry_type(index) {
+            PageEntryType::Invalid => None,
+            PageEntryType::Leaf(number, flags) => Some((
+                number + Self::offset_of_vpn(vpn, level),
+                PageAttributes::from(&flags),
+            )),
+            PageEntryType::Branch(table) => Self::locate_internal(table, vpn, level - 1),
+        }
+    }
+
     fn index_of_vpn(vpn: PageNumber, level: usize) -> usize {
         // 9|9|9
         (vpn >> (level * E::SIZE)) & ((1 << E::SIZE) - 1)
     }
 
-    fn is_page_number_aligned_to(number: PageNumber, level: usize) -> bool {
-        number & ((1 << (level * E::SIZE)) - 1) == 0
+    fn offset_of_vpn(vpn: PageNumber, level: usize) -> usize {
+        // 9|9|9
+        vpn & ((1 << (level * E::SIZE)) - 1)
+    }
+
+    fn is_page_number_aligned_to(number: Option<PageNumber>, level: usize) -> bool {
+        if let Some(inner) = number {
+            inner & ((1 << (level * E::SIZE)) - 1) == 0
+        } else {
+            true
+        }
     }
 }
 
@@ -220,50 +386,12 @@ impl<E: PageTableEntry + Sized + 'static> Display for MemoryUnit<E> {
             }
         }
         if dirty {
-            writeln!(
+            write!(
                 f,
                 "{:#010x}->{:#010x}({:#010x})={:#010b}",
                 start_v, start_p, aggregated, bits
             )?;
         }
         Ok(())
-    }
-}
-
-pub fn init() {
-    let memory_start = _memory_start as usize >> 12;
-    let memory_end = _memory_end as usize >> 12;
-    let mut unit = MemoryUnit::<PageTableEntry39>::new().unwrap();
-    // mmio device space
-    unit.map(
-        0x0,
-        0x0,
-        memory_start,
-        PageFlag::Valid | PageFlag::Writeable | PageFlag::Readable,
-    )
-    .unwrap();
-    // sbi + kernel space
-    unit.map(
-        memory_start,
-        memory_start,
-        memory_end - memory_start,
-        PageFlag::Valid | PageFlag::Writeable | PageFlag::Readable | PageFlag::Executable,
-    )
-    .unwrap();
-    let top_address = PageEntryImpl::top_address();
-    // trampoline code page
-    unit.map(
-        top_address >> 12,
-        _trampoline as usize >> 12,
-        1,
-        PageFlag::Valid | PageFlag::Writeable | PageFlag::Readable | PageFlag::Executable,
-    )
-    .unwrap();
-    // kernel has no trap frame so it has no trap frame mapped
-    println!("{}", unit);
-    unsafe {
-        let satp = unit.satp();
-        KERNEL_UNIT.call_once(|| unit);
-        KERNEL_SATP = satp;
     }
 }

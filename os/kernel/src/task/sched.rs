@@ -10,5 +10,5 @@ pub trait Scheduler {
     fn add(&mut self, proc: Process, parent: Option<Pid>) -> Pid;
     fn schedule(&mut self);
     fn next_timeslice(&self) -> usize;
-    fn context(&self) -> (&Process, &Thread, Address);
+    fn context(&self) -> (&Process, &Thread, Address, Address);
 }

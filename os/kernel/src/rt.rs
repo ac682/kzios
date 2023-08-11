@@ -8,7 +8,7 @@ use erhino_shared::proc::Termination;
 use crate::{
     external::{_heap_start, _park, _stack_start},
     hart,
-    mm::frame::{self, alloc},
+    mm::{frame::{self, alloc}, unit, page::PAGE_SIZE, self},
     print, println, sbi,
 };
 
@@ -42,17 +42,19 @@ fn rust_start<T: Termination + 'static>(
         unsafe {
             ENV_INIT = true;
         }
-        // hart::get_hart(hartid).init();
         println!("Hart #{} init completed, go kernel init", hartid);
+        kernel_init();
         main();
         hart::send_ipi_all();
+        unsafe{
+            _park();
+        }
     } else {
         unsafe {
             while !ENV_INIT {
                 spin_loop();
             }
         }
-        // hart::get_hart(hartid).init();
         println!("Hart #{} init completed, sleeping", hartid);
         unsafe {
             _park();
@@ -82,6 +84,10 @@ fn early_init(dtb_addr: usize) {
     hart::init(&[timebase_frequency]);
 }
 
+fn kernel_init(){
+    mm::init();
+}
+
 #[panic_handler]
 fn handle_panic(info: &PanicInfo) -> ! {
     if let Some(location) = info.location() {
@@ -107,7 +113,7 @@ pub fn handle_alloc_error(layout: Layout) -> ! {
 }
 
 fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
-    let single = 4096;
+    let single = 1 * PAGE_SIZE;
     let mut size = 1;
     unsafe {
         while layout.size() > size * single {

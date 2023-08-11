@@ -24,9 +24,13 @@ KERNEL_BIN := KERNEL_ELF+".bin"
 DTB := TARGET_DIR/"device.dtb"
 
 # qemu
-QEMU_CORES := "4"
+QEMU_CORES := "1"
 QEMU_MEMORY := "128m"
 QEMU_LAUNCH := "qemu-system-riscv64 -smp cores="+QEMU_CORES+" -M "+QEMU_MEMORY+" -machine virt -nographic -bios \""+BOOTLOADER+"\" -kernel \""+KERNEL_ELF+"\" -dtb \""+DTB+"\""
+
+# gdb
+GDB_BINARY := "gdb-multiarch"
+# GDB_BINARY := "riscv64-elf-gdb"
 
 alias b := build_kernel
 alias c := clean
@@ -88,4 +92,4 @@ run:
     @just PLATFORM={{PLATFORM}} MODE={{MODE}} run_{{PLATFORM}}
 
 debug: build_kernel
-    @tmux new-session -d "{{QEMU_LAUNCH}} -s -S" && tmux split-window -h "riscv64-elf-gdb -ex 'file {{KERNEL_ELF}}' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'" && tmux -2 attach-session -d
+    @tmux new-session -d "{{QEMU_LAUNCH}} -s -S" && tmux split-window -h "{{GDB_BINARY}} -ex 'file {{KERNEL_ELF}}' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'" && tmux -2 attach-session -d
