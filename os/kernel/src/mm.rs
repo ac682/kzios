@@ -1,21 +1,26 @@
+use core::hint::spin_loop;
+
 use riscv::register::satp;
 use spin::Once;
 
-use crate::{external::{_memory_start, _memory_end, _trampoline}, mm::page::{PageTableEntry39, PageEntryFlag, PageTableEntry}, println};
+use crate::{
+    external::{_memory_end, _memory_start, _trampoline},
+    mm::page::{PageEntryFlag, PageTableEntry, PageTableEntry39},
+    println,
+};
 
-use self::{unit::MemoryUnit, page::PageEntryImpl};
+use self::{page::PageEntryImpl, unit::MemoryUnit};
 
 pub mod frame;
+pub mod layout;
 pub mod page;
 pub mod unit;
-pub mod layout;
 
 type KernelUnit = MemoryUnit<PageEntryImpl>;
 
 static mut KERNEL_UNIT: Once<KernelUnit> = Once::new();
 #[export_name = "_kernel_satp"]
 pub static mut KERNEL_SATP: usize = 0;
-
 
 pub fn init() {
     let memory_start = _memory_start as usize >> 12;
@@ -40,10 +45,9 @@ pub fn init() {
             | PageEntryFlag::Executable,
     )
     .expect("map sbi + kernel space failed");
-    let top_address = PageEntryImpl::top_address();
     // trampoline code page
     unit.map(
-        top_address >> 12,
+        PageEntryImpl::top_address() >> 12,
         _trampoline as usize >> 12,
         1,
         PageEntryFlag::Valid

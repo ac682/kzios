@@ -14,11 +14,11 @@ SECTIONS
         *(.text.init)
         *(.text.*)
         . = ALIGN(0x1000);
-        _trampoline = .;
+        _trampoline_start = .;
         *(.trampoline.user_trap)
         *(.trampoline.*)
         . = ALIGN(0x1000);
-        ASSERT(. - _trampoline == 0x1000, "error: _trampoline code larger than one page");
+        ASSERT(. - _trampoline_start == 0x1000, "error: _trampoline code larger than one page");
     } > RAM
 
     .rodata : ALIGN(8) {

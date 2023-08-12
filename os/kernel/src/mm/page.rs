@@ -313,8 +313,10 @@ impl<'a, E: PageTableEntry + 'static> Iterator for PageTableIter<'a, E> {
             let res = inner.get_mut().next();
             if res.is_none() {
                 self.inner = None;
+                self.next()
+            } else {
+                res
             }
-            res
         } else {
             while self.current < self.root.entries.len() {
                 let index = self.current;

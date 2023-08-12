@@ -111,11 +111,11 @@ unsafe fn handle_user_trap(frame: &mut TrapFrame, cause: Scause, _val: usize) ->
             match exception {
                 Exception::Breakpoint => hart.trap(TrapCause::Breakpoint),
                 Exception::UserEnvCall => hart.trap(TrapCause::EnvironmentCall),
-                _ => todo!("Unknown exception: {}", cause.bits()),
+                _ => todo!("unknown exception: {}", cause.bits()),
             }
         }
         _ => {
-            unimplemented!("Unknown trap from user: {}", cause.bits())
+            unimplemented!("unknown trap from user: {}", cause.bits())
         }
     }
     hart.arranged_context()

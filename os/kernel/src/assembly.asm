@@ -207,9 +207,9 @@ _kernel_trap:
     sret
     
 .section .trampoline.user_trap
-.align 4
 .global _trampoline
 _trampoline:
+.align 4
 .global _user_trap
 _user_trap:
     # sscratch holds the trapframe address

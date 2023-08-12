@@ -422,6 +422,7 @@ impl Scheduler for UnfairScheduler {
                 | PageEntryFlag::Writeable
                 | PageEntryFlag::Executable
         );
+        println!("{}",cell.inner.memory);
         let trapframe = cell.struct_at::<TrapFrame>(trapframe_address);
         trapframe.init(
             self.hartid,

@@ -7,7 +7,8 @@ use spin::Once;
 use crate::{
     external::{_kernel_start, _memory_end, _memory_start},
     mm::page::PageTableEntry39,
-    println,
+    print, println,
+    sync::up,
     trap::TrapFrame,
 };
 
@@ -35,10 +36,10 @@ pub struct PageAttributes {
     cow: bool,
 }
 
-pub enum AddressSpace{
+pub enum AddressSpace {
     User,
     Invalid,
-    Kernel
+    Kernel,
 }
 
 impl From<&FlagSet<PageEntryFlag>> for PageAttributes {
@@ -92,11 +93,11 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
     pub fn is_address_in(addr: Address) -> AddressSpace {
         let top = E::top_address();
         let size = E::space_size();
-        if addr < size{
+        if addr < size {
             AddressSpace::User
-        }else if addr <= top && addr > top - size{
+        } else if addr <= top && addr > top - size {
             AddressSpace::Kernel
-        }else{
+        } else {
             AddressSpace::Invalid
         }
     }
@@ -209,7 +210,6 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
                     }
                 }
             }
-
             Ok(())
         } else {
             // ..:start:.. 到 ..:end:.. 可能跨越节也可能不跨越
@@ -247,7 +247,6 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
                         remaining -= size;
                         round += 1;
                     }
-
                     if remaining > 0 {
                         let next = if let Some(number) = ppn {
                             Some(number + (size * round))
@@ -354,11 +353,20 @@ impl<E: PageTableEntry + Sized + 'static> Display for MemoryUnit<E> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         writeln!(
             f,
-            "Memory Mapping at {:#x}\n  Visual  -> Physical (  Length  )=0bDAGUXWRV",
+            "Memory Mapping at {:#x}\n     Visual    ->    Physical   (  Length  )=0bDAGUXWRV",
             self.where_the_frame_tracker_of_root_for_recycling_put
                 .start()
                 << 12
         )?;
+        let highest = 1 << (E::SIZE * E::DEPTH - 1);
+        let upper_bits = (E::top_address() >> 12) - (highest - 1);
+        let vpn_fmt: fn(Address, usize, usize) -> Address = |x, h, u| {
+            if x & h != 0 {
+                u | x
+            } else {
+                x
+            }
+        };
         let mut start_v = 0usize;
         let mut start_p = 0usize;
         let mut aggregated = 0usize;
@@ -373,8 +381,11 @@ impl<E: PageTableEntry + Sized + 'static> Display for MemoryUnit<E> {
                 if (dirty) {
                     writeln!(
                         f,
-                        "{:#010x}->{:#010x}({:#010x})={:#010b}",
-                        start_v, start_p, aggregated, bits
+                        "{:#015x}->{:#015x}({:#010x})={:#010b}",
+                        vpn_fmt(start_v, highest, upper_bits),
+                        start_p,
+                        aggregated,
+                        bits
                     )?;
                     dirty = false;
                 }
@@ -388,8 +399,11 @@ impl<E: PageTableEntry + Sized + 'static> Display for MemoryUnit<E> {
         if dirty {
             write!(
                 f,
-                "{:#010x}->{:#010x}({:#010x})={:#010b}",
-                start_v, start_p, aggregated, bits
+                "{:#015x}->{:#015x}({:#010x})={:#010b}",
+                vpn_fmt(start_v, highest, upper_bits),
+                start_p,
+                aggregated,
+                bits
             )?;
         }
         Ok(())
