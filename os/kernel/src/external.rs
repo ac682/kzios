@@ -14,7 +14,9 @@ extern "C" {
     pub fn _kernel_end();
     pub fn _memory_end();
     
-    pub fn _trampoline(trapframe: &TrapFrame, cause: usize, val: usize);
+    
+    pub fn _kernel_trap();
+    pub fn _user_trap(cause: usize, val: usize);
     pub fn _park() -> !;
     pub fn _switch(user_trap: Address, satp: usize, trapframe: usize) -> !;
     pub fn _stack_size();

@@ -15,8 +15,8 @@ use crate::{
 use super::{
     frame::{self, FrameTracker},
     page::{
-        PageEntryFlag, PageEntryImpl, PageEntryType, PageTable, PageTableEntry, PageTableEntry32,
-        PAGE_SIZE,
+        PageEntryFlag, PageEntryImpl, PageEntryType, PageEntryWriteError, PageTable,
+        PageTableEntry, PageTableEntry32, PAGE_SIZE,
     },
 };
 
@@ -25,8 +25,6 @@ pub enum MemoryUnitError {
     EntryNotFound,
     RanOutOfFrames,
     EntryOverwrite,
-    RanOutOfFramesOrEntryOverwrite,
-    BufferOverflow,
 }
 
 pub struct PageAttributes {
@@ -167,6 +165,10 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         Self::map_internal(&mut self.root, vpn, Some(ppn), count, flags, E::DEPTH - 1)
     }
 
+    pub fn is_page_created(&self, vpn: PageNumber) -> bool {
+        self.locate(vpn).is_some()
+    }
+
     pub fn translate(&self, addr: Address) -> Option<(Address, PageAttributes)> {
         let offset = addr & 0xFFF;
         if let Some((ppn, attributes)) = self.locate(addr >> 12) {
@@ -189,25 +191,35 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         // [N] 当前处理级别
         // .. 省略但存在可能多个级别
         let start = Self::index_of_vpn(vpn, level);
-        let end = Self::index_of_vpn(vpn + count, level);
+        let fake_end = Self::index_of_vpn(vpn + count, level);
+        let end = if fake_end == 0 {
+            let size = PageTable::<E>::entry_count();
+            if start == 0 {
+                if count >= size.pow(level as u32) {
+                    size
+                } else {
+                    0
+                }
+            } else {
+                size
+            }
+        } else {
+            fake_end
+        };
         if level == 0 {
             // ..:_:[123]/..:_:[223]
             // 不需要关心 count 是否存在溢出当前级别的问题。上级会处理好（且对 count 不溢出做检查和保证）。
             if let Some(number) = ppn {
                 for i in 0..count {
-                    if container
-                        .create_leaf(start + i, number + i, flags)
-                        .is_none()
-                    {
-                        return Err(MemoryUnitError::EntryOverwrite);
-                    }
+                    Self::into_result(container.ensure_leaf_created(start + i, number + i, flags))?;
                 }
             } else {
                 for i in 0..count {
-                    if !container.ensure_managed_leaf_created(start + i, || frame::borrow(1), flags)
-                    {
-                        return Err(MemoryUnitError::RanOutOfFramesOrEntryOverwrite);
-                    }
+                    Self::into_result(container.ensure_managed_leaf_created(
+                        start + i,
+                        || frame::borrow(1),
+                        flags,
+                    ))?;
                 }
             }
             Ok(())
@@ -225,25 +237,41 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
                     let mut remaining = count;
                     let mut round = 0usize;
                     let round_space = PageTable::<E>::entry_count() - start;
-                    // 第一段可以成为超级页
+                    // start + round 段可以成为超级页
                     while remaining >= size && round < round_space {
-                        if let Some(number) = ppn {
-                            if container
-                                .create_leaf(start + round, number + (round * size), flags)
-                                .is_none()
-                            {
-                                return Err(MemoryUnitError::EntryOverwrite);
-                            }
-                        } else {
-                            if container.ensure_managed_leaf_created(
-                                start + round,
-                                || frame::borrow(size),
+                        if container.is_table_created(start + round) {
+                            // 已经有一个页表了，那就转发给下一级
+                            let table = container
+                                .get_table_mut(start + round)
+                                .expect("there must be a table");
+                            let offset = round * size;
+                            Self::map_internal(
+                                table,
+                                vpn + offset,
+                                if let Some(number) = ppn {
+                                    Some(number + offset)
+                                } else {
+                                    None
+                                },
+                                size,
                                 flags,
-                            ) {
-                                return Err(MemoryUnitError::RanOutOfFramesOrEntryOverwrite);
+                                level - 1,
+                            )?;
+                        } else {
+                            if let Some(number) = ppn {
+                                Self::into_result(container.create_leaf(
+                                    start + round,
+                                    number + (round * size),
+                                    flags,
+                                ))?;
+                            } else {
+                                Self::into_result(container.ensure_managed_leaf_created(
+                                    start + round,
+                                    || frame::borrow(size),
+                                    flags,
+                                ))?;
                             }
                         }
-
                         remaining -= size;
                         round += 1;
                     }
@@ -269,42 +297,84 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
                     // _:[2]:3:../_:[4]:13:..
                     // [2] 成为表转发给次级
                     let size = PageTable::<E>::entry_count();
-                    let remaining =
+                    let max_remaining =
                         (size - Self::index_of_vpn(vpn, level - 1)) * size.pow(level as u32 - 1);
-                    if let Some(table) = container.ensure_table_created(start, || frame::borrow(1))
-                    {
-                        Self::map_internal(table, vpn, ppn, remaining, flags, level - 1)?;
-                        // vpn + remaining = _:[3]:00
-                        // 虽然末尾都是0但ppn依旧无法对齐，不是超级页，且接下来都不是超级页
-                        let next = if let Some(number) = ppn {
-                            Some(number + remaining)
-                        } else {
-                            None
-                        };
-                        if count > remaining {
+                    match container.ensure_table_created(start, || frame::borrow(1)) {
+                        Ok(table) => {
                             Self::map_internal(
                                 table,
-                                vpn + remaining,
-                                next,
-                                count - remaining,
+                                vpn,
+                                ppn,
+                                if count > max_remaining {
+                                    max_remaining
+                                } else {
+                                    count
+                                },
                                 flags,
-                                level,
-                            )
-                        } else {
-                            // 没有剩下！
-                            Ok(())
+                                level - 1,
+                            )?;
+                            // vpn + remaining = _:[3]:00
+                            // 虽然末尾都是0但ppn依旧无法对齐，不是超级页，且接下来都不是超级页
+                            let next = if let Some(number) = ppn {
+                                Some(number + max_remaining)
+                            } else {
+                                None
+                            };
+                            if count > max_remaining {
+                                Self::map_internal(
+                                    table,
+                                    vpn + max_remaining,
+                                    next,
+                                    count - max_remaining,
+                                    flags,
+                                    level,
+                                )
+                            } else {
+                                // 没有剩下！
+                                Ok(())
+                            }
                         }
-                    } else {
-                        Err(MemoryUnitError::RanOutOfFrames)
+                        // 有表会进入 Ok 不会来到 Err。有大页但 ppn 肯定没对齐，没法打散映射，直接报错
+                        Err(PageEntryWriteError::BranchExists)
+                        | Err(PageEntryWriteError::LeafExists(_, _)) => {
+                            Err(MemoryUnitError::EntryOverwrite)
+                        }
+                        Err(PageEntryWriteError::TrackerUnavailable) => {
+                            Err(MemoryUnitError::RanOutOfFrames)
+                        }
                     }
                 }
             } else {
-                // _:[1]:123/_:[1]:223
+                // _:[1]:123:../_:[1]:223:..
                 // 对于不跨越的情况直接转发给 container[1].table() 处理
-                if let Some(table) = container.ensure_table_created(start, || frame::borrow(1)) {
-                    Self::map_internal(table, vpn, ppn, count, flags, level - 1)
-                } else {
-                    Err(MemoryUnitError::RanOutOfFrames)
+                match container.ensure_table_created(start, || frame::borrow(1)) {
+                    Ok(table) => Self::map_internal(table, vpn, ppn, count, flags, level - 1),
+                    Err(PageEntryWriteError::LeafExists(original, f)) => {
+                        // container[start] 是大页
+                        let set = flags.into();
+                        if Self::is_flags_extended(&f, &set) {
+                            if let Some(number) = ppn {
+                                if number == original {
+                                    let table =
+                                        Self::split_page_into_table(container, vpn, ppn, level, f)?;
+                                    Self::map_internal(table, vpn, ppn, count, flags, level - 1)
+                                } else {
+                                    // 映射要求不匹配，无法覆盖
+                                    Err(MemoryUnitError::EntryOverwrite)
+                                }
+                            } else {
+                                let table =
+                                    Self::split_page_into_table(container, vpn, ppn, level, f)?;
+                                Self::map_internal(table, vpn, ppn, count, flags, level - 1)
+                            }
+                        } else {
+                            Ok(())
+                        }
+                    }
+                    Err(PageEntryWriteError::BranchExists) => Err(MemoryUnitError::EntryOverwrite),
+                    Err(PageEntryWriteError::TrackerUnavailable) => {
+                        Err(MemoryUnitError::RanOutOfFrames)
+                    }
                 }
             }
         }
@@ -330,6 +400,58 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         }
     }
 
+    fn split_page_into_table<F: Into<FlagSet<PageEntryFlag>> + Copy>(
+        container: &mut PageTable<E>,
+        vpn: PageNumber,
+        ppn: Option<PageNumber>,
+        level: usize,
+        original: F,
+    ) -> Result<&mut PageTable<E>, MemoryUnitError> {
+        let index = Self::index_of_vpn(vpn, level);
+        container.free_entry(index);
+        if let Ok(table) = container.ensure_table_created(index, || frame::borrow(1)) {
+            let small_size = PageTable::<E>::entry_count().pow((level - 1) as u32);
+            if let Some(number) = ppn {
+                for i in 0..512 {
+                    Self::into_result(table.create_leaf(i, number + small_size * i, original))?;
+                }
+            } else {
+                for i in 0..512 {
+                    Self::into_result(table.ensure_managed_leaf_created(
+                        i,
+                        || frame::borrow(small_size),
+                        original,
+                    ))?;
+                }
+            }
+            Ok(table)
+        } else {
+            Err(MemoryUnitError::RanOutOfFrames)
+        }
+    }
+
+    fn is_flags_extended(
+        original: &FlagSet<PageEntryFlag>,
+        may_extended: &FlagSet<PageEntryFlag>,
+    ) -> bool {
+        if may_extended.contains(PageEntryFlag::Readable)
+            & !original.contains(PageEntryFlag::Readable)
+        {
+            return true;
+        }
+        if may_extended.contains(PageEntryFlag::Writeable)
+            & !original.contains(PageEntryFlag::Writeable)
+        {
+            return true;
+        }
+        if may_extended.contains(PageEntryFlag::Executable)
+            & !original.contains(PageEntryFlag::Executable)
+        {
+            return true;
+        }
+        false
+    }
+
     fn index_of_vpn(vpn: PageNumber, level: usize) -> usize {
         // 9|9|9
         (vpn >> (level * E::SIZE)) & ((1 << E::SIZE) - 1)
@@ -345,6 +467,19 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
             inner & ((1 << (level * E::SIZE)) - 1) == 0
         } else {
             true
+        }
+    }
+
+    fn into_result(input: Result<(), PageEntryWriteError>) -> Result<(), MemoryUnitError> {
+        if let Err(err) = input {
+            match err {
+                PageEntryWriteError::BranchExists | PageEntryWriteError::LeafExists(_, _) => {
+                    Err(MemoryUnitError::EntryOverwrite)
+                }
+                PageEntryWriteError::TrackerUnavailable => Err(MemoryUnitError::RanOutOfFrames),
+            }
+        } else {
+            Ok(())
         }
     }
 }

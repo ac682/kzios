@@ -6,6 +6,7 @@ use riscv::register::{scause::Scause, sip, sscratch, sstatus, stvec, utvec::Trap
 
 use crate::{
     external::{_hart_num, _switch},
+    mm::{page::PageEntryFlag, MemoryOperation, ProcessAddressRegion},
     println, sbi,
     sync::hart,
     task::{
@@ -41,8 +42,8 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
     }
 
     pub fn arranged_context(&self) -> (usize, Address) {
-        let (p, _, trapframe, _) = self.scheduler.context();
-        (p.memory.satp(), trapframe)
+        let (_, satp, trapframe) = self.scheduler.context();
+        (satp, trapframe)
     }
 
     pub fn send_ipi(&self) -> bool {
@@ -61,10 +62,8 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
 
     pub fn enter_user(&mut self) -> ! {
         self.scheduler.schedule();
-        let (p,_, trapframe, trampoline) = self.scheduler.context();
-        unsafe{
-            _switch(trampoline, p.memory.satp(), trapframe)
-        }
+        let (trampoline, satp, trapframe) = self.scheduler.context();
+        unsafe { _switch(trampoline, satp, trapframe) }
     }
 
     pub fn trap(&mut self, cause: TrapCause) {
@@ -75,6 +74,24 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
             TrapCause::TimerInterrupt => {
                 self.scheduler.schedule();
                 self.timer.schedule_next(self.scheduler.next_timeslice());
+            }
+            TrapCause::PageFault(address, operation) => {
+                let region = self.scheduler.is_address_in(address);
+                match region {
+                    ProcessAddressRegion::Stack(_) => {
+                        self.scheduler.with_context(|p, _| {
+                            p.memory
+                                .fill(address >> 12, 1, PageEntryFlag::PrefabUserStack);
+                        });
+                    }
+                    ProcessAddressRegion::TrapFrame(_) => {
+                        self.scheduler.with_context(|p, _| {
+                            p.memory
+                                .fill(address >> 12, 1, PageEntryFlag::PrefabUserTrapframe);
+                        });
+                    }
+                    _ => todo!("unexpected memory page fault at: {:#x}", address),
+                }
             }
             _ => {
                 todo!("unimplemented trap cause {:?}", cause)

@@ -1,12 +1,19 @@
 // Sv39 only
 
-use core::{cell::UnsafeCell, fmt::Debug, mem::size_of, ops::Not};
+use core::{
+    cell::UnsafeCell,
+    fmt::Debug,
+    mem::size_of,
+    ops::{BitAnd, Not},
+};
 
 use alloc::boxed::Box;
 use erhino_shared::mem::{Address, PageNumber};
 use flagset::{flags, FlagSet};
 use hashbrown::HashMap;
 use num_traits::Pow;
+
+use crate::println;
 
 use super::frame::FrameTracker;
 
@@ -15,6 +22,7 @@ pub const PAGE_SIZE: usize = 4096;
 pub type PageEntryImpl = PageTableEntry39;
 
 flags! {
+    #[repr(u64)]
     pub enum PageEntryFlag: u64{
         Valid = 0b1,
         Readable = 0b10,
@@ -24,11 +32,23 @@ flags! {
         Global = 0b10_0000,
         Accessed = 0b100_0000,
         Dirty = 0b1000_0000,
-        Cow = 0b1_0000_0000,
-        CowWriteable = 0b10_0000_0000,
+        Cow = 0b100000000,
+        CowWriteable = 0b1000000000,
 
-        UserReadWrite = (PageEntryFlag::User | PageEntryFlag::Readable | PageEntryFlag::Writeable | PageEntryFlag::Valid).bits(),
+        PrefabKernelDevice = (PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable).bits(),
+        PrefabKernelProgram = (PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable | PageEntryFlag::Executable).bits(),
+        PrefabKernelTrapframe = (PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable).bits(),
+        PrefabKernelTrampoline = (PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable | PageEntryFlag::Executable).bits(),
+        PrefabUserStack = (PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable | PageEntryFlag::User).bits(),
+        PrefabUserTrapframe = (PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable).bits(),
+        PrefabUserTrampoline = (PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable | PageEntryFlag::Executable).bits(),
     }
+}
+
+pub enum PageEntryWriteError {
+    LeafExists(PageNumber, FlagSet<PageEntryFlag>),
+    BranchExists,
+    TrackerUnavailable,
 }
 
 pub enum PageEntryType<'table, E: PageTableEntry + 'static> {
@@ -76,6 +96,27 @@ impl<E: PageTableEntry + 'static> PageTable<E> {
         self.entry(index).is_valid()
     }
 
+    pub fn free_entry(&mut self, index: usize) -> Option<PageNumber> {
+        let entry = self.entry_mut(index);
+        if entry.is_valid() {
+            let number = entry.physical_page_number();
+            entry.clear();
+            if entry.is_leaf() {
+                self.managed.remove(&index);
+            } else {
+                self.branches.remove(&index);
+            }
+            Some(number)
+        } else {
+            None
+        }
+    }
+
+    pub fn is_table_created(&self, index: usize) -> bool {
+        let entry = self.entry(index);
+        entry.is_valid() && !entry.is_leaf()
+    }
+
     pub fn get_entry_type(&self, index: usize) -> PageEntryType<E> {
         let entry = self.entry(index);
         if entry.is_valid() {
@@ -97,31 +138,70 @@ impl<E: PageTableEntry + 'static> PageTable<E> {
         index: usize,
         ppn: PageNumber,
         flags: F,
-    ) -> Option<&mut E> {
+    ) -> Result<(), PageEntryWriteError> {
         let entry = self.entry_mut(index);
         if !entry.is_valid() {
             entry.set(ppn, flags);
-            Some(entry)
+            Ok(())
         } else {
-            None
+            Err(if entry.is_leaf() {
+                PageEntryWriteError::LeafExists(entry.physical_page_number(), entry.flags())
+            } else {
+                PageEntryWriteError::BranchExists
+            })
         }
     }
 
-    // return frame tracker if failed
+    pub fn ensure_leaf_created<F: Into<FlagSet<PageEntryFlag>>>(
+        &mut self,
+        index: usize,
+        ppn: PageNumber,
+        flags: F,
+    ) -> Result<(), PageEntryWriteError> {
+        let entry = self.entry_mut(index);
+        if entry.is_valid() {
+            if entry.is_leaf() {
+                if entry.physical_page_number() == ppn {
+                    entry.set_flags(
+                        flags.into()
+                            & (PageEntryFlag::Readable
+                                | PageEntryFlag::Writeable
+                                | PageEntryFlag::Executable),
+                    );
+                    Ok(())
+                } else {
+                    Err(PageEntryWriteError::LeafExists(
+                        entry.physical_page_number(),
+                        entry.flags(),
+                    ))
+                }
+            } else {
+                Err(PageEntryWriteError::BranchExists)
+            }
+        } else {
+            entry.set(ppn, flags);
+            Ok(())
+        }
+    }
+
     pub fn create_managed_leaf<F: Into<FlagSet<PageEntryFlag>>>(
         &mut self,
         index: usize,
         tracker: FrameTracker,
         flags: F,
-    ) -> Option<FrameTracker> {
+    ) -> Result<(), PageEntryWriteError> {
         let entry = self.entry_mut(index);
         let ppn = tracker.start();
         if !entry.is_valid() {
             entry.set(ppn, flags);
             self.managed.insert(index, tracker);
-            None
+            Ok(())
         } else {
-            Some(tracker)
+            Err(if entry.is_leaf() {
+                PageEntryWriteError::LeafExists(entry.physical_page_number(), entry.flags())
+            } else {
+                PageEntryWriteError::BranchExists
+            })
         }
     }
 
@@ -133,15 +213,25 @@ impl<E: PageTableEntry + 'static> PageTable<E> {
         index: usize,
         tracker_factory: Factory,
         flags: F,
-    ) -> bool {
+    ) -> Result<(), PageEntryWriteError> {
         let entry = self.entry_mut(index);
         if entry.is_valid() {
-            entry.is_leaf()
+            if entry.is_leaf() {
+                entry.set_flags(
+                    flags.into()
+                        & (PageEntryFlag::Readable
+                            | PageEntryFlag::Writeable
+                            | PageEntryFlag::Executable),
+                );
+                Ok(())
+            } else {
+                Err(PageEntryWriteError::BranchExists)
+            }
         } else {
             if let Some(tracker) = tracker_factory() {
-                self.create_managed_leaf(index, tracker, flags).is_none()
+                self.create_managed_leaf(index, tracker, flags)
             } else {
-                false
+                Err(PageEntryWriteError::TrackerUnavailable)
             }
         }
     }
@@ -155,18 +245,33 @@ impl<E: PageTableEntry + 'static> PageTable<E> {
         }
     }
 
+    pub fn get_table_mut(&mut self, index: usize) -> Option<&mut PageTable<E>> {
+        let entry = self.entry(index);
+        if entry.is_valid() && !entry.is_leaf() {
+            self.branches.get_mut(&index)
+        } else {
+            None
+        }
+    }
+
     pub fn ensure_table_created<F: Fn() -> Option<FrameTracker>>(
         &mut self,
         index: usize,
         frame_factory: F,
-    ) -> Option<&mut PageTable<E>> {
+    ) -> Result<&mut PageTable<E>, PageEntryWriteError> {
         let entry = self.entry_mut(index);
 
         if entry.is_valid() {
             if !entry.is_leaf() {
-                self.branches.get_mut(&index)
+                Ok(self
+                    .branches
+                    .get_mut(&index)
+                    .expect("page table management went wrong"))
             } else {
-                None
+                Err(PageEntryWriteError::LeafExists(
+                    entry.physical_page_number(),
+                    entry.flags(),
+                ))
             }
         } else {
             if let Some(frame) = frame_factory() {
@@ -175,9 +280,12 @@ impl<E: PageTableEntry + 'static> PageTable<E> {
                 let table = PageTable::<E>::from(ppn);
                 self.managed.insert(index, frame);
                 self.branches.insert(index, table);
-                self.branches.get_mut(&index)
+                Ok(self
+                    .branches
+                    .get_mut(&index)
+                    .expect("page table management went wrong"))
             } else {
-                None
+                Err(PageEntryWriteError::TrackerUnavailable)
             }
         }
     }
@@ -195,12 +303,13 @@ pub trait PageTableEntry: Sized {
     fn top_address() -> Address;
     fn is_leaf(&self) -> bool;
     fn is_valid(&self) -> bool;
-    fn has_flag(&self, flag: PageEntryFlag) -> bool;
-    fn set_flag(&mut self, flag: PageEntryFlag);
-    fn clear_flag(&mut self, flag: PageEntryFlag);
+    fn has_flags<F: Into<FlagSet<PageEntryFlag>>>(&self, flags: F) -> bool;
+    fn set_flags<F: Into<FlagSet<PageEntryFlag>>>(&mut self, flags: F);
+    fn clear_flags<F: Into<FlagSet<PageEntryFlag>>>(&mut self, flags: F);
     fn flags(&self) -> FlagSet<PageEntryFlag>;
     fn physical_page_number(&self) -> PageNumber;
     fn set<F: Into<FlagSet<PageEntryFlag>>>(&mut self, ppn: PageNumber, flags: F);
+    fn clear(&mut self);
 }
 
 pub struct PageTableEntryPrimitive<
@@ -224,7 +333,7 @@ impl<
     const SIZE: usize = SIZE;
 
     fn space_size() -> usize {
-        1usize << ((DEPTH * SIZE + 12) - 1)
+        1usize << (DEPTH * SIZE + 12 - 1)
     }
     // 以 Sv39 为例，其虚拟地址空间大小为 2^64
     // 但是 有效位为 (0){25}0(x){38} 或 (1){25}1(x){38}
@@ -242,22 +351,22 @@ impl<
         self.0.into() & 0b1 != 0
     }
 
-    fn set_flag(&mut self, flag: PageEntryFlag) {
-        let pre = self.0.into() | flag as u64;
+    fn set_flags<F: Into<FlagSet<PageEntryFlag>>>(&mut self, flags: F) {
+        let pre = self.0.into() | flags.into().bits();
         if let Ok(p) = P::try_from(pre) {
             self.0 = p
         }
     }
 
-    fn clear_flag(&mut self, flag: PageEntryFlag) {
-        let pre = self.0.into() & (!0u64 - flag as u64);
+    fn clear_flags<F: Into<FlagSet<PageEntryFlag>>>(&mut self, flags: F) {
+        let pre = self.0.into() & (!0u64 - flags.into().bits());
         if let Ok(p) = P::try_from(pre) {
             self.0 = p
         }
     }
 
-    fn has_flag(&self, flag: PageEntryFlag) -> bool {
-        self.0.into() & flag as u64 != 0
+    fn has_flags<F: Into<FlagSet<PageEntryFlag>>>(&self, flags: F) -> bool {
+        self.0.into() & flags.into().bits() != 0
     }
 
     fn flags(&self) -> FlagSet<PageEntryFlag> {
@@ -272,6 +381,12 @@ impl<
         let pre = ((ppn as u64) << 10) + flags.into().bits();
         if let Ok(p) = P::try_from(pre) {
             self.0 = p
+        }
+    }
+
+    fn clear(&mut self) {
+        if let Ok(p) = P::try_from(0) {
+            self.0 = p;
         }
     }
 }

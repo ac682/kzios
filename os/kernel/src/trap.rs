@@ -4,9 +4,10 @@ use erhino_shared::{call::SystemCall, mem::Address};
 use riscv::register::scause::{Exception, Interrupt, Scause, Trap};
 
 use crate::{
-    external::{_kernel_end, _stack_size},
+    external::{_kernel_end, _stack_size, _kernel_trap},
     hart,
-    println, mm::KERNEL_SATP,
+    mm::{MemoryOperation, KERNEL_SATP},
+    println,
 };
 
 #[derive(Debug)]
@@ -17,6 +18,7 @@ pub enum TrapCause {
     TimerInterrupt,
     EnvironmentCall,
     Breakpoint,
+    PageFault(Address, MemoryOperation),
 }
 
 #[repr(C)]
@@ -36,15 +38,27 @@ pub struct TrapFrame {
     // 536
     kernel_satp: u64,
     // 544
+    kernel_trap: u64,
+    // 552
     user_trap: u64,
 }
 
 impl TrapFrame {
-    pub fn init(&mut self, hartid: usize, entry_point: Address, user_trap: Address) {
+    pub fn init(
+        &mut self,
+        hartid: usize,
+        entry_point: Address,
+        stack_address: Address,
+        user_trap: Address,
+    ) {
+        self.x = [0; 32];
+        self.f = [0; 32];
+        self.x[2] = stack_address as u64;
         self.pc = entry_point as u64;
         self.kernel_tp = hartid as u64;
         self.kernel_sp = _kernel_end as u64 - (_stack_size as u64 * hartid as u64);
         self.kernel_satp = unsafe { KERNEL_SATP } as u64;
+        self.kernel_trap = _kernel_trap as u64;
         self.user_trap = user_trap as u64;
     }
 }
@@ -60,20 +74,6 @@ impl Display for TrapFrame {
         writeln!(f, "a4={:#016x}, a5={:#016x}", self.x[14], self.x[15])?;
         writeln!(f, "a6={:#016x}, a7={:#016x}", self.x[16], self.x[17])?;
         writeln!(f, "sepc={:#x}", self.pc)
-        // writeln!(
-        //     f,
-        //     "sepc={:#x}, satp({})={:#x}",
-        //     self.pc,
-        //     match (self.satp >> 60) {
-        //         0 => "Bare",
-        //         8 => "Sv39",
-        //         9 => "Sv48",
-        //         10 => "Sv57",
-        //         11 => "Sv64",
-        //         _ => "unimp",
-        //     },
-        //     self.satp & ((1 << 44) - 1)
-        // )
     }
 }
 
@@ -100,17 +100,26 @@ unsafe fn handle_kernel_trap(cause: Scause, val: usize) {
 }
 
 #[no_mangle]
-unsafe fn handle_user_trap(frame: &mut TrapFrame, cause: Scause, _val: usize) -> (usize, Address) {
+unsafe fn handle_user_trap(cause: Scause, val: usize) -> (usize, Address) {
     let hart = hart::this_hart();
     match cause.cause() {
         Trap::Interrupt(Interrupt::UserTimer) => hart.trap(TrapCause::TimerInterrupt),
         Trap::Interrupt(Interrupt::SupervisorTimer) => todo!("nested interrupt: timer"),
         Trap::Interrupt(Interrupt::UserSoft) => todo!("impossible user soft interrupt"),
         Trap::Exception(exception) => {
-            frame.pc += 4;
             match exception {
                 Exception::Breakpoint => hart.trap(TrapCause::Breakpoint),
                 Exception::UserEnvCall => hart.trap(TrapCause::EnvironmentCall),
+                Exception::LoadPageFault => {
+                    hart.trap(TrapCause::PageFault(val as Address, MemoryOperation::Read))
+                }
+                Exception::StorePageFault => {
+                    hart.trap(TrapCause::PageFault(val as Address, MemoryOperation::Write))
+                }
+                Exception::InstructionPageFault => hart.trap(TrapCause::PageFault(
+                    val as Address,
+                    MemoryOperation::Execute,
+                )),
                 _ => todo!("unknown exception: {}", cause.bits()),
             }
         }

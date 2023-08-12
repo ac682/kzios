@@ -1,17 +1,20 @@
 use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
 use alloc::{borrow::ToOwned, string::String};
-use elf_rs::{Elf, ElfFile, ElfMachine, ElfType, ProgramType, ProgramHeaderFlags};
+use elf_rs::{Elf, ElfFile, ElfMachine, ElfType, ProgramHeaderFlags, ProgramType};
 use erhino_shared::{
     mem::Address,
     proc::{ExecutionState, ExitCode, Pid, ProcessPermission, Tid},
 };
 use flagset::FlagSet;
 
-use crate::mm::{
-        page::{PageEntryFlag, PageTableEntry, PageTableEntry39, PageEntryImpl},
+use crate::{
+    mm::{
+        page::{PageEntryFlag, PageEntryImpl, PageTableEntry, PageTableEntry39},
         unit::MemoryUnit,
-    };
+    },
+    println,
+};
 
 use super::thread::Thread;
 
@@ -30,10 +33,8 @@ pub struct Process {
 }
 
 impl Process {
-
     pub fn from_elf(data: &[u8], name: &str) -> Result<Self, ProcessSpawnError> {
         if let Ok(elf) = Elf::from_bytes(data) {
-            let top = 1usize << ((PageEntryImpl::DEPTH * PageEntryImpl::SIZE + 12) - 1);
             let mut process = Self {
                 name: name.to_owned(),
                 permissions: ProcessPermission::All.into(),
@@ -46,22 +47,18 @@ impl Process {
             if header.machine() != ElfMachine::RISC_V || header.elftype() != ElfType::ET_EXEC {
                 return Err(ProcessSpawnError::WrongTarget);
             }
-            // process
-            //     .memory
-            //     .fill(0x3f_ffff_e, 1, PageEntryFlag::UserReadWrite)
-            //     .unwrap();
             for ph in elf.program_header_iter() {
                 if ph.ph_type() == ProgramType::LOAD {
-                    if let Some(content) = ph.content(){
+                    if let Some(content) = ph.content() {
                         process
-                        .memory
-                        .write(
-                            ph.vaddr() as Address,
-                            content,
-                            ph.memsz() as usize,
-                            flags_to_permission(ph.flags()),
-                        )
-                        .unwrap();
+                            .memory
+                            .write(
+                                ph.vaddr() as Address,
+                                content,
+                                ph.memsz() as usize,
+                                flags_to_permission(ph.flags()),
+                            )
+                            .unwrap();
                     }
                 }
             }

@@ -12,25 +12,33 @@ use alloc::{
 };
 use elf_rs::ElfHeader;
 use erhino_shared::{
-    mem::Address,
+    mem::{Address, PageNumber},
     proc::{ExecutionState, Pid, Tid},
     sync::{DataLock, InteriorLock, ReadWriteDataLock},
 };
+use flagset::FlagSet;
 use spin::Spin;
 
 use crate::{
-    mm::page::{PageEntryFlag, PageEntryImpl, PageTableEntry, PAGE_SIZE},
+    external::_user_trap,
+    mm::{
+        page::{PageEntryFlag, PageEntryImpl, PageTableEntry, PAGE_SIZE},
+        unit::{AddressSpace, MemoryUnit},
+        ProcessAddressRegion,
+    },
+    println,
     sync::{
         spin::{ReadWriteSpinLock, SpinLock},
         up::UpSafeCell,
     },
     task::{proc::Process, thread::Thread},
-    trap::TrapFrame, println, external::_trampoline,
+    trap::TrapFrame,
 };
 
 use super::Scheduler;
 
-type Locked<T> = ReadWriteDataLock<T, ReadWriteSpinLock>;
+// 日后替换成 InterruptSafeLock
+type Locked<T> = DataLock<T, SpinLock>;
 type Shared<T> = UpSafeCell<T>;
 
 // timeslice in ticks
@@ -38,47 +46,107 @@ const QUANTUM: usize = 2;
 
 static mut PROC_TABLE: ProcessTable = ProcessTable::new();
 
-pub struct ProcessCell {
+const THREAD_STACK_SIZE: usize = 8 * 1024 * 1024;
+
+struct ProcessLayout {
+    // 跳板地址向上是跳板页，向下是 TrapFrame
+    trampoline: Address,
+    stack: Address,
+    heap: Address,
+    thread_count: usize,
+}
+
+impl ProcessLayout {
+    pub fn new(trampoline: Address, stack: Address, heap: Address) -> Self {
+        Self {
+            trampoline: trampoline,
+            stack: stack,
+            heap: heap,
+            thread_count: 1,
+        }
+    }
+
+    pub fn is_address_in(&self, addr: Address) -> ProcessAddressRegion {
+        match MemoryUnit::<PageEntryImpl>::is_address_in(addr) {
+            AddressSpace::Invalid => ProcessAddressRegion::Invalid,
+            AddressSpace::Kernel => {
+                let count = self.thread_count;
+                let diff = (self.trampoline - addr) / TRAPFRAME_SIZE;
+                ProcessAddressRegion::TrapFrame(diff as Tid)
+            }
+            AddressSpace::User => {
+                if addr < self.heap {
+                    ProcessAddressRegion::Program
+                } else {
+                    let diff = (self.stack - addr - 1) / THREAD_STACK_SIZE;
+                    let count = self.thread_count;
+                    if diff < count {
+                        ProcessAddressRegion::Stack(diff as Tid)
+                    } else {
+                        ProcessAddressRegion::Heap
+                    }
+                }
+            }
+        }
+    }
+}
+
+// 只有 next, prev 需要用 ring_lock, head 用 head_lock, inner 和 layout 则需要手动获得中断安全锁
+struct ProcessCell {
     inner: Process,
     id: Pid,
     parent: Pid,
-    // 线程数量。未来可能改成 FairEnough 调度，保留用
-    count: AtomicUsize,
+    layout: ProcessLayout,
     head: Arc<Shared<ThreadCell>>,
     head_lock: SpinLock,
     next: Option<Arc<Shared<ProcessCell>>>,
     prev: Option<Weak<Shared<ProcessCell>>>,
     ring_lock: SpinLock,
+    state_lock: SpinLock,
 }
 
-const BLOCK_SIZE: usize = 1024;
-const BLOCK_HOLD: usize = PAGE_SIZE / BLOCK_SIZE;
+const TRAPFRAME_SIZE: usize = 1024;
+const TRAPFRAME_HOLD: usize = PAGE_SIZE / TRAPFRAME_SIZE;
 
 impl ProcessCell {
-    pub fn new(proc: Process, pid: Pid, parent: Pid, main: ThreadCell) -> Self {
+    pub fn new(
+        proc: Process,
+        pid: Pid,
+        parent: Pid,
+        main: ThreadCell,
+        layout: ProcessLayout,
+    ) -> Self {
+        let mut mutable = proc;
+        mutable.memory.map(
+            layout.trampoline >> 12,
+            _user_trap as usize >> 12,
+            1,
+            PageEntryFlag::PrefabUserTrampoline,
+        );
         Self {
-            inner: proc,
+            inner: mutable,
             id: pid,
             parent: parent,
-            count: AtomicUsize::new(1),
+            layout: layout,
             head: Arc::new(Shared::new(main)),
             head_lock: SpinLock::new(),
             next: None,
             prev: None,
             ring_lock: SpinLock::new(),
+            state_lock: SpinLock::new(),
         }
     }
 
-    pub fn address_of_trampoline<E: PageTableEntry>() -> Address {
-        E::top_address() & !0xFFF
+    pub fn address_of_trapframe<E: PageTableEntry>(trampoline: Address, id: Tid) -> Address {
+        // 最高页留给跳板，倒数第二个开始向下分配
+        let start_page_number = (trampoline >> 12) - 1;
+        let block = id as usize / TRAPFRAME_HOLD;
+        let index = id as usize % TRAPFRAME_HOLD;
+        ((start_page_number - block) << 12) + index * TRAPFRAME_SIZE
     }
 
-    pub fn address_of_trapframe<E: PageTableEntry>(id: Tid) -> Address {
-        // 最高页留给跳板，倒数第二个开始向下分配
-        let start_page_number = (E::top_address() >> 12) - 1;
-        let block = id as usize / BLOCK_HOLD;
-        let index = id as usize % BLOCK_HOLD;
-        ((start_page_number - block) << 12) + index * BLOCK_SIZE
+    pub fn address_of_stack(stack: Address, id: Tid) -> Address {
+        stack - (id as usize * THREAD_STACK_SIZE) - 1
     }
 
     pub fn move_next(
@@ -136,17 +204,35 @@ impl ProcessCell {
         self.find_gap()
     }
 
+    pub fn ensure_page_created<F: Into<FlagSet<PageEntryFlag>> + Copy>(
+        &mut self,
+        number: PageNumber,
+        flags: F,
+    ) -> bool {
+        self.state_lock.lock();
+        if !self.inner.memory.is_page_created(number) {
+            self.inner.memory.fill(number, 1, flags);
+            self.state_lock.unlock();
+            true
+        } else {
+            self.state_lock.unlock();
+            false
+        }
+    }
+
     pub fn struct_at<T: Sized>(&self, addr: Address) -> &mut T {
+        self.state_lock.lock();
         let (physical, _) = self
             .inner
             .memory
             .translate(addr)
             .expect("the page struct at has not been created");
+        self.state_lock.unlock();
         unsafe { unsafe { &mut *(physical as *mut T) } }
     }
 }
 
-pub struct ThreadCell {
+struct ThreadCell {
     inner: Thread,
     id: Tid,
     proc: Weak<Shared<ProcessCell>>,
@@ -184,19 +270,10 @@ impl ThreadCell {
             false
         }
     }
-
-    // pub fn trapframe(&self) -> &mut TrapFrame {
-    //     let proc = self
-    //         .proc
-    //         .upgrade()
-    //         .expect("the process cell it referred can not be None");
-    //     let result = proc.struct_at(self.trapframe);
-    //     result
-    // }
 }
 
 // 在调度开始时这个 head 必须有东西，因为“没有任何一个线程或所有线程全部失活时内核失去意义”
-pub struct ProcessTable {
+struct ProcessTable {
     generation: AtomicUsize,
     pid_generator: AtomicUsize,
     head: Option<Arc<Shared<ProcessCell>>>,
@@ -383,20 +460,6 @@ impl UnfairScheduler {
             }
         }
     }
-
-    fn install_trapframe_if_needed(proc: &mut ProcessCell, address: Address) -> bool {
-        // 每一 block 的第一个页时进行安装
-        let id = proc.count.load(Ordering::Relaxed) - 1;
-        let result = id as usize % BLOCK_HOLD == 0;
-        if result {
-            proc.inner.memory.fill(
-                address >> 12,
-                1,
-                PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable,
-            );
-        }
-        result
-    }
 }
 
 impl Scheduler for UnfairScheduler {
@@ -408,34 +471,40 @@ impl Scheduler for UnfairScheduler {
         } else {
             pid
         };
-        let trapframe_address = ProcessCell::address_of_trapframe::<PageEntryImpl>(0);
-        let trampoline_address = ProcessCell::address_of_trampoline::<PageEntryImpl>();
+        let layout = ProcessLayout::new(
+            PageEntryImpl::top_address() & !0xFFF,
+            PageEntryImpl::space_size(),
+            0,
+        );
+        let entry_point = proc.entry_point;
+        let trampoline_address = layout.trampoline;
+        let stack_address = ProcessCell::address_of_stack(layout.stack, 0);
+        let trapframe_address =
+            ProcessCell::address_of_trapframe::<PageEntryImpl>(layout.trampoline, 0);
         let thread = ThreadCell::new(Thread::new("main"), 0, table.gen(), trapframe_address);
-        let mut cell = ProcessCell::new(proc, pid, parent_id, thread);
-        Self::install_trapframe_if_needed(&mut cell, trapframe_address);
-        cell.inner.memory.map(
-            trampoline_address >> 12,
-            _trampoline as usize >> 12,
-            1,
-            PageEntryFlag::Valid
-                | PageEntryFlag::Readable
-                | PageEntryFlag::Writeable
-                | PageEntryFlag::Executable
-        );
-        println!("{}",cell.inner.memory);
+        let mut cell = ProcessCell::new(proc, pid, parent_id, thread, layout);
+        cell.ensure_page_created(trapframe_address >> 12, PageEntryFlag::PrefabUserTrapframe);
         let trapframe = cell.struct_at::<TrapFrame>(trapframe_address);
-        trapframe.init(
-            self.hartid,
-            cell.inner.entry_point,
-            ProcessCell::address_of_trampoline::<PageEntryImpl>(),
-        );
-        // TODO: Trapframe 区域的位置应该记录在 Layout 中，当发生 Page Fault 时判断是否为 Trapframe，进行 fill
+        trapframe.init(self.hartid, entry_point, stack_address, trampoline_address);
         let sealed = table.add_process(cell);
         sealed.head_lock.lock();
         let mutable = sealed.head.get_mut();
         mutable.proc = Arc::downgrade(&sealed);
         sealed.head_lock.unlock();
         pid
+    }
+
+    fn is_address_in(&self, addr: Address) -> ProcessAddressRegion {
+        if let Some((p, _)) = &self.current {
+            p.state_lock.lock();
+            let result = p.layout.is_address_in(addr);
+            p.state_lock.unlock();
+            result
+        } else {
+            unreachable!(
+                "previous process want to see the address region while it is not in current field"
+            )
+        }
     }
 
     fn schedule(&mut self) {
@@ -458,14 +527,21 @@ impl Scheduler for UnfairScheduler {
         QUANTUM
     }
 
-    fn context(&self) -> (&Process, &Thread, Address, Address) {
+    fn context(&self) -> (Address, usize, Address) {
         if let Some((p, t)) = &self.current {
-            (
-                &p.inner,
-                &t.inner,
-                t.trapframe,
-                ProcessCell::address_of_trampoline::<PageEntryImpl>(),
-            )
+            let satp = p.inner.memory.satp();
+            (p.layout.trampoline, satp, t.trapframe)
+        } else {
+            // go IDLE
+            panic!("hart is not scheduling-prepared yet")
+        }
+    }
+
+    fn with_context<F: Fn(&mut Process, &mut Thread)>(&self, func: F) {
+        if let Some((p, t)) = &self.current {
+            p.state_lock.lock();
+            func(&mut p.get_mut().inner, &mut t.get_mut().inner);
+            p.state_lock.unlock();
         } else {
             // go IDLE
             panic!("hart is not scheduling-prepared yet")

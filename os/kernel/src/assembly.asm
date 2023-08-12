@@ -130,38 +130,38 @@ _kernel_trap:
     li      t1, 3
     bne     t0, t1, 3f
 2:
-    fld      f0, 256(sp)
-    fld      f1, 264(sp)
-    fld      f2, 272(sp)
-    fld      f3, 280(sp)
-    fld      f4, 288(sp)
-    fld      f5, 296(sp)
-    fld      f6, 304(sp)
-    fld      f7, 312(sp)
-    fld      f8, 320(sp)
-    fld      f9, 328(sp)
-    fld      f10, 336(sp)
-    fld      f11, 344(sp)
-    fld      f12, 352(sp)
-    fld      f13, 360(sp)
-    fld      f14, 368(sp)
-    fld      f15, 376(sp)
-    fld      f16, 384(sp)
-    fld      f17, 392(sp)
-    fld      f18, 400(sp)
-    fld      f19, 408(sp)
-    fld      f20, 416(sp)
-    fld      f21, 424(sp)
-    fld      f22, 432(sp)
-    fld      f23, 440(sp)
-    fld      f24, 448(sp)
-    fld      f25, 456(sp)
-    fld      f26, 464(sp)
-    fld      f27, 472(sp)
-    fld      f28, 480(sp)
-    fld      f29, 488(sp)
-    fld      f30, 496(sp)
-    fld      f31, 504(sp)
+    fld     f0, 256(sp)
+    fld     f1, 264(sp)
+    fld     f2, 272(sp)
+    fld     f3, 280(sp)
+    fld     f4, 288(sp)
+    fld     f5, 296(sp)
+    fld     f6, 304(sp)
+    fld     f7, 312(sp)
+    fld     f8, 320(sp)
+    fld     f9, 328(sp)
+    fld     f10, 336(sp)
+    fld     f11, 344(sp)
+    fld     f12, 352(sp)
+    fld     f13, 360(sp)
+    fld     f14, 368(sp)
+    fld     f15, 376(sp)
+    fld     f16, 384(sp)
+    fld     f17, 392(sp)
+    fld     f18, 400(sp)
+    fld     f19, 408(sp)
+    fld     f20, 416(sp)
+    fld     f21, 424(sp)
+    fld     f22, 432(sp)
+    fld     f23, 440(sp)
+    fld     f24, 448(sp)
+    fld     f25, 456(sp)
+    fld     f26, 464(sp)
+    fld     f27, 472(sp)
+    fld     f28, 480(sp)
+    fld     f29, 488(sp)
+    fld     f30, 496(sp)
+    fld     f31, 504(sp)
     # make floating dirty bit clean
     csrr    t0, sstatus
     li      t1, 2
@@ -207,10 +207,9 @@ _kernel_trap:
     sret
     
 .section .trampoline.user_trap
-.global _trampoline
-_trampoline:
 .align 4
 .global _user_trap
+.global _restore
 _user_trap:
     # sscratch holds the trapframe address
     csrrw	t6, sscratch, t6
@@ -256,38 +255,38 @@ _user_trap:
     li      t1, 3
     bne     t0, t1, 1f
 0:
-    fsd      f0, 256(a0)
-    fsd      f1, 264(a0)
-    fsd      f2, 272(a0)
-    fsd      f3, 280(a0)
-    fsd      f4, 288(a0)
-    fsd      f5, 296(a0)
-    fsd      f6, 304(a0)
-    fsd      f7, 312(a0)
-    fsd      f8, 320(a0)
-    fsd      f9, 328(a0)
-    fsd      f10, 336(a0)
-    fsd      f11, 344(a0)
-    fsd      f12, 352(a0)
-    fsd      f13, 360(a0)
-    fsd      f14, 368(a0)
-    fsd      f15, 376(a0)
-    fsd      f16, 384(a0)
-    fsd      f17, 392(a0)
-    fsd      f18, 400(a0)
-    fsd      f19, 408(a0)
-    fsd      f20, 416(a0)
-    fsd      f21, 424(a0)
-    fsd      f22, 432(a0)
-    fsd      f23, 440(a0)
-    fsd      f24, 448(a0)
-    fsd      f25, 456(a0)
-    fsd      f26, 464(a0)
-    fsd      f27, 472(a0)
-    fsd      f28, 480(a0)
-    fsd      f29, 488(a0)
-    fsd      f30, 496(a0)
-    fsd      f31, 504(a0)
+    fsd     f0, 256(a0)
+    fsd     f1, 264(a0)
+    fsd     f2, 272(a0)
+    fsd     f3, 280(a0)
+    fsd     f4, 288(a0)
+    fsd     f5, 296(a0)
+    fsd     f6, 304(a0)
+    fsd     f7, 312(a0)
+    fsd     f8, 320(a0)
+    fsd     f9, 328(a0)
+    fsd     f10, 336(a0)
+    fsd     f11, 344(a0)
+    fsd     f12, 352(a0)
+    fsd     f13, 360(a0)
+    fsd     f14, 368(a0)
+    fsd     f15, 376(a0)
+    fsd     f16, 384(a0)
+    fsd     f17, 392(a0)
+    fsd     f18, 400(a0)
+    fsd     f19, 408(a0)
+    fsd     f20, 416(a0)
+    fsd     f21, 424(a0)
+    fsd     f22, 432(a0)
+    fsd     f23, 440(a0)
+    fsd     f24, 448(a0)
+    fsd     f25, 456(a0)
+    fsd     f26, 464(a0)
+    fsd     f27, 472(a0)
+    fsd     f28, 480(a0)
+    fsd     f29, 488(a0)
+    fsd     f30, 496(a0)
+    fsd     f31, 504(a0)
     # make floating dirty bit clean
     csrr    t0, sstatus
     li      t1, 2
@@ -298,44 +297,50 @@ _user_trap:
 1:
     # save pc
     csrr    t6, sepc
+    srli    t5, t6, 63
+    beqz    t5, 2f
+    addi    t6, t6, 4
+2:
     sd      t6, 512(a0)
     # load tp and sp
     ld      tp, 520(a0)
     ld      sp, 528(a0)
+    # traps here redirect to kernel trap
+    ld      t6, 544(a0)
+    csrw    stvec, t6
     # install kernel page table
     ld      t6, 536(a0)
     csrw    satp, t6
     sfence.vma
-    # traps here redirect to kernel trap
-    la      t6, _kernel_trap
-    csrw    stvec, t6
     # prepare arguments
-    csrr    a1, scause
-    csrr    a2, stval
-    call handle_user_trap
+    csrr    a0, scause
+    csrr    a1, stval
+    ld      t0, _handle_user_trap
+    jalr    t0
     # a0 -> satp
     # a1 -> &trapframe(inaccessible before satp install)
     # install context
     csrw    satp, a0
-    csrw    sscratch, a1
     sfence.vma
+# _restore(satp: usize, trampframe: &TrampFrame)
+_restore:
     # traps here redirect to user trap
     # restore special registers
-    ld      t6, 544(a1)
+    csrw    sscratch, a1
+    ld      t6, 552(a1)
     csrw    stvec, t6
     ld      t6, 512(a1)
     csrw    sepc, t6
     # save tp and sp
     sd      tp, 520(a1)
     sd      sp, 528(a1)
-    sfence.vma
     # restore floating registers
     csrr    t0, sstatus
     srli    t0, t0, 13
     andi    t0, t0, 0b11
     li      t1, 3
-    bne     t0, t1, 3f
-2:
+    bne     t0, t1, 4f
+3:
     fld      f0, 256(a1)
     fld      f1, 264(a1)
     fld      f2, 272(a1)
@@ -375,7 +380,7 @@ _user_trap:
     not     t1, t1
     and     t0, t0, t1
     csrw    sstatus, t0
-3:
+4:
     # restore generic registers
     mv      t6, a1
     ld      x0, 0(t6)
@@ -411,6 +416,7 @@ _user_trap:
     ld      x30, 240(t6)
 _enter_user_breakpoint:
     sret
+    _handle_user_trap: .dword handle_user_trap
 
 .section .text
 .global _switch
@@ -434,12 +440,13 @@ _switch_internal:
     not     t1, t1
     and     t0, t0, t1
     csrw    sstatus, t0
-    # redirect trap to _user_trap
-    csrw    stvec, a0
     # install page table
     csrw    satp, a1
+    la      t0, _restore
+    li      t1, 0xfff
+    and     t0, t0, t1
+    add     ra, a0, t0
+    mv      a0, a1
+    mv      a1, a2
     sfence.vma
-    ld      t0, 512(a2)
-    csrw    sepc, t0
-    li      t0, 0
-    sret
+    ret
