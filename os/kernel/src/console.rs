@@ -2,10 +2,7 @@ use core::fmt::{Arguments, Error, Result, Write};
 
 use erhino_shared::sync::DataLock;
 
-use crate::{
-    sbi,
-    sync::{hart::HartLock},
-};
+use crate::{sbi, sync::hart::HartLock};
 
 static mut LOCKED_CONSOLE: DataLock<Console, HartLock> = DataLock::new(Console, HartLock::new());
 

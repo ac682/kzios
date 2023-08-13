@@ -1,23 +1,16 @@
 // Sv39 only
 
-use core::{
-    cell::UnsafeCell,
-    fmt::Debug,
-    mem::size_of,
-    ops::{BitAnd, Not},
-};
+use core::{cell::UnsafeCell, fmt::Debug, mem::size_of, ops::Not};
 
 use alloc::boxed::Box;
 use erhino_shared::mem::{Address, PageNumber};
 use flagset::{flags, FlagSet};
 use hashbrown::HashMap;
-use num_traits::Pow;
-
-use crate::println;
 
 use super::frame::FrameTracker;
 
 pub const PAGE_SIZE: usize = 4096;
+pub const PAGE_BITS: usize = 12;
 
 pub type PageEntryImpl = PageTableEntry39;
 
@@ -68,9 +61,12 @@ pub struct PageTable<E: PageTableEntry + 'static> {
 impl<E: PageTableEntry + 'static> PageTable<E> {
     pub fn from(location: PageNumber) -> Self {
         let entries = unsafe {
-            core::slice::from_raw_parts_mut((location << 12) as *mut E, PAGE_SIZE / size_of::<E>())
-                .try_into()
-                .unwrap()
+            core::slice::from_raw_parts_mut(
+                (location << PAGE_BITS) as *mut E,
+                PAGE_SIZE / size_of::<E>(),
+            )
+            .try_into()
+            .unwrap()
         };
         Self {
             location,
@@ -157,7 +153,7 @@ impl<E: PageTableEntry + 'static> PageTable<E> {
         index: usize,
         ppn: PageNumber,
         flags: F,
-    ) -> Result<(), PageEntryWriteError> {
+    ) -> Result<bool, PageEntryWriteError> {
         let entry = self.entry_mut(index);
         if entry.is_valid() {
             if entry.is_leaf() {
@@ -168,7 +164,7 @@ impl<E: PageTableEntry + 'static> PageTable<E> {
                                 | PageEntryFlag::Writeable
                                 | PageEntryFlag::Executable),
                     );
-                    Ok(())
+                    Ok(false)
                 } else {
                     Err(PageEntryWriteError::LeafExists(
                         entry.physical_page_number(),
@@ -180,7 +176,7 @@ impl<E: PageTableEntry + 'static> PageTable<E> {
             }
         } else {
             entry.set(ppn, flags);
-            Ok(())
+            Ok(true)
         }
     }
 
@@ -207,13 +203,13 @@ impl<E: PageTableEntry + 'static> PageTable<E> {
 
     pub fn ensure_managed_leaf_created<
         F: Into<FlagSet<PageEntryFlag>>,
-        Factory: Fn() -> Option<FrameTracker>,
+        Factory: FnOnce() -> Option<FrameTracker>,
     >(
         &mut self,
         index: usize,
         tracker_factory: Factory,
         flags: F,
-    ) -> Result<(), PageEntryWriteError> {
+    ) -> Result<bool, PageEntryWriteError> {
         let entry = self.entry_mut(index);
         if entry.is_valid() {
             if entry.is_leaf() {
@@ -223,13 +219,14 @@ impl<E: PageTableEntry + 'static> PageTable<E> {
                             | PageEntryFlag::Writeable
                             | PageEntryFlag::Executable),
                 );
-                Ok(())
+                Ok(false)
             } else {
                 Err(PageEntryWriteError::BranchExists)
             }
         } else {
             if let Some(tracker) = tracker_factory() {
                 self.create_managed_leaf(index, tracker, flags)
+                    .map(|f| true)
             } else {
                 Err(PageEntryWriteError::TrackerUnavailable)
             }
@@ -254,7 +251,7 @@ impl<E: PageTableEntry + 'static> PageTable<E> {
         }
     }
 
-    pub fn ensure_table_created<F: Fn() -> Option<FrameTracker>>(
+    pub fn ensure_table_created<F: FnOnce() -> Option<FrameTracker>>(
         &mut self,
         index: usize,
         frame_factory: F,
@@ -333,7 +330,7 @@ impl<
     const SIZE: usize = SIZE;
 
     fn space_size() -> usize {
-        1usize << (DEPTH * SIZE + 12 - 1)
+        1usize << (DEPTH * SIZE + PAGE_BITS - 1)
     }
     // 以 Sv39 为例，其虚拟地址空间大小为 2^64
     // 但是 有效位为 (0){25}0(x){38} 或 (1){25}1(x){38}
@@ -391,9 +388,13 @@ impl<
     }
 }
 
+#[allow(unused)]
 pub type PageTableEntry32 = PageTableEntryPrimitive<u32, 34, 2, 10>;
+#[allow(unused)]
 pub type PageTableEntry39 = PageTableEntryPrimitive<u64, 56, 3, 9>;
+#[allow(unused)]
 pub type PageTableEntry48 = PageTableEntryPrimitive<u64, 56, 4, 9>;
+#[allow(unused)]
 pub type PageTableEntry57 = PageTableEntryPrimitive<u64, 56, 5, 9>;
 
 impl<'a, E: PageTableEntry + 'static> IntoIterator for &'a PageTable<E> {

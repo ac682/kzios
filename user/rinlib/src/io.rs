@@ -1,8 +1,8 @@
-use core::{arch::asm, fmt::Arguments};
+use core::fmt::Arguments;
 
-use alloc::{ffi::CString, fmt::format};
+use alloc::fmt::format;
 
-// use crate::call::sys_debug;
+use crate::call::sys_debug;
 
 #[macro_export]
 macro_rules! dbg
@@ -13,9 +13,7 @@ macro_rules! dbg
 }
 pub fn debug(args: Arguments) {
     let str = format(args);
-    let _cstr = CString::new(str).unwrap();
     unsafe {
-        // sys_debug(&cstr)
-        asm!("ebreak")
-    };
+        sys_debug(&str);
+    }
 }

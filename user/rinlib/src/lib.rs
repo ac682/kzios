@@ -6,6 +6,8 @@ pub use erhino_shared as shared;
 
 extern crate alloc;
 
+mod call;
 pub mod io;
+pub mod mm;
 pub mod preclude;
 mod rt;

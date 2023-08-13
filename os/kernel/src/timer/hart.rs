@@ -11,22 +11,26 @@ fn time() -> usize {
 }
 
 pub struct HartTimer {
-    hartid: usize,
     frequency: usize,
+    uptime: usize,
+    last_ticks: usize,
+    last_count: usize,
 }
 
 impl HartTimer {
-    pub const fn new(id: usize, freq: usize) -> Self {
+    pub const fn new(freq: usize) -> Self {
         Self {
-            hartid: id,
             frequency: freq,
+            uptime: 0,
+            last_ticks: 0,
+            last_count: 0,
         }
     }
 }
 
 impl Timer for HartTimer {
     fn uptime(&self) -> usize {
-        time() * TICKS_PER_SEC / self.frequency
+        self.uptime
     }
 
     fn tick_freq(&self) -> usize {
@@ -34,9 +38,16 @@ impl Timer for HartTimer {
     }
 
     fn schedule_next(&mut self, ticks: usize) {
+        if self.last_count > 1000 {
+            self.uptime = time() * TICKS_PER_SEC / self.frequency;
+        } else {
+            self.uptime += ticks;
+            self.last_count += 1;
+        }
+        self.last_ticks = ticks;
         let interval = ticks * self.frequency / TICKS_PER_SEC;
         if sbi::is_time_supported() {
-            sbi::set_timer(interval);
+            sbi::set_timer(interval).expect("sbi timer system broken");
         } else {
             sbi::legacy_set_timer(interval);
         }

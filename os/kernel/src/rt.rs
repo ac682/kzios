@@ -8,7 +8,12 @@ use erhino_shared::proc::Termination;
 use crate::{
     external::{_heap_start, _park, _stack_start},
     hart,
-    mm::{frame::{self, alloc}, unit, page::PAGE_SIZE, self},
+    mm::{
+        self,
+        frame::{self, alloc},
+        page::PAGE_SIZE,
+        unit,
+    },
     print, println, sbi,
 };
 
@@ -46,7 +51,7 @@ fn rust_start<T: Termination + 'static>(
         kernel_init();
         main();
         hart::send_ipi_all();
-        unsafe{
+        unsafe {
             _park();
         }
     } else {
@@ -60,7 +65,6 @@ fn rust_start<T: Termination + 'static>(
             _park();
         }
     }
-    unreachable!();
 }
 
 fn early_init(dtb_addr: usize) {
@@ -68,7 +72,6 @@ fn early_init(dtb_addr: usize) {
     frame::init();
     let tree = dtb_parser::device_tree::DeviceTree::from_address(dtb_addr).unwrap();
     let mut timebase_frequency: usize = 0;
-    let mut frequency = Vec::<usize>::new();
     for node in tree.into_iter() {
         if node.name() == "cpus" {
             if let Some(prop) = node.find_prop("timebase-frequency") {
@@ -84,7 +87,7 @@ fn early_init(dtb_addr: usize) {
     hart::init(&[timebase_frequency]);
 }
 
-fn kernel_init(){
+fn kernel_init() {
     mm::init();
 }
 
@@ -100,7 +103,7 @@ fn handle_panic(info: &PanicInfo) -> ! {
         );
     } else {
         println!(
-            "\x1b[0;31mKernel panicking at #{}: no information available.",
+            "\x1b[0;31mKernel panicking at #{}: \x1b[0mno information available.",
             hart::hartid()
         );
     }

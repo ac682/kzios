@@ -1,12 +1,10 @@
-use core::hint::spin_loop;
-
 use erhino_shared::proc::Tid;
 use riscv::register::satp;
 use spin::Once;
 
 use crate::{
     external::{_memory_end, _memory_start, _user_trap},
-    mm::page::{PageEntryFlag, PageTableEntry, PageTableEntry39},
+    mm::page::{PageEntryFlag, PageTableEntry, PAGE_BITS},
     println,
 };
 
@@ -15,6 +13,7 @@ use self::{page::PageEntryImpl, unit::MemoryUnit};
 pub mod frame;
 pub mod page;
 pub mod unit;
+pub mod usage;
 
 type KernelUnit = MemoryUnit<PageEntryImpl>;
 
@@ -22,13 +21,7 @@ static mut KERNEL_UNIT: Once<KernelUnit> = Once::new();
 #[export_name = "_kernel_satp"]
 pub static mut KERNEL_SATP: usize = 0;
 
-#[derive(Debug)]
-pub enum MemoryOperation {
-    Read,
-    Write,
-    Execute,
-}
-
+#[allow(unused)]
 pub enum ProcessAddressRegion {
     Invalid,
     Unknown,
@@ -39,8 +32,8 @@ pub enum ProcessAddressRegion {
 }
 
 pub fn init() {
-    let memory_start = _memory_start as usize >> 12;
-    let memory_end = _memory_end as usize >> 12;
+    let memory_start = _memory_start as usize >> PAGE_BITS;
+    let memory_end = _memory_end as usize >> PAGE_BITS;
     let mut unit = MemoryUnit::<PageEntryImpl>::new().unwrap();
     // mmio device space
     unit.map(0x0, 0x0, memory_start, PageEntryFlag::PrefabKernelDevice)
@@ -55,8 +48,8 @@ pub fn init() {
     .expect("map sbi + kernel space failed");
     // trampoline
     unit.map(
-        PageEntryImpl::top_address() >> 12,
-        _user_trap as usize >> 12,
+        PageEntryImpl::top_address() >> PAGE_BITS,
+        _user_trap as usize >> PAGE_BITS,
         1,
         PageEntryFlag::PrefabKernelTrampoline,
     )

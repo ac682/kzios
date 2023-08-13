@@ -1,11 +1,36 @@
 use num_derive::{FromPrimitive, ToPrimitive};
 
+/// Predefined system call errors
+#[repr(usize)]
+#[derive(Debug, FromPrimitive, ToPrimitive)]
+pub enum SystemCallError {
+    // Generic errors
+    /// [SystemCallError::NoError] means no errors at all
+    NoError = 0x00,
+    /// Undefined error
+    Unknown = 0x01,
+    /// Undefined error
+    InternalError = 0x02,
+    /// Argument out of range or illegal
+    IllegalArgument = 0x3,
+    // Role of process
+    /// Process must need the permission to do the system call
+    PermissionRequired = 0x10,
+    // Memory related
+    /// System is out of memory or the process reached the allocation limit
+    OutOfMemory = 0x20,
+    /// Address is not power of two or page-aligned
+    MisalignedAddress = 0x21,
+    /// The region accessed is not available
+    MemoryNotAccessible = 0x22,
+}
+
 /// Predefined system calls
 ///
 /// Only accessible in userspace
-/// ipc_call is done through SystemCall::IPC part
+/// ipc_call is sent through SystemCall::IPC
 #[repr(usize)]
-#[derive(FromPrimitive, ToPrimitive)]
+#[derive(Debug, FromPrimitive, ToPrimitive)]
 pub enum SystemCall {
     // System reserved
     /// Undefined behavior in release environment
@@ -17,7 +42,7 @@ pub enum SystemCall {
     // Process control
     /// Finalized process notifies kernel to cleanup
     Exit = 0x10,
-    /// Yield return
+    /// Be nice
     Yield = 0x11,
     /// Fork process itself
     Fork = 0x12,

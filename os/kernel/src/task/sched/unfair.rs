@@ -1,36 +1,24 @@
 use core::{
-    cell::UnsafeCell,
-    ops::DerefMut,
     panic,
-    sync::atomic::{AtomicU32, AtomicUsize, Ordering},
-    task::Waker,
+    sync::atomic::{AtomicUsize, Ordering},
 };
 
-use alloc::{
-    sync::{Arc, Weak},
-    vec::Vec,
-};
-use elf_rs::ElfHeader;
+use alloc::sync::{Arc, Weak};
 use erhino_shared::{
-    mem::{Address, PageNumber},
+    mem::{Address, MemoryRegionAttribute, PageNumber},
     proc::{ExecutionState, Pid, Tid},
-    sync::{DataLock, InteriorLock, ReadWriteDataLock},
+    sync::{DataLock, InteriorLock},
 };
 use flagset::FlagSet;
-use spin::Spin;
 
 use crate::{
     external::_user_trap,
     mm::{
-        page::{PageEntryFlag, PageEntryImpl, PageTableEntry, PAGE_SIZE},
+        page::{PageEntryFlag, PageEntryImpl, PageTableEntry, PAGE_BITS, PAGE_SIZE},
         unit::{AddressSpace, MemoryUnit},
         ProcessAddressRegion,
     },
-    println,
-    sync::{
-        spin::{ReadWriteSpinLock, SpinLock},
-        up::UpSafeCell,
-    },
+    sync::{spin::SpinLock, up::UpSafeCell},
     task::{proc::Process, thread::Thread},
     trap::TrapFrame,
 };
@@ -51,8 +39,8 @@ const THREAD_STACK_SIZE: usize = 8 * 1024 * 1024;
 struct ProcessLayout {
     // 跳板地址向上是跳板页，向下是 TrapFrame
     trampoline: Address,
-    stack: Address,
-    heap: Address,
+    stack_point: Address,
+    break_point: Address,
     thread_count: usize,
 }
 
@@ -60,8 +48,8 @@ impl ProcessLayout {
     pub fn new(trampoline: Address, stack: Address, heap: Address) -> Self {
         Self {
             trampoline: trampoline,
-            stack: stack,
-            heap: heap,
+            stack_point: stack,
+            break_point: heap,
             thread_count: 1,
         }
     }
@@ -70,15 +58,14 @@ impl ProcessLayout {
         match MemoryUnit::<PageEntryImpl>::is_address_in(addr) {
             AddressSpace::Invalid => ProcessAddressRegion::Invalid,
             AddressSpace::Kernel => {
-                let count = self.thread_count;
                 let diff = (self.trampoline - addr) / TRAPFRAME_SIZE;
                 ProcessAddressRegion::TrapFrame(diff as Tid)
             }
             AddressSpace::User => {
-                if addr < self.heap {
+                if addr < self.break_point {
                     ProcessAddressRegion::Program
                 } else {
-                    let diff = (self.stack - addr - 1) / THREAD_STACK_SIZE;
+                    let diff = (self.stack_point - addr - 1) / THREAD_STACK_SIZE;
                     let count = self.thread_count;
                     if diff < count {
                         ProcessAddressRegion::Stack(diff as Tid)
@@ -117,12 +104,17 @@ impl ProcessCell {
         layout: ProcessLayout,
     ) -> Self {
         let mut mutable = proc;
-        mutable.memory.map(
-            layout.trampoline >> 12,
-            _user_trap as usize >> 12,
-            1,
-            PageEntryFlag::PrefabUserTrampoline,
-        );
+        mutable
+            .map(
+                layout.trampoline >> PAGE_BITS,
+                _user_trap as usize >> PAGE_BITS,
+                1,
+                MemoryRegionAttribute::Execute
+                    | MemoryRegionAttribute::Write
+                    | MemoryRegionAttribute::Read,
+                true,
+            )
+            .expect("spawn process cell but no frame available for trampoline");
         Self {
             inner: mutable,
             id: pid,
@@ -139,10 +131,10 @@ impl ProcessCell {
 
     pub fn address_of_trapframe<E: PageTableEntry>(trampoline: Address, id: Tid) -> Address {
         // 最高页留给跳板，倒数第二个开始向下分配
-        let start_page_number = (trampoline >> 12) - 1;
+        let start_page_number = (trampoline >> PAGE_BITS) - 1;
         let block = id as usize / TRAPFRAME_HOLD;
         let index = id as usize % TRAPFRAME_HOLD;
-        ((start_page_number - block) << 12) + index * TRAPFRAME_SIZE
+        ((start_page_number - block) << PAGE_BITS) + index * TRAPFRAME_SIZE
     }
 
     pub fn address_of_stack(stack: Address, id: Tid) -> Address {
@@ -204,31 +196,23 @@ impl ProcessCell {
         self.find_gap()
     }
 
-    pub fn ensure_page_created<F: Into<FlagSet<PageEntryFlag>> + Copy>(
+    pub fn ensure_page_created<A: Into<FlagSet<MemoryRegionAttribute>> + Copy>(
         &mut self,
         number: PageNumber,
-        flags: F,
-    ) -> bool {
+        attributes: A,
+        reserved: bool,
+    ) {
         self.state_lock.lock();
-        if !self.inner.memory.is_page_created(number) {
-            self.inner.memory.fill(number, 1, flags);
-            self.state_lock.unlock();
-            true
-        } else {
-            self.state_lock.unlock();
-            false
-        }
+        self.inner.fill(number, 1, attributes, reserved);
+        self.state_lock.unlock();
     }
 
-    pub fn struct_at<T: Sized>(&self, addr: Address) -> &mut T {
-        self.state_lock.lock();
-        let (physical, _) = self
+    pub fn struct_at<'context, T: Sized>(&self, addr: Address) -> &'context mut T {
+        let physical = self
             .inner
-            .memory
             .translate(addr)
             .expect("the page struct at has not been created");
-        self.state_lock.unlock();
-        unsafe { unsafe { &mut *(physical as *mut T) } }
+        unsafe { &mut *(physical as *mut T) }
     }
 }
 
@@ -303,7 +287,7 @@ impl ProcessTable {
         if let Some(last) = &self.last {
             let upgrade = last.upgrade().expect("last exists but pointers to null");
             upgrade.ring_lock.lock();
-            let mut mutable = upgrade.get_mut();
+            let mutable = upgrade.get_mut();
             cell.prev = Some(last.clone());
             let sealed = Arc::new(Shared::new(cell));
             mutable.next = Some(sealed.clone());
@@ -431,7 +415,7 @@ impl UnfairScheduler {
 
     fn find_next(&self) -> Option<(Arc<Shared<ProcessCell>>, Arc<Shared<ThreadCell>>)> {
         let table = unsafe { &PROC_TABLE };
-        let pred: fn(&Arc<Shared<ProcessCell>>, &Arc<Shared<ThreadCell>>) -> bool = |p, t| {
+        let pred: fn(&Arc<Shared<ProcessCell>>, &Arc<Shared<ThreadCell>>) -> bool = |_, t| {
             if t.inner.state == ExecutionState::Ready && t.run_lock.try_lock() {
                 let mutable = t.get_mut();
                 if mutable.check_and_set_if_behind() {
@@ -464,7 +448,7 @@ impl UnfairScheduler {
 
 impl Scheduler for UnfairScheduler {
     fn add(&mut self, proc: Process, parent: Option<Pid>) -> Pid {
-        let mut table = unsafe { &mut PROC_TABLE };
+        let table = unsafe { &mut PROC_TABLE };
         let pid = self.new_pid();
         let parent_id = if let Some(parent) = parent {
             parent
@@ -474,16 +458,20 @@ impl Scheduler for UnfairScheduler {
         let layout = ProcessLayout::new(
             PageEntryImpl::top_address() & !0xFFF,
             PageEntryImpl::space_size(),
-            0,
+            proc.break_point,
         );
         let entry_point = proc.entry_point;
         let trampoline_address = layout.trampoline;
-        let stack_address = ProcessCell::address_of_stack(layout.stack, 0);
+        let stack_address = ProcessCell::address_of_stack(layout.stack_point, 0);
         let trapframe_address =
             ProcessCell::address_of_trapframe::<PageEntryImpl>(layout.trampoline, 0);
         let thread = ThreadCell::new(Thread::new("main"), 0, table.gen(), trapframe_address);
         let mut cell = ProcessCell::new(proc, pid, parent_id, thread, layout);
-        cell.ensure_page_created(trapframe_address >> 12, PageEntryFlag::PrefabUserTrapframe);
+        cell.ensure_page_created(
+            trapframe_address >> PAGE_BITS,
+            MemoryRegionAttribute::Write | MemoryRegionAttribute::Read,
+            true,
+        );
         let trapframe = cell.struct_at::<TrapFrame>(trapframe_address);
         trapframe.init(self.hartid, entry_point, stack_address, trampoline_address);
         let sealed = table.add_process(cell);
@@ -509,7 +497,7 @@ impl Scheduler for UnfairScheduler {
 
     fn schedule(&mut self) {
         // 采用 smooth 的代数算法，由于该算法存在进程间公平问题，干脆取消进程级别的公平比较，直接去保证线程公平，彻底放弃进程公平。
-        if let Some((p, t)) = &self.current {
+        if let Some((_, t)) = &self.current {
             let mutable = t.get_mut();
             // ring unlocked, run locked
             if mutable.check_and_set_if_behind() {
@@ -529,7 +517,7 @@ impl Scheduler for UnfairScheduler {
 
     fn context(&self) -> (Address, usize, Address) {
         if let Some((p, t)) = &self.current {
-            let satp = p.inner.memory.satp();
+            let satp = p.inner.page_table_token();
             (p.layout.trampoline, satp, t.trapframe)
         } else {
             // go IDLE
@@ -537,10 +525,12 @@ impl Scheduler for UnfairScheduler {
         }
     }
 
-    fn with_context<F: Fn(&mut Process, &mut Thread)>(&self, func: F) {
+    fn with_context<F: Fn(&mut Process, &mut Thread, &mut TrapFrame)>(&self, func: F) {
         if let Some((p, t)) = &self.current {
             p.state_lock.lock();
-            func(&mut p.get_mut().inner, &mut t.get_mut().inner);
+            let cell = p.get_mut();
+            let trapframe = cell.struct_at(t.trapframe);
+            func(&mut cell.inner, &mut t.get_mut().inner, trapframe);
             p.state_lock.unlock();
         } else {
             // go IDLE

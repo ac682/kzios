@@ -3,7 +3,7 @@ use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
 
 #[repr(isize)]
-#[derive(FromPrimitive, ToPrimitive)]
+#[derive(Debug, FromPrimitive, ToPrimitive)]
 pub enum SbiError {
     Success = 0,
     Failed = -1,
@@ -20,6 +20,7 @@ pub enum SbiError {
 pub type SbiResult = Result<isize, SbiError>;
 
 #[repr(usize)]
+#[allow(unused)]
 pub enum SbiExtension {
     LegacySetTimer = 0x0,
     LegacyConsolePutchar = 0x01,

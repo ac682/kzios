@@ -3,7 +3,7 @@ use core::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use erhino_shared::sync::{InteriorLock, InteriorLockMut};
+use erhino_shared::sync::InteriorLock;
 
 use crate::hart;
 
@@ -44,7 +44,7 @@ impl InteriorLock for HartLock {
     }
 
     fn try_lock(&self) -> bool {
-        let hartid = hart::hartid() ;
+        let hartid = hart::hartid();
         match self
             .lock
             .compare_exchange(usize::MAX, hartid, Ordering::Acquire, Ordering::Relaxed)

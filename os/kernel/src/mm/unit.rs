@@ -2,21 +2,12 @@ use core::fmt::Display;
 
 use erhino_shared::mem::{Address, PageNumber};
 use flagset::FlagSet;
-use spin::Once;
-
-use crate::{
-    external::{_kernel_start, _memory_end, _memory_start},
-    mm::page::PageTableEntry39,
-    print, println,
-    sync::up,
-    trap::TrapFrame,
-};
 
 use super::{
     frame::{self, FrameTracker},
     page::{
-        PageEntryFlag, PageEntryImpl, PageEntryType, PageEntryWriteError, PageTable,
-        PageTableEntry, PageTableEntry32, PAGE_SIZE,
+        PageEntryFlag, PageEntryType, PageEntryWriteError, PageTable, PageTableEntry, PAGE_BITS,
+        PAGE_SIZE,
     },
 };
 
@@ -74,7 +65,7 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
     }
 
     pub fn satp(&self) -> usize {
-        let mode = 12 + E::DEPTH * E::SIZE;
+        let mode = PAGE_BITS + E::DEPTH * E::SIZE;
         let mode_code = match mode {
             32 => 1,
             39 => 8,
@@ -100,58 +91,12 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         }
     }
 
-    pub fn write<F: Into<FlagSet<PageEntryFlag>> + Copy>(
-        &mut self,
-        addr: Address,
-        data: &[u8],
-        length: usize,
-        flags: F,
-    ) -> Result<(), MemoryUnitError> {
-        let real_length = if length == 0 { data.len() } else { length };
-        let vpn = addr >> 12;
-        self.fill(
-            vpn,
-            ((addr + real_length + PAGE_SIZE - 1) >> 12) - vpn,
-            flags,
-        )
-        .expect("create process memory before write failed");
-        let mut offset = addr & 0xFFF;
-        let mut copied = 0usize;
-        let mut page_count = 0usize;
-        unsafe {
-            while copied < real_length {
-                if let Some((ppn, _)) = self.locate(vpn + page_count) {
-                    let start = (ppn << 12) + offset;
-                    let end = if (real_length - copied) > (0x1000 - offset) {
-                        (ppn + 1) << 12
-                    } else {
-                        start + real_length - copied
-                    };
-                    let ptr = start as *mut u8;
-                    for i in 0..(end - start) {
-                        ptr.add(i).write(if copied + i >= data.len() {
-                            0
-                        } else {
-                            data[copied + i]
-                        });
-                    }
-                    offset = 0;
-                    copied += (end - start) as usize;
-                    page_count += 1;
-                } else {
-                    return Err(MemoryUnitError::EntryNotFound);
-                }
-            }
-        }
-        Ok(())
-    }
-
     pub fn fill<F: Into<FlagSet<PageEntryFlag>> + Copy>(
         &mut self,
         vpn: PageNumber,
         count: usize,
         flags: F,
-    ) -> Result<(), MemoryUnitError> {
+    ) -> Result<usize, MemoryUnitError> {
         Self::map_internal(&mut self.root, vpn, None, count, flags, E::DEPTH - 1)
     }
 
@@ -161,7 +106,7 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         ppn: PageNumber,
         count: usize,
         flags: F,
-    ) -> Result<(), MemoryUnitError> {
+    ) -> Result<usize, MemoryUnitError> {
         Self::map_internal(&mut self.root, vpn, Some(ppn), count, flags, E::DEPTH - 1)
     }
 
@@ -171,8 +116,8 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
 
     pub fn translate(&self, addr: Address) -> Option<(Address, PageAttributes)> {
         let offset = addr & 0xFFF;
-        if let Some((ppn, attributes)) = self.locate(addr >> 12) {
-            Some(((ppn << 12) + offset, attributes))
+        if let Some((ppn, attributes)) = self.locate(addr >> PAGE_BITS) {
+            Some(((ppn << PAGE_BITS) + offset, attributes))
         } else {
             None
         }
@@ -185,7 +130,7 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         count: usize,
         flags: F,
         level: usize,
-    ) -> Result<(), MemoryUnitError> {
+    ) -> Result<usize, MemoryUnitError> {
         // 标记 _:[N]:..
         // _ container 所在位置。递归不考虑外围循环，_ 之前可能也存在级别，但当前前轮递归无法考虑故省略
         // [N] 当前处理级别
@@ -209,6 +154,7 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         if level == 0 {
             // ..:_:[123]/..:_:[223]
             // 不需要关心 count 是否存在溢出当前级别的问题。上级会处理好（且对 count 不溢出做检查和保证）。
+            let mut mapped = 0usize;
             if let Some(number) = ppn {
                 for i in 0..count {
                     Self::into_result(container.ensure_leaf_created(start + i, number + i, flags))?;
@@ -217,12 +163,15 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
                 for i in 0..count {
                     Self::into_result(container.ensure_managed_leaf_created(
                         start + i,
-                        || frame::borrow(1),
+                        || {
+                            mapped += 1;
+                            frame::borrow(1)
+                        },
                         flags,
                     ))?;
                 }
             }
-            Ok(())
+            Ok(mapped)
         } else {
             // ..:start:.. 到 ..:end:.. 可能跨越节也可能不跨越
             if end > start {
@@ -238,6 +187,7 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
                     let mut round = 0usize;
                     let round_space = PageTable::<E>::entry_count() - start;
                     // start + round 段可以成为超级页
+                    let mut mapped = 0usize;
                     while remaining >= size && round < round_space {
                         if container.is_table_created(start + round) {
                             // 已经有一个页表了，那就转发给下一级
@@ -256,18 +206,22 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
                                 size,
                                 flags,
                                 level - 1,
-                            )?;
+                            )
+                            .map(|f| mapped += f)?;
                         } else {
                             if let Some(number) = ppn {
-                                Self::into_result(container.create_leaf(
-                                    start + round,
-                                    number + (round * size),
-                                    flags,
-                                ))?;
+                                Self::into_result(
+                                    container
+                                        .create_leaf(start + round, number + (round * size), flags)
+                                        .map(|_| true),
+                                )?;
                             } else {
                                 Self::into_result(container.ensure_managed_leaf_created(
                                     start + round,
-                                    || frame::borrow(size),
+                                    || {
+                                        mapped += size;
+                                        frame::borrow(size)
+                                    },
                                     flags,
                                 ))?;
                             }
@@ -289,9 +243,10 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
                             flags,
                             level,
                         )
+                        .map(|f| mapped + f)
                     } else {
                         // 没有剩下！
-                        Ok(())
+                        Ok(mapped)
                     }
                 } else {
                     // _:[2]:3:../_:[4]:13:..
@@ -299,28 +254,27 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
                     let size = PageTable::<E>::entry_count();
                     let max_remaining =
                         (size - Self::index_of_vpn(vpn, level - 1)) * size.pow(level as u32 - 1);
-                    match container.ensure_table_created(start, || frame::borrow(1)) {
+                    let remaining = if count > max_remaining {
+                        max_remaining
+                    } else {
+                        count
+                    };
+                    let mut mapped = 0usize;
+                    match container.ensure_table_created(start, || {
+                        mapped += 1;
+                        frame::borrow(1)
+                    }) {
                         Ok(table) => {
-                            Self::map_internal(
-                                table,
-                                vpn,
-                                ppn,
-                                if count > max_remaining {
-                                    max_remaining
-                                } else {
-                                    count
-                                },
-                                flags,
-                                level - 1,
-                            )?;
-                            // vpn + remaining = _:[3]:00
-                            // 虽然末尾都是0但ppn依旧无法对齐，不是超级页，且接下来都不是超级页
-                            let next = if let Some(number) = ppn {
-                                Some(number + max_remaining)
-                            } else {
-                                None
-                            };
+                            Self::map_internal(table, vpn, ppn, remaining, flags, level - 1)
+                                .map(|f| mapped += f)?;
                             if count > max_remaining {
+                                // vpn + remaining = _:[3]:00
+                                // 虽然末尾都是0但ppn依旧无法对齐，不是超级页，且接下来都不是超级页
+                                let next = if let Some(number) = ppn {
+                                    Some(number + max_remaining)
+                                } else {
+                                    None
+                                };
                                 Self::map_internal(
                                     table,
                                     vpn + max_remaining,
@@ -329,9 +283,10 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
                                     flags,
                                     level,
                                 )
+                                .map(|f| mapped + f)
                             } else {
                                 // 没有剩下！
-                                Ok(())
+                                Ok(mapped)
                             }
                         }
                         // 有表会进入 Ok 不会来到 Err。有大页但 ppn 肯定没对齐，没法打散映射，直接报错
@@ -347,28 +302,37 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
             } else {
                 // _:[1]:123:../_:[1]:223:..
                 // 对于不跨越的情况直接转发给 container[1].table() 处理
-                match container.ensure_table_created(start, || frame::borrow(1)) {
-                    Ok(table) => Self::map_internal(table, vpn, ppn, count, flags, level - 1),
-                    Err(PageEntryWriteError::LeafExists(original, f)) => {
+                let mut mapped = 0usize;
+                match container.ensure_table_created(start, || {
+                    mapped += 1;
+                    frame::borrow(1)
+                }) {
+                    Ok(table) => Self::map_internal(table, vpn, ppn, count, flags, level - 1)
+                        .map(|f| mapped + f),
+                    Err(PageEntryWriteError::LeafExists(o, p)) => {
                         // container[start] 是大页
                         let set = flags.into();
-                        if Self::is_flags_extended(&f, &set) {
+                        if Self::is_flags_extended(&p, &set) {
                             if let Some(number) = ppn {
-                                if number == original {
-                                    let table =
-                                        Self::split_page_into_table(container, vpn, ppn, level, f)?;
+                                if number == o {
+                                    let (table, created) =
+                                        Self::split_page_into_table(container, vpn, ppn, level, p)?;
+                                    mapped += created;
                                     Self::map_internal(table, vpn, ppn, count, flags, level - 1)
+                                        .map(|f| mapped + f)
                                 } else {
                                     // 映射要求不匹配，无法覆盖
                                     Err(MemoryUnitError::EntryOverwrite)
                                 }
                             } else {
-                                let table =
-                                    Self::split_page_into_table(container, vpn, ppn, level, f)?;
+                                let (table, created) =
+                                    Self::split_page_into_table(container, vpn, ppn, level, p)?;
+                                mapped += created;
                                 Self::map_internal(table, vpn, ppn, count, flags, level - 1)
+                                    .map(|f| mapped + f)
                             }
                         } else {
-                            Ok(())
+                            Ok(mapped)
                         }
                     }
                     Err(PageEntryWriteError::BranchExists) => Err(MemoryUnitError::EntryOverwrite),
@@ -406,25 +370,36 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         ppn: Option<PageNumber>,
         level: usize,
         original: F,
-    ) -> Result<&mut PageTable<E>, MemoryUnitError> {
+    ) -> Result<(&mut PageTable<E>, usize), MemoryUnitError> {
         let index = Self::index_of_vpn(vpn, level);
+        let mut mapped = 0usize;
         container.free_entry(index);
-        if let Ok(table) = container.ensure_table_created(index, || frame::borrow(1)) {
+        if let Ok(table) = container.ensure_table_created(index, || {
+            mapped += 1;
+            frame::borrow(1)
+        }) {
             let small_size = PageTable::<E>::entry_count().pow((level - 1) as u32);
             if let Some(number) = ppn {
                 for i in 0..512 {
-                    Self::into_result(table.create_leaf(i, number + small_size * i, original))?;
+                    Self::into_result(
+                        table
+                            .create_leaf(i, number + small_size * i, original)
+                            .map(|_| true),
+                    )?;
                 }
             } else {
                 for i in 0..512 {
                     Self::into_result(table.ensure_managed_leaf_created(
                         i,
-                        || frame::borrow(small_size),
+                        || {
+                            mapped += small_size;
+                            frame::borrow(small_size)
+                        },
                         original,
                     ))?;
                 }
             }
-            Ok(table)
+            Ok((table, mapped))
         } else {
             Err(MemoryUnitError::RanOutOfFrames)
         }
@@ -470,16 +445,15 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         }
     }
 
-    fn into_result(input: Result<(), PageEntryWriteError>) -> Result<(), MemoryUnitError> {
-        if let Err(err) = input {
-            match err {
+    fn into_result(input: Result<bool, PageEntryWriteError>) -> Result<bool, MemoryUnitError> {
+        match input {
+            Err(err) => match err {
                 PageEntryWriteError::BranchExists | PageEntryWriteError::LeafExists(_, _) => {
                     Err(MemoryUnitError::EntryOverwrite)
                 }
                 PageEntryWriteError::TrackerUnavailable => Err(MemoryUnitError::RanOutOfFrames),
-            }
-        } else {
-            Ok(())
+            },
+            Ok(i) => Ok(i),
         }
     }
 }
@@ -491,10 +465,10 @@ impl<E: PageTableEntry + Sized + 'static> Display for MemoryUnit<E> {
             "Memory Mapping at {:#x}\n     Visual    ->    Physical   (  Length  )=0bDAGUXWRV",
             self.where_the_frame_tracker_of_root_for_recycling_put
                 .start()
-                << 12
+                << PAGE_BITS
         )?;
         let highest = 1 << (E::SIZE * E::DEPTH - 1);
-        let upper_bits = (E::top_address() >> 12) - (highest - 1);
+        let upper_bits = (E::top_address() >> PAGE_BITS) - (highest - 1);
         let vpn_fmt: fn(Address, usize, usize) -> Address = |x, h, u| {
             if x & h != 0 {
                 u | x
@@ -513,7 +487,7 @@ impl<E: PageTableEntry + Sized + 'static> Display for MemoryUnit<E> {
                 aggregated += count;
                 dirty = true;
             } else {
-                if (dirty) {
+                if dirty {
                     writeln!(
                         f,
                         "{:#015x}->{:#015x}({:#010x})={:#010b}",
@@ -522,7 +496,6 @@ impl<E: PageTableEntry + Sized + 'static> Display for MemoryUnit<E> {
                         aggregated,
                         bits
                     )?;
-                    dirty = false;
                 }
                 start_v = vpn;
                 start_p = ppn;

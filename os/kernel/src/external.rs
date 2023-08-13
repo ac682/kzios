@@ -1,7 +1,4 @@
 use erhino_shared::mem::Address;
-use riscv::register::scause::Scause;
-
-use crate::trap::TrapFrame;
 
 extern "C" {
     pub fn _hart_num();
@@ -13,8 +10,7 @@ extern "C" {
     pub fn _stack_start();
     pub fn _kernel_end();
     pub fn _memory_end();
-    
-    
+
     pub fn _kernel_trap();
     pub fn _user_trap(cause: usize, val: usize);
     pub fn _park() -> !;

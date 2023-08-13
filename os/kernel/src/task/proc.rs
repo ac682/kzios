@@ -1,23 +1,21 @@
-use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
-
-use alloc::{borrow::ToOwned, string::String};
+use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use elf_rs::{Elf, ElfFile, ElfMachine, ElfType, ProgramHeaderFlags, ProgramType};
 use erhino_shared::{
-    mem::Address,
-    proc::{ExecutionState, ExitCode, Pid, ProcessPermission, Tid},
+    mem::{Address, MemoryRegionAttribute, PageNumber},
+    proc::ProcessPermission,
 };
 use flagset::FlagSet;
 
 use crate::{
     mm::{
-        page::{PageEntryFlag, PageEntryImpl, PageTableEntry, PageTableEntry39},
-        unit::MemoryUnit,
+        page::{PageEntryFlag, PageEntryImpl, PAGE_BITS, PAGE_SIZE},
+        unit::{MemoryUnit, MemoryUnitError},
+        usage::MemoryUsage,
     },
     println,
 };
 
-use super::thread::Thread;
-
+#[allow(unused)]
 #[derive(Debug)]
 pub enum ProcessSpawnError {
     BrokenBinary,
@@ -25,10 +23,31 @@ pub enum ProcessSpawnError {
     InvalidPermissions,
 }
 
+#[derive(Debug)]
+pub enum ProcessMemoryError {
+    Unknown,
+    ConflictingMapping,
+    MisalignedAddress,
+    OutOfMemory,
+    InaccessibleRegion,
+}
+
+impl From<MemoryUnitError> for ProcessMemoryError {
+    fn from(value: MemoryUnitError) -> Self {
+        match value {
+            MemoryUnitError::EntryNotFound => Self::Unknown,
+            MemoryUnitError::EntryOverwrite => Self::ConflictingMapping,
+            MemoryUnitError::RanOutOfFrames => Self::OutOfMemory,
+        }
+    }
+}
+
 pub struct Process {
     pub name: String,
-    pub memory: MemoryUnit<PageEntryImpl>,
+    memory: MemoryUnit<PageEntryImpl>,
+    pub usage: MemoryUsage,
     pub entry_point: Address,
+    pub break_point: Address,
     pub permissions: FlagSet<ProcessPermission>,
 }
 
@@ -39,47 +58,211 @@ impl Process {
                 name: name.to_owned(),
                 permissions: ProcessPermission::All.into(),
                 entry_point: elf.entry_point() as Address,
+                break_point: 0,
                 memory: MemoryUnit::new().unwrap(),
-                // layout: MemoryLayout::new(top),
+                usage: MemoryUsage::new(),
             };
             let header = elf.elf_header();
-            // TODO: validate RV64 from flags parameter
             if header.machine() != ElfMachine::RISC_V || header.elftype() != ElfType::ET_EXEC {
                 return Err(ProcessSpawnError::WrongTarget);
             }
+            let mut max_addr = 0usize;
+            let mut byte_used = 0usize;
+            let mut page_used = 0usize;
             for ph in elf.program_header_iter() {
                 if ph.ph_type() == ProgramType::LOAD {
+                    let addr = ph.vaddr() as usize;
                     if let Some(content) = ph.content() {
+                        let length = ph.memsz() as usize;
+                        let vpn = addr >> PAGE_BITS;
+                        let attr = flags_to_attrs(ph.flags());
                         process
-                            .memory
-                            .write(
-                                ph.vaddr() as Address,
-                                content,
-                                ph.memsz() as usize,
-                                flags_to_permission(ph.flags()),
+                            .fill(
+                                vpn,
+                                ((addr + length + PAGE_SIZE - 1) >> PAGE_BITS) - vpn,
+                                attr,
+                                false,
                             )
-                            .unwrap();
+                            .map(|w| page_used += w)
+                            .expect("create program segment space failed");
+                        process
+                            .write(addr as Address, content, length)
+                            .map(|w| byte_used += w)
+                            .expect("write program segment to its process space failed");
+                    }
+                    if addr > max_addr {
+                        max_addr = addr;
                     }
                 }
             }
+            let brk = (max_addr as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+            process.usage.program = byte_used as usize;
+            process.usage.page = page_used;
+            process.break_point = brk;
             Ok(process)
         } else {
             Err(ProcessSpawnError::BrokenBinary)
         }
     }
+
+    pub fn fill<A: Into<FlagSet<MemoryRegionAttribute>>>(
+        &mut self,
+        vpn: PageNumber,
+        count: usize,
+        attributes: A,
+        reserved: bool,
+    ) -> Result<usize, ProcessMemoryError> {
+        let flags = attrs_to_flags(attributes, reserved);
+        self.memory
+            .fill(vpn, count, flags)
+            .map(|p| {
+                self.usage.page += p;
+                p
+            })
+            .map_err(|e| ProcessMemoryError::from(e))
+    }
+
+    pub fn map<A: Into<FlagSet<MemoryRegionAttribute>>>(
+        &mut self,
+        vpn: PageNumber,
+        ppn: PageNumber,
+        count: usize,
+        attributes: A,
+        reserved: bool,
+    ) -> Result<usize, ProcessMemoryError> {
+        let flags = attrs_to_flags(attributes, reserved);
+        self.memory
+            .map(vpn, ppn, count, flags)
+            .map(|p| {
+                self.usage.page += p;
+                p
+            })
+            .map_err(|e| ProcessMemoryError::from(e))
+    }
+
+    pub fn extend(&mut self, size: usize) -> Result<usize, ProcessMemoryError> {
+        if !size.is_power_of_two() {
+            return Err(ProcessMemoryError::MisalignedAddress);
+        }
+        let start = self.break_point + self.usage.heap;
+        let count = (size + PAGE_SIZE - 1) >> PAGE_BITS;
+        let flags = attrs_to_flags(
+            MemoryRegionAttribute::Write | MemoryRegionAttribute::Read,
+            false,
+        );
+        match self.memory.fill(start >> PAGE_BITS, count, flags) {
+            Ok(pages) => {
+                self.usage.page += pages;
+                self.usage.heap += size;
+                Ok(start + size)
+            }
+            Err(error) => Err(ProcessMemoryError::from(error)),
+        }
+    }
+
+    pub fn write(
+        &mut self,
+        address: Address,
+        data: &[u8],
+        length: usize,
+    ) -> Result<usize, ProcessMemoryError> {
+        let real_length = if length == 0 { data.len() } else { length };
+        let mut written = 0usize;
+        while written < real_length {
+            if let Some(base) = self.translate(address + written) {
+                let offset = base & (PAGE_SIZE - 1);
+                let start = base as *mut u8;
+                let space = PAGE_SIZE - offset;
+                let count = if real_length - written > space {
+                    space
+                } else {
+                    real_length - written
+                };
+                for i in 0..count {
+                    unsafe {
+                        start.add(i).write(if written + i >= data.len() {
+                            0
+                        } else {
+                            data[written + i]
+                        });
+                    }
+                }
+                written += count;
+            } else {
+                return Err(ProcessMemoryError::InaccessibleRegion);
+            }
+        }
+        Ok(written)
+    }
+
+    pub fn read(&self, address: Address, length: usize) -> Result<Vec<u8>, ProcessMemoryError> {
+        let mut container = Vec::<u8>::with_capacity(length);
+        let mut read = 0usize;
+        while read < length {
+            if let Some(base) = self.translate(address + read) {
+                let offset = base & (PAGE_SIZE - 1);
+                let start = (base + offset) as *const u8;
+                let space = PAGE_SIZE - offset;
+                let count = if length - read > space {
+                    space
+                } else {
+                    length - read
+                };
+                for i in 0..count {
+                    container.push(unsafe { start.add(i).read() });
+                }
+                read += count;
+            } else {
+                return Err(ProcessMemoryError::InaccessibleRegion);
+            }
+        }
+        Ok(container)
+    }
+
+    pub fn translate(&self, address: Address) -> Option<Address> {
+        self.memory.translate(address).map(|(a, _)| a)
+    }
+
+    pub fn page_table_token(&self) -> usize {
+        self.memory.satp()
+    }
+
+    pub fn usage(&self) -> &MemoryUsage {
+        &self.usage
+    }
 }
 
-fn flags_to_permission(flags: ProgramHeaderFlags) -> impl Into<FlagSet<PageEntryFlag>> + Copy {
-    let mut perm = PageEntryFlag::Valid | PageEntryFlag::User;
-    let bits = flags.bits();
-    if bits & 0b1 == 1 {
-        perm |= PageEntryFlag::Executable;
+fn attrs_to_flags<A: Into<FlagSet<MemoryRegionAttribute>>>(
+    attributes: A,
+    reserved: bool,
+) -> FlagSet<PageEntryFlag> {
+    let mut flags: FlagSet<PageEntryFlag> = PageEntryFlag::Valid.into();
+    let attr: FlagSet<MemoryRegionAttribute> = attributes.into();
+    if attr.contains(MemoryRegionAttribute::Read) {
+        flags |= PageEntryFlag::Readable;
     }
-    if bits & 0b10 == 0b10 {
-        perm |= PageEntryFlag::Writeable;
+    if attr.contains(MemoryRegionAttribute::Write) {
+        flags |= PageEntryFlag::Writeable;
     }
-    if bits & 0b100 == 0b100 {
-        perm |= PageEntryFlag::Readable;
+    if attr.contains(MemoryRegionAttribute::Execute) {
+        flags |= PageEntryFlag::Executable;
     }
-    perm
+    if !reserved {
+        flags |= PageEntryFlag::User;
+    }
+    flags
+}
+
+fn flags_to_attrs(flags: ProgramHeaderFlags) -> FlagSet<MemoryRegionAttribute> {
+    let mut attr: FlagSet<MemoryRegionAttribute> = MemoryRegionAttribute::None.into();
+    if flags.contains(ProgramHeaderFlags::EXECUTE) {
+        attr |= MemoryRegionAttribute::Execute;
+    }
+    if flags.contains(ProgramHeaderFlags::WRITE) {
+        attr |= MemoryRegionAttribute::Write;
+    }
+    if flags.contains(ProgramHeaderFlags::READ) {
+        attr |= MemoryRegionAttribute::Read;
+    }
+    attr
 }

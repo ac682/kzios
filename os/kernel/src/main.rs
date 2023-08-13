@@ -1,13 +1,11 @@
 #![no_std]
 #![feature(lang_items, alloc_error_handler, panic_info_message)]
-#![allow(unused)]
 
 use core::arch::global_asm;
 
-use external::{_kernel_end, _stack_size};
 use tar_no_std::TarArchiveRef;
 
-use crate::{mm::unit, task::proc::Process, hart::add_process};
+use crate::{hart::add_process, task::proc::Process};
 
 extern crate alloc;
 
@@ -41,4 +39,5 @@ fn main() {
         let process = Process::from_elf(system.data(), system.filename().as_str()).unwrap();
         add_process(process);
     }
+    println!("\x1b[0;32m=LINK^START=\x1b[0m");
 }

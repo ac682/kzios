@@ -297,10 +297,6 @@ _user_trap:
 1:
     # save pc
     csrr    t6, sepc
-    srli    t5, t6, 63
-    beqz    t5, 2f
-    addi    t6, t6, 4
-2:
     sd      t6, 512(a0)
     # load tp and sp
     ld      tp, 520(a0)
@@ -339,8 +335,8 @@ _restore:
     srli    t0, t0, 13
     andi    t0, t0, 0b11
     li      t1, 3
-    bne     t0, t1, 4f
-3:
+    bne     t0, t1, 3f
+2:
     fld      f0, 256(a1)
     fld      f1, 264(a1)
     fld      f2, 272(a1)
@@ -380,7 +376,7 @@ _restore:
     not     t1, t1
     and     t0, t0, t1
     csrw    sstatus, t0
-4:
+3:
     # restore generic registers
     mv      t6, a1
     ld      x0, 0(t6)
@@ -416,7 +412,7 @@ _restore:
     ld      x30, 240(t6)
 _enter_user_breakpoint:
     sret
-    _handle_user_trap: .dword handle_user_trap
+_handle_user_trap: .dword handle_user_trap
 
 .section .text
 .global _switch

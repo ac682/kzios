@@ -1,20 +1,21 @@
 use core::arch::asm;
 
-use alloc::vec::Vec;
-use erhino_shared::{mem::Address, proc::Tid};
-use riscv::register::{scause::Scause, sip, sscratch, sstatus, stvec, utvec::TrapMode};
+use alloc::{string::String, vec::Vec};
+use erhino_shared::{
+    call::{SystemCall, SystemCallError},
+    mem::{Address, MemoryRegionAttribute},
+};
 
 use crate::{
     external::{_hart_num, _switch},
-    mm::{page::PageEntryFlag, MemoryOperation, ProcessAddressRegion},
+    mm::{page::PAGE_BITS, ProcessAddressRegion},
     println, sbi,
-    sync::hart,
     task::{
-        proc::Process,
+        proc::{Process, ProcessMemoryError},
         sched::{unfair::UnfairScheduler, Scheduler},
     },
     timer::{hart::HartTimer, Timer},
-    trap::{TrapCause, TrapFrame},
+    trap::TrapCause,
 };
 
 type TimerImpl = HartTimer;
@@ -68,31 +69,91 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
 
     pub fn trap(&mut self, cause: TrapCause) {
         match cause {
-            TrapCause::Breakpoint => {
-                println!("#{} Pid={} requested a breakpoint", self.id, "unimp");
-            }
             TrapCause::TimerInterrupt => {
                 self.scheduler.schedule();
                 self.timer.schedule_next(self.scheduler.next_timeslice());
             }
-            TrapCause::PageFault(address, operation) => {
+            TrapCause::Breakpoint => {
+                self.scheduler.with_context(|p, t, f| {
+                    f.move_next_instruction();
+                    println!(
+                        "#{} Pn={} Tn={} requested a breakpoint",
+                        self.id, p.name, t.name
+                    );
+                });
+            }
+            TrapCause::PageFault(address, _) => {
                 let region = self.scheduler.is_address_in(address);
                 match region {
                     ProcessAddressRegion::Stack(_) => {
-                        self.scheduler.with_context(|p, _| {
-                            p.memory
-                                .fill(address >> 12, 1, PageEntryFlag::PrefabUserStack);
+                        self.scheduler.with_context(|p, _, _| {
+                            p.fill(
+                                address >> PAGE_BITS,
+                                1,
+                                MemoryRegionAttribute::Write | MemoryRegionAttribute::Read,
+                                false,
+                            )
+                            .expect("fill stack failed, to be killed");
                         });
                     }
                     ProcessAddressRegion::TrapFrame(_) => {
-                        self.scheduler.with_context(|p, _| {
-                            p.memory
-                                .fill(address >> 12, 1, PageEntryFlag::PrefabUserTrapframe);
+                        self.scheduler.with_context(|p, _, _| {
+                            p.fill(
+                                address >> PAGE_BITS,
+                                1,
+                                MemoryRegionAttribute::Write | MemoryRegionAttribute::Read,
+                                true,
+                            )
+                            .expect("fill trapframe failed, to be killed");
                         });
                     }
                     _ => todo!("unexpected memory page fault at: {:#x}", address),
                 }
             }
+            TrapCause::EnvironmentCall => self.scheduler.with_context(|p, t, f| {
+                f.move_next_instruction();
+                let mut syscall = f.extract_syscall().expect("invalid sys call triggered");
+                match syscall.call {
+                    SystemCall::Debug => {
+                        let address = syscall.arg0;
+                        let length = syscall.arg1;
+                        match p.read(address, length) {
+                            Ok(buffer) => {
+                                if let Ok(str) = String::from_utf8(buffer) {
+                                    println!("DBG {}/{}: {}", p.name, t.name, str);
+                                    syscall.write_response(length)
+                                } else {
+                                    syscall.write_error(SystemCallError::IllegalArgument)
+                                }
+                            }
+                            Err(e) => syscall.write_error(match e {
+                                ProcessMemoryError::InaccessibleRegion => {
+                                    SystemCallError::MemoryNotAccessible
+                                }
+                                _ => SystemCallError::Unknown,
+                            }),
+                        }
+                    }
+                    SystemCall::Extend => {
+                        let bytes = syscall.arg0;
+                        match p.extend(bytes) {
+                            Ok(position) => {
+                                syscall.write_response(position);
+                            }
+                            Err(err) => {
+                                syscall.write_error(match err {
+                                    ProcessMemoryError::OutOfMemory => SystemCallError::OutOfMemory,
+                                    ProcessMemoryError::MisalignedAddress => {
+                                        SystemCallError::MisalignedAddress
+                                    }
+                                    _ => SystemCallError::Unknown,
+                                });
+                            }
+                        }
+                    }
+                    _ => unimplemented!("unimplemented syscall: {:?}", syscall.call),
+                }
+            }),
             _ => {
                 todo!("unimplemented trap cause {:?}", cause)
             }
@@ -105,14 +166,11 @@ pub fn init(freq: &[usize]) {
         for i in 0..(_hart_num as usize) {
             HARTS.push(Hart::new(
                 i,
-                TimerImpl::new(
-                    i,
-                    if i < freq.len() {
-                        freq[i]
-                    } else {
-                        freq[freq.len() - 1]
-                    },
-                ),
+                TimerImpl::new(if i < freq.len() {
+                    freq[i]
+                } else {
+                    freq[freq.len() - 1]
+                }),
                 SchedulerImpl::new(i),
             ));
         }
@@ -146,7 +204,7 @@ pub fn get_hart(id: usize) -> &'static mut Hart<TimerImpl, SchedulerImpl> {
 }
 
 pub fn hartid() -> usize {
-    let mut tp: usize = 0;
+    let mut tp: usize;
     unsafe {
         asm!("mv {tmp}, tp", tmp = out(reg) tp);
     }

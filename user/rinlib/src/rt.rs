@@ -1,20 +1,16 @@
-use core::{alloc::Layout, panic::PanicInfo};
+use core::{alloc::Layout, hint::spin_loop, panic::PanicInfo};
 
 use buddy_system_allocator::{Heap, LockedHeapWithRescue};
 use erhino_shared::proc::Termination;
 
-use crate::dbg;
-
-#[global_allocator]
-static mut HEAP_ALLOCATOR: LockedHeapWithRescue<HEAP_ORDER> =
-    LockedHeapWithRescue::new(heap_rescue);
+use crate::{call::sys_extend, dbg};
 
 const INITIAL_HEAP_SIZE: usize = 1 * 0x1000;
 const HEAP_ORDER: usize = 64;
 
-extern "C" {
-    fn _segment_break();
-}
+#[global_allocator]
+static mut HEAP_ALLOCATOR: LockedHeapWithRescue<HEAP_ORDER> =
+    LockedHeapWithRescue::new(heap_rescue);
 
 #[lang = "start"]
 fn lang_start<T: Termination + 'static>(
@@ -23,15 +19,17 @@ fn lang_start<T: Termination + 'static>(
     _: *const *const u8,
     _: u8,
 ) -> isize {
-    let single = 0x1000;
     unsafe {
-        //sys_extend(_segment_break as usize, single, 0b011);
-        HEAP_ALLOCATOR.lock().init(_segment_break as usize, single);
+        let offset = sys_extend(INITIAL_HEAP_SIZE).expect("the first extend call failed");
+        HEAP_ALLOCATOR
+            .lock()
+            .init(offset - INITIAL_HEAP_SIZE, INITIAL_HEAP_SIZE);
     }
     let _code = main().to_exit_code();
     unsafe {
         loop {
             // sys_exit(code);
+            spin_loop()
         }
     }
 }
@@ -54,16 +52,20 @@ fn handle_panic(info: &PanicInfo) -> ! {
 
 fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
     dbg!("rescue: ");
-    let single = 0x1000;
-    let mut size = single;
+    let owned = heap.stats_total_bytes();
+    let mut size = owned;
     while layout.size() > size {
         size *= 2;
     }
-    let last = heap.stats_total_bytes() + _segment_break as usize;
-    dbg!("{:#x}..{:#x}", last, last + size);
     unsafe {
-        // sys_extend(last, size, 0b011);
-        heap.add_to_heap(last, last + size);
+        let call = sys_extend(size);
+        match call {
+            Ok(position) => heap.add_to_heap(position - size, position),
+            Err(err) => panic!(
+                "cannot request more memory region by extend sys call{:?}",
+                err
+            ),
+        }
     }
 }
 

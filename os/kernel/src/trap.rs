@@ -1,16 +1,39 @@
 use core::fmt::Display;
 
-use erhino_shared::{call::SystemCall, mem::Address};
+use erhino_shared::{
+    call::{SystemCall, SystemCallError},
+    mem::{Address, MemoryOperation},
+};
+use num_traits::FromPrimitive;
 use riscv::register::scause::{Exception, Interrupt, Scause, Trap};
 
 use crate::{
-    external::{_kernel_end, _stack_size, _kernel_trap},
+    external::{_kernel_end, _kernel_trap, _stack_size},
     hart,
-    mm::{MemoryOperation, KERNEL_SATP},
-    println,
+    mm::KERNEL_SATP,
 };
 
+pub struct SystemCallRequest<'context> {
+    trapframe: &'context mut TrapFrame,
+    pub call: SystemCall,
+    pub arg0: usize,
+    pub arg1: usize,
+    pub arg2: usize,
+}
+
+impl<'context> SystemCallRequest<'context> {
+    pub fn write_error(&mut self, error: SystemCallError) {
+        self.trapframe.x[10] = error as u64;
+    }
+
+    pub fn write_response(&mut self, ret: usize) {
+        self.trapframe.x[10] = 0;
+        self.trapframe.x[11] = ret as u64;
+    }
+}
+
 #[derive(Debug)]
+#[allow(unused)]
 pub enum TrapCause {
     Unknown,
     SoftwareInterrupt,
@@ -61,6 +84,28 @@ impl TrapFrame {
         self.kernel_trap = _kernel_trap as u64;
         self.user_trap = user_trap as u64;
     }
+
+    pub fn extract_syscall(&mut self) -> Option<SystemCallRequest> {
+        let which = self.x[17] as usize;
+        if let Some(call) = SystemCall::from_usize(which) {
+            let arg0 = self.x[10] as usize;
+            let arg1 = self.x[11] as usize;
+            let arg2 = self.x[12] as usize;
+            Some(SystemCallRequest {
+                trapframe: self,
+                call: call,
+                arg0,
+                arg1,
+                arg2,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn move_next_instruction(&mut self) {
+        self.pc += 4;
+    }
 }
 
 impl Display for TrapFrame {
@@ -77,17 +122,8 @@ impl Display for TrapFrame {
     }
 }
 
-pub struct TrapContext {
-    // process reference
-    // thread reference
-}
-
-pub struct EnvironmentCallBody {
-    pub function: SystemCall,
-}
-
 #[no_mangle]
-unsafe fn handle_kernel_trap(cause: Scause, val: usize) {
+unsafe fn handle_kernel_trap(cause: Scause, _val: usize) {
     let hart = hart::this_hart();
     match cause.cause() {
         Trap::Interrupt(Interrupt::SupervisorSoft) => {
@@ -106,23 +142,21 @@ unsafe fn handle_user_trap(cause: Scause, val: usize) -> (usize, Address) {
         Trap::Interrupt(Interrupt::UserTimer) => hart.trap(TrapCause::TimerInterrupt),
         Trap::Interrupt(Interrupt::SupervisorTimer) => todo!("nested interrupt: timer"),
         Trap::Interrupt(Interrupt::UserSoft) => todo!("impossible user soft interrupt"),
-        Trap::Exception(exception) => {
-            match exception {
-                Exception::Breakpoint => hart.trap(TrapCause::Breakpoint),
-                Exception::UserEnvCall => hart.trap(TrapCause::EnvironmentCall),
-                Exception::LoadPageFault => {
-                    hart.trap(TrapCause::PageFault(val as Address, MemoryOperation::Read))
-                }
-                Exception::StorePageFault => {
-                    hart.trap(TrapCause::PageFault(val as Address, MemoryOperation::Write))
-                }
-                Exception::InstructionPageFault => hart.trap(TrapCause::PageFault(
-                    val as Address,
-                    MemoryOperation::Execute,
-                )),
-                _ => todo!("unknown exception: {}", cause.bits()),
+        Trap::Exception(exception) => match exception {
+            Exception::Breakpoint => hart.trap(TrapCause::Breakpoint),
+            Exception::UserEnvCall => hart.trap(TrapCause::EnvironmentCall),
+            Exception::LoadPageFault => {
+                hart.trap(TrapCause::PageFault(val as Address, MemoryOperation::Read))
             }
-        }
+            Exception::StorePageFault => {
+                hart.trap(TrapCause::PageFault(val as Address, MemoryOperation::Write))
+            }
+            Exception::InstructionPageFault => hart.trap(TrapCause::PageFault(
+                val as Address,
+                MemoryOperation::Execute,
+            )),
+            _ => todo!("unknown exception: {}", cause.bits()),
+        },
         _ => {
             unimplemented!("unknown trap from user: {}", cause.bits())
         }
