@@ -1,4 +1,7 @@
-use core::arch::asm;
+use core::{
+    arch::asm,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 use alloc::{string::String, vec::Vec};
 use erhino_shared::{
@@ -8,7 +11,7 @@ use erhino_shared::{
 };
 
 use crate::{
-    external::{_hart_num, _switch},
+    external::{_hart_num, _park, _switch},
     mm::{page::PAGE_BITS, ProcessAddressRegion, KERNEL_SATP},
     println, sbi,
     task::{
@@ -23,9 +26,16 @@ type TimerImpl = HartTimer;
 type SchedulerImpl = UnfairScheduler;
 
 static mut HARTS: Vec<Hart<TimerImpl, SchedulerImpl>> = Vec::new();
+static IDLE_HARTS: AtomicUsize = AtomicUsize::new(0);
+
+pub enum HartMode {
+    Scheduling,
+    Idle,
+}
 
 pub struct Hart<T: Timer, S: Scheduler> {
     id: usize,
+    mode: HartMode,
     timer: T,
     scheduler: S,
 }
@@ -34,6 +44,7 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
     pub const fn new(hartid: usize, timer: T, scheduler: S) -> Self {
         Self {
             id: hartid,
+            mode: HartMode::Idle,
             timer,
             scheduler,
         }
@@ -43,9 +54,13 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
         self.id
     }
 
-    pub fn arranged_context(&self) -> (usize, Address) {
-        let (_, satp, trapframe) = self.scheduler.context();
-        (satp, trapframe)
+    pub fn arranged_context(&mut self) -> (usize, Address) {
+        if let Some((_, satp, trapframe)) = self.scheduler.context() {
+            self.mode = HartMode::Scheduling;
+            (satp, trapframe)
+        } else {
+            self.go_idle()
+        }
     }
 
     pub fn send_ipi(&self) -> bool {
@@ -62,10 +77,22 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
         unsafe { asm!("csrr {o}, sip", "csrw sip, {i}", o = out(reg) sip, i = in(reg) sip & !2) }
     }
 
+    pub fn go_idle(&mut self) -> ! {
+        self.mode = HartMode::Idle;
+        IDLE_HARTS.fetch_or(1 << self.id, Ordering::Relaxed);
+        println!("#{} enter idle", self.id);
+        unsafe { _park() }
+    }
+
     pub fn enter_user(&mut self) -> ! {
         self.scheduler.schedule();
-        let (trampoline, satp, trapframe) = self.scheduler.context();
-        unsafe { _switch(KERNEL_SATP, trampoline, satp, trapframe) }
+        self.timer.schedule_next(self.scheduler.next_timeslice());
+        if let Some((trampoline, satp, trapframe)) = self.scheduler.context() {
+            self.mode = HartMode::Scheduling;
+            unsafe { _switch(KERNEL_SATP, trampoline, satp, trapframe) }
+        } else {
+            self.go_idle()
+        }
     }
 
     pub fn trap(&mut self, cause: TrapCause) {
@@ -84,31 +111,36 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
                 });
             }
             TrapCause::PageFault(address, _) => {
-                let region = self.scheduler.is_address_in(address);
-                match region {
-                    ProcessAddressRegion::Stack(_) => {
-                        self.scheduler.with_context(|p, _, _| {
-                            p.fill(
-                                address >> PAGE_BITS,
-                                1,
-                                MemoryRegionAttribute::Write | MemoryRegionAttribute::Read,
-                                false,
-                            )
-                            .expect("fill stack failed, to be killed");
-                        });
+                if let Some(region) = self.scheduler.is_address_in(address) {
+                    match region {
+                        ProcessAddressRegion::Stack(_) => {
+                            self.scheduler.with_context(|p, _, _| {
+                                p.fill(
+                                    address >> PAGE_BITS,
+                                    1,
+                                    MemoryRegionAttribute::Write | MemoryRegionAttribute::Read,
+                                    false,
+                                )
+                                .expect("fill stack failed, to be killed");
+                            });
+                        }
+                        ProcessAddressRegion::TrapFrame(_) => {
+                            self.scheduler.with_context(|p, _, _| {
+                                p.fill(
+                                    address >> PAGE_BITS,
+                                    1,
+                                    MemoryRegionAttribute::Write | MemoryRegionAttribute::Read,
+                                    true,
+                                )
+                                .expect("fill trapframe failed, to be killed");
+                            });
+                        }
+                        _ => todo!("unexpected memory page fault at: {:#x}", address),
                     }
-                    ProcessAddressRegion::TrapFrame(_) => {
-                        self.scheduler.with_context(|p, _, _| {
-                            p.fill(
-                                address >> PAGE_BITS,
-                                1,
-                                MemoryRegionAttribute::Write | MemoryRegionAttribute::Read,
-                                true,
-                            )
-                            .expect("fill trapframe failed, to be killed");
-                        });
-                    }
-                    _ => todo!("unexpected memory page fault at: {:#x}", address),
+                } else {
+                    unreachable!(
+                        "previous process triggered page fault while it is not in current field"
+                    )
                 }
             }
             TrapCause::EnvironmentCall => self.scheduler.with_context(|p, t, f| {
@@ -121,7 +153,7 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
                         match p.read(address, length) {
                             Ok(buffer) => {
                                 if let Ok(str) = String::from_utf8(buffer) {
-                                    println!("DBG {}/{}: {}", p.name, t.name, str);
+                                    println!("DBG#{} {}/{}: {}", self.id, p.name, t.name, str);
                                     syscall.write_response(length)
                                 } else {
                                     syscall.write_error(SystemCallError::IllegalArgument)
@@ -194,6 +226,11 @@ pub fn send_ipi(hart_mask: usize) -> bool {
     } else {
         false
     }
+}
+
+pub fn awake_idle() -> bool {
+    let map = IDLE_HARTS.load(Ordering::Relaxed);
+    send_ipi(map)
 }
 
 pub fn send_ipi_all() -> bool {

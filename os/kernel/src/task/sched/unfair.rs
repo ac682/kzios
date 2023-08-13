@@ -23,7 +23,7 @@ use crate::{
         proc::{Process, ProcessHealth},
         thread::Thread,
     },
-    trap::TrapFrame,
+    trap::TrapFrame, hart,
 };
 
 use super::Scheduler;
@@ -206,7 +206,7 @@ impl ProcessCell {
         reserved: bool,
     ) {
         self.state_lock.lock();
-        self.inner.fill(number, 1, attributes, reserved);
+        self.inner.fill(number, 1, attributes, reserved).expect("process memory for scheduling create failed");
         self.state_lock.unlock();
     }
 
@@ -484,19 +484,18 @@ impl Scheduler for UnfairScheduler {
         let mutable = sealed.head.get_mut();
         mutable.proc = Arc::downgrade(&sealed);
         sealed.head_lock.unlock();
+        hart::awake_idle();
         pid
     }
 
-    fn is_address_in(&self, addr: Address) -> ProcessAddressRegion {
+    fn is_address_in(&self, addr: Address) -> Option<ProcessAddressRegion> {
         if let Some((p, _)) = &self.current {
             p.state_lock.lock();
             let result = p.layout.is_address_in(addr);
             p.state_lock.unlock();
-            result
+            Some(result)
         } else {
-            unreachable!(
-                "previous process want to see the address region while it is not in current field"
-            )
+            None
         }
     }
 
@@ -520,13 +519,12 @@ impl Scheduler for UnfairScheduler {
         QUANTUM
     }
 
-    fn context(&self) -> (Address, usize, Address) {
+    fn context(&self) -> Option<(Address, usize, Address)> {
         if let Some((p, t)) = &self.current {
             let satp = p.inner.page_table_token();
-            (p.layout.trampoline, satp, t.trapframe)
+            Some((p.layout.trampoline, satp, t.trapframe))
         } else {
-            // go IDLE
-            panic!("hart is not scheduling-prepared yet")
+            None
         }
     }
 
