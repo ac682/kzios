@@ -1,6 +1,5 @@
 use core::{alloc::Layout, hint::spin_loop, panic::PanicInfo};
 
-use alloc::vec::Vec;
 use buddy_system_allocator::{Heap, LockedHeapWithRescue};
 use dtb_parser::{prop::PropertyValue, traits::HasNamedProperty};
 use erhino_shared::proc::Termination;
@@ -12,7 +11,6 @@ use crate::{
         self,
         frame::{self, alloc},
         page::PAGE_SIZE,
-        unit,
     },
     print, println, sbi,
 };

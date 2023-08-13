@@ -24,7 +24,7 @@ KERNEL_BIN := KERNEL_ELF+".bin"
 DTB := TARGET_DIR/"device.dtb"
 
 # qemu
-QEMU_CORES := "1"
+QEMU_CORES := "2"
 QEMU_MEMORY := "128m"
 QEMU_LAUNCH := "qemu-system-riscv64 -smp cores="+QEMU_CORES+" -M "+QEMU_MEMORY+" -machine virt -nographic -bios \""+BOOTLOADER+"\" -kernel \""+KERNEL_ELF+"\" -dtb \""+DTB+"\""
 

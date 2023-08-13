@@ -1,9 +1,9 @@
-use core::{alloc::Layout, hint::spin_loop, panic::PanicInfo};
+use core::{alloc::Layout, panic::PanicInfo};
 
 use buddy_system_allocator::{Heap, LockedHeapWithRescue};
 use erhino_shared::proc::Termination;
 
-use crate::{call::sys_extend, dbg};
+use crate::{call::{sys_extend, sys_exit}, dbg};
 
 const INITIAL_HEAP_SIZE: usize = 1 * 0x1000;
 const HEAP_ORDER: usize = 64;
@@ -25,11 +25,10 @@ fn lang_start<T: Termination + 'static>(
             .lock()
             .init(offset - INITIAL_HEAP_SIZE, INITIAL_HEAP_SIZE);
     }
-    let _code = main().to_exit_code();
+    let code = main().to_exit_code();
     unsafe {
         loop {
-            // sys_exit(code);
-            spin_loop()
+            sys_exit(code).expect("this can't be wrong");
         }
     }
 }

@@ -1,16 +1,21 @@
 use core::fmt::Display;
 
+use alloc::{borrow::ToOwned, format};
 use erhino_shared::{
     call::{SystemCall, SystemCallError},
     mem::{Address, MemoryOperation},
 };
 use num_traits::FromPrimitive;
-use riscv::register::scause::{Exception, Interrupt, Scause, Trap};
+use riscv::register::{
+    satp,
+    scause::{self, Exception, Interrupt, Scause, Trap},
+    sepc, stval,
+};
 
 use crate::{
     external::{_kernel_end, _kernel_trap, _stack_size},
     hart,
-    mm::KERNEL_SATP,
+    mm::{KERNEL_SATP, KERNEL_UNIT},
 };
 
 pub struct SystemCallRequest<'context> {
@@ -122,6 +127,21 @@ impl Display for TrapFrame {
     }
 }
 
+fn kernel_dump() -> ! {
+    let cause = scause::read().bits();
+    let val = stval::read();
+    let pc = sepc::read();
+    let satp = satp::read().bits();
+    let mut memory = "unavailable".to_owned();
+    if let Some(unit) = unsafe { KERNEL_UNIT.get() } {
+        memory = format!("{}", unit);
+    }
+    panic!(
+        "trapped!!!\ncause={},val={:#x}\nsatp={:#x},pc={:#x}\n{}",
+        cause, val, satp, pc, memory
+    )
+}
+
 #[no_mangle]
 unsafe fn handle_kernel_trap(cause: Scause, _val: usize) {
     let hart = hart::this_hart();
@@ -131,7 +151,7 @@ unsafe fn handle_kernel_trap(cause: Scause, _val: usize) {
             hart.clear_ipi();
             hart.enter_user();
         }
-        _ => unimplemented!("Unknown trap from kernel: {}", cause.bits()),
+        _ => kernel_dump(),
     }
 }
 

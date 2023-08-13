@@ -1,8 +1,9 @@
-use core::{arch::asm, ffi::CStr};
+use core::arch::asm;
 
 use erhino_shared::{
     call::{SystemCall, SystemCallError},
     mem::Address,
+    proc::ExitCode,
 };
 use num_traits::FromPrimitive;
 
@@ -21,14 +22,13 @@ unsafe fn raw_call(id: usize, arg0: usize, arg1: usize, arg2: usize) -> (usize, 
     (error_code, result)
 }
 
-// returns actual byte count sent to debug stream
-pub unsafe fn sys_debug(msg: &str) -> Result<usize, SystemCallError> {
-    let (error, ret) = raw_call(
-        SystemCall::Debug as usize,
-        msg.as_ptr() as usize,
-        msg.len(),
-        0,
-    );
+unsafe fn sys_call(
+    call: SystemCall,
+    arg0: usize,
+    arg1: usize,
+    arg2: usize,
+) -> Result<usize, SystemCallError> {
+    let (error, ret) = raw_call(call as usize, arg0, arg1, arg2);
     if error == 0 {
         Ok(ret)
     } else {
@@ -36,12 +36,17 @@ pub unsafe fn sys_debug(msg: &str) -> Result<usize, SystemCallError> {
     }
 }
 
+// returns actual byte count sent to debug stream
+pub unsafe fn sys_debug(msg: &str) -> Result<usize, SystemCallError> {
+    sys_call(SystemCall::Debug, msg.as_ptr() as usize, msg.len(), 0)
+}
+
 // returns the new heap top address, or the current when size is 0
 pub unsafe fn sys_extend(size: usize) -> Result<Address, SystemCallError> {
-    let (error, ret) = raw_call(SystemCall::Extend as usize, size, 0, 0);
-    if error == 0 {
-        Ok(ret as Address)
-    } else {
-        Err(to_error(error))
-    }
+    sys_call(SystemCall::Extend, size, 0, 0)
+}
+
+// returns nothing
+pub unsafe fn sys_exit(code: ExitCode) -> Result<(), SystemCallError> {
+    sys_call(SystemCall::Exit, code as usize, 0, 0).map(|_| ())
 }

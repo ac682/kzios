@@ -7,7 +7,6 @@ use super::{
     frame::{self, FrameTracker},
     page::{
         PageEntryFlag, PageEntryType, PageEntryWriteError, PageTable, PageTableEntry, PAGE_BITS,
-        PAGE_SIZE,
     },
 };
 

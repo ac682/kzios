@@ -2,18 +2,15 @@ use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use elf_rs::{Elf, ElfFile, ElfMachine, ElfType, ProgramHeaderFlags, ProgramType};
 use erhino_shared::{
     mem::{Address, MemoryRegionAttribute, PageNumber},
-    proc::ProcessPermission,
+    proc::{ProcessPermission, ExitCode},
 };
 use flagset::FlagSet;
 
-use crate::{
-    mm::{
+use crate::mm::{
         page::{PageEntryFlag, PageEntryImpl, PAGE_BITS, PAGE_SIZE},
         unit::{MemoryUnit, MemoryUnitError},
         usage::MemoryUsage,
-    },
-    println,
-};
+    };
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -42,6 +39,12 @@ impl From<MemoryUnitError> for ProcessMemoryError {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum ProcessHealth{
+    Healthy,
+    Dead(ExitCode)
+}
+
 pub struct Process {
     pub name: String,
     memory: MemoryUnit<PageEntryImpl>,
@@ -49,6 +52,7 @@ pub struct Process {
     pub entry_point: Address,
     pub break_point: Address,
     pub permissions: FlagSet<ProcessPermission>,
+    pub health: ProcessHealth
 }
 
 impl Process {
@@ -61,6 +65,7 @@ impl Process {
                 break_point: 0,
                 memory: MemoryUnit::new().unwrap(),
                 usage: MemoryUsage::new(),
+                health: ProcessHealth::Healthy
             };
             let header = elf.elf_header();
             if header.machine() != ElfMachine::RISC_V || header.elftype() != ElfType::ET_EXEC {

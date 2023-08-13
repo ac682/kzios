@@ -416,12 +416,17 @@ _handle_user_trap: .dword handle_user_trap
 
 .section .text
 .global _switch
-# _switch(trampoline: Address, satp: usize, trapframe: &TrapFrame)
+# _switch(kernel_satp, trampoline: Address, satp: usize, trapframe: &TrapFrame)
 _switch:
+    csrw    satp, a0
+    sfence.vma
     la      t0, _switch_internal
     li      t1, 0xfff
     and     t0, t0, t1
-    add     ra, a0, t0
+    add     ra, a1, t0
+    mv      a0, a1
+    mv      a1, a2
+    mv      a2, a3
     ret
 
 .section .trampoline.switch

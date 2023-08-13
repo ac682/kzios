@@ -4,14 +4,15 @@ use alloc::{string::String, vec::Vec};
 use erhino_shared::{
     call::{SystemCall, SystemCallError},
     mem::{Address, MemoryRegionAttribute},
+    proc::ExitCode,
 };
 
 use crate::{
     external::{_hart_num, _switch},
-    mm::{page::PAGE_BITS, ProcessAddressRegion},
+    mm::{page::PAGE_BITS, ProcessAddressRegion, KERNEL_SATP},
     println, sbi,
     task::{
-        proc::{Process, ProcessMemoryError},
+        proc::{Process, ProcessHealth, ProcessMemoryError},
         sched::{unfair::UnfairScheduler, Scheduler},
     },
     timer::{hart::HartTimer, Timer},
@@ -64,14 +65,14 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
     pub fn enter_user(&mut self) -> ! {
         self.scheduler.schedule();
         let (trampoline, satp, trapframe) = self.scheduler.context();
-        unsafe { _switch(trampoline, satp, trapframe) }
+        unsafe { _switch(KERNEL_SATP, trampoline, satp, trapframe) }
     }
 
     pub fn trap(&mut self, cause: TrapCause) {
+        let mut schedule_request = false;
         match cause {
             TrapCause::TimerInterrupt => {
-                self.scheduler.schedule();
-                self.timer.schedule_next(self.scheduler.next_timeslice());
+                schedule_request = true;
             }
             TrapCause::Breakpoint => {
                 self.scheduler.with_context(|p, t, f| {
@@ -134,6 +135,12 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
                             }),
                         }
                     }
+                    SystemCall::Exit => {
+                        let code = syscall.arg0 as ExitCode;
+                        p.health = ProcessHealth::Dead(code);
+                        schedule_request = true;
+                        syscall.write_response(0);
+                    }
                     SystemCall::Extend => {
                         let bytes = syscall.arg0;
                         match p.extend(bytes) {
@@ -157,6 +164,10 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
             _ => {
                 todo!("unimplemented trap cause {:?}", cause)
             }
+        }
+        if schedule_request {
+            self.scheduler.schedule();
+            self.timer.schedule_next(self.scheduler.next_timeslice());
         }
     }
 }

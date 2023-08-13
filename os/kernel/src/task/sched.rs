@@ -12,5 +12,5 @@ pub trait Scheduler {
     fn schedule(&mut self);
     fn next_timeslice(&self) -> usize;
     fn context(&self) -> (Address, usize, Address);
-    fn with_context<F: Fn(&mut Process, &mut Thread, &mut TrapFrame)>(&self, func: F);
+    fn with_context<F: FnMut(&mut Process, &mut Thread, &mut TrapFrame)>(&self, func: F);
 }

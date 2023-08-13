@@ -14,12 +14,15 @@ use flagset::FlagSet;
 use crate::{
     external::_user_trap,
     mm::{
-        page::{PageEntryFlag, PageEntryImpl, PageTableEntry, PAGE_BITS, PAGE_SIZE},
+        page::{PageEntryImpl, PageTableEntry, PAGE_BITS, PAGE_SIZE},
         unit::{AddressSpace, MemoryUnit},
         ProcessAddressRegion,
     },
     sync::{spin::SpinLock, up::UpSafeCell},
-    task::{proc::Process, thread::Thread},
+    task::{
+        proc::{Process, ProcessHealth},
+        thread::Thread,
+    },
     trap::TrapFrame,
 };
 
@@ -336,7 +339,6 @@ impl ProcessTable {
         &self,
         proc: &Arc<Shared<ProcessCell>>,
         thread: &Arc<Shared<ThreadCell>>,
-        repeat: bool,
     ) -> Option<(Arc<Shared<ProcessCell>>, Arc<Shared<ThreadCell>>)> {
         thread.ring_lock.lock();
         if let Some(next_thread) = &thread.next {
@@ -353,20 +355,16 @@ impl ProcessTable {
                 Some((next_proc.clone(), next_thread))
             } else {
                 proc.ring_lock.unlock();
-                if repeat {
-                    self.head_lock.lock();
-                    if let Some(head) = &self.head {
-                        self.head_lock.unlock();
-                        head.head_lock.lock();
-                        let next_thread = head.head.clone();
-                        head.head_lock.unlock();
-                        Some((head.clone(), next_thread))
-                    } else {
-                        self.head_lock.unlock();
-                        unreachable!("head cannot be None in the whole scheduler life-cycle")
-                    }
+                self.head_lock.lock();
+                if let Some(head) = &self.head {
+                    self.head_lock.unlock();
+                    head.head_lock.lock();
+                    let next_thread = head.head.clone();
+                    head.head_lock.unlock();
+                    Some((head.clone(), next_thread))
                 } else {
-                    None
+                    self.head_lock.unlock();
+                    unreachable!("head cannot be None in the whole scheduler life-cycle")
                 }
             }
         }
@@ -381,10 +379,13 @@ impl ProcessTable {
     ) -> Option<(Arc<Shared<ProcessCell>>, Arc<Shared<ThreadCell>>)> {
         let mut one_proc = proc.clone();
         let mut one_thread = thread.clone();
+        let start_proc = proc.id;
+        let start_thread = thread.id;
         while !pred(&one_proc, &one_thread) {
-            if let Some((next_proc, next_thread)) =
-                self.move_next_thread(&one_proc, &one_thread, repeat)
-            {
+            if let Some((next_proc, next_thread)) = self.move_next_thread(&one_proc, &one_thread) {
+                if !repeat && next_proc.id == start_proc && next_thread.id == start_thread {
+                    return None;
+                }
                 one_proc = next_proc;
                 one_thread = next_thread;
             } else {
@@ -415,14 +416,18 @@ impl UnfairScheduler {
 
     fn find_next(&self) -> Option<(Arc<Shared<ProcessCell>>, Arc<Shared<ThreadCell>>)> {
         let table = unsafe { &PROC_TABLE };
-        let pred: fn(&Arc<Shared<ProcessCell>>, &Arc<Shared<ThreadCell>>) -> bool = |_, t| {
-            if t.inner.state == ExecutionState::Ready && t.run_lock.try_lock() {
-                let mutable = t.get_mut();
-                if mutable.check_and_set_if_behind() {
-                    mutable.inner.state = ExecutionState::Running;
-                    true
+        let pred: fn(&Arc<Shared<ProcessCell>>, &Arc<Shared<ThreadCell>>) -> bool = |p, t| {
+            if p.inner.health == ProcessHealth::Healthy {
+                if t.inner.state == ExecutionState::Ready && t.run_lock.try_lock() {
+                    let mutable = t.get_mut();
+                    if mutable.check_and_set_if_behind() {
+                        mutable.inner.state = ExecutionState::Running;
+                        true
+                    } else {
+                        t.run_lock.unlock();
+                        false
+                    }
                 } else {
-                    t.run_lock.unlock();
                     false
                 }
             } else {
@@ -430,7 +435,7 @@ impl UnfairScheduler {
             }
         };
         if let Some((p, t)) = &self.current {
-            table.move_next_thread_until(p, t, pred, true)
+            table.move_next_thread_until(p, t, pred, false)
         } else {
             table.head_lock.lock();
             if let Some(process) = &table.head {
@@ -438,7 +443,7 @@ impl UnfairScheduler {
                 process.head_lock.lock();
                 let thread = &process.head;
                 process.head_lock.unlock();
-                table.move_next_thread_until(process, thread, pred, true)
+                table.move_next_thread_until(process, thread, pred, false)
             } else {
                 panic!("head can not be None during scheduler life-cycle")
             }
@@ -525,16 +530,16 @@ impl Scheduler for UnfairScheduler {
         }
     }
 
-    fn with_context<F: Fn(&mut Process, &mut Thread, &mut TrapFrame)>(&self, func: F) {
+    fn with_context<F: FnMut(&mut Process, &mut Thread, &mut TrapFrame)>(&self, mut func: F) {
         if let Some((p, t)) = &self.current {
             p.state_lock.lock();
             let cell = p.get_mut();
             let trapframe = cell.struct_at(t.trapframe);
             func(&mut cell.inner, &mut t.get_mut().inner, trapframe);
             p.state_lock.unlock();
+            // TODO: 进程/线程状态被更新，这里可以做 clean up
         } else {
-            // go IDLE
-            panic!("hart is not scheduling-prepared yet")
+            unreachable!("it's only be called when a process requesting some system function")
         }
     }
 }
