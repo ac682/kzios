@@ -36,16 +36,11 @@ alias b := build_kernel
 alias c := clean
 alias d := debug
 alias r := run
-alias run_k210 := run_renode
-alias run_mq_r := run_renode
 
 clean:
     #!/usr/bin/env bash
     if [ -d "artifacts" ]; then
     	rm -r artifacts
-    fi
-    if [ -d "artifacts/initfs" ]; then
-    	rm -r artifacts/initfs
     fi
 
 artifact_dir: clean
@@ -68,7 +63,7 @@ build_user: artifact_dir
 build_initfs: build_user
     @cd "{{TARGET_DIR}}/initfs" && tar -cf ../initfs.tar *
 
-build_kernel: build_initfs make_dtb
+build_kernel: build_initfs
     @echo -e "\033[0;36mBuild: {{PLATFORM}}\033[0m"
     @cp "{{LINKER_SCRIPT}}" "{{TARGET_DIR}}"
     @cd os && RUSTFLAGS="{{RUSTFLAGS_OS}}" cargo build --bin erhino_kernel {{RELEASE}} -Z unstable-options --out-dir {{TARGET_DIR}}
@@ -79,7 +74,7 @@ build_k210: build_kernel
     @rust-objcopy "{{BOOTLOADER}}" -S -O binary "{{KERNEL_ELF}}_merged.bin"
     @dd if="{{KERNEL_BIN}}" of="{{KERNEL_ELF}}_merged.bin" bs=128k seek=1
 
-run_qemu +EXPOSE="": build_kernel
+run_qemu +EXPOSE="": make_dtb build_kernel
     @echo -e "\033[0;36mQEMU: Simulating\033[0m"
     @{{QEMU_LAUNCH}} {{EXPOSE}}
 
@@ -87,6 +82,10 @@ run_renode CONSOLE="--console":
     @just PLATFORM={{PLATFORM}} MODE={{MODE}} build_{{PLATFORM}}
     @echo -e "\033[0;36mRenode console pops up\033[0m"
     @renode {{CONSOLE}} "os/platforms/{{PLATFORM}}/{{PLATFORM}}.resc"
+
+run_k210: build_k210
+    @python3 -m kflash -p /dev/ttyUSB1 -b 1500000 "{{KERNEL_ELF}}_merged.bin"
+    @python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct /dev/ttyUSB1 115200
 
 run:
     @just PLATFORM={{PLATFORM}} MODE={{MODE}} run_{{PLATFORM}}    

@@ -132,7 +132,7 @@ fn kernel_dump() -> ! {
     let val = stval::read();
     let pc = sepc::read();
     let satp = satp::read().bits();
-    let mut memory = "unavailable".to_owned();
+    let mut memory = "memory unavailable".to_owned();
     if let Some(unit) = unsafe { KERNEL_UNIT.get() } {
         memory = format!("{}", unit);
     }

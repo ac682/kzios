@@ -1,5 +1,6 @@
 use core::{alloc::Layout, hint::spin_loop, panic::PanicInfo};
 
+use alloc::vec::Vec;
 use buddy_system_allocator::{Heap, LockedHeapWithRescue};
 use dtb_parser::{prop::PropertyValue, traits::HasNamedProperty};
 use erhino_shared::proc::Termination;
@@ -70,16 +71,29 @@ fn early_init(dtb_addr: usize) {
     frame::init();
     let tree = dtb_parser::device_tree::DeviceTree::from_address(dtb_addr).unwrap();
     let mut timebase_frequency: usize = 0;
+    let mut freq: Vec<usize> = Vec::new();
     for node in tree.into_iter() {
         if node.name() == "cpus" {
             if let Some(prop) = node.find_prop("timebase-frequency") {
                 if let PropertyValue::Integer(frequency) = prop.value() {
                     timebase_frequency = *frequency as usize;
                 }
+            } else {
+                for cpu in node.nodes() {
+                    if let Some(clock) = cpu.find_prop("clock-frequency") {
+                        if let &PropertyValue::Integer(frequency) = clock.value() {
+                            freq.push(frequency as usize);
+                        } else {
+                            panic!("device tree clock-frequency has wrong data type")
+                        }
+                    } else {
+                        panic!("device tree cpu is missing clock-frequency prop");
+                    }
+                }
             }
         }
     }
-    if timebase_frequency == 0 {
+    if timebase_frequency == 0 && freq.len() == 0 {
         panic!("device tree provides no cpu information");
     }
     hart::init(&[timebase_frequency]);

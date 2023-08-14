@@ -63,6 +63,7 @@
 			"println",
 			"PUTCHAR",
 			"RAII",
+			"ramfs",
 			"rinlib",
 			"riscv",
 			"Rootfs",

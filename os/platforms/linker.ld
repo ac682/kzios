@@ -46,8 +46,14 @@ SECTIONS
         . = ALIGN(16);
         PROVIDE(_stack_start = .);
         . = . + STACK_SIZE * HART_NUM;    
-        . = ALIGN(4k); # make kernel 4k aligned
         PROVIDE(_kernel_end = .);
+    } > RAM
+
+    .ramfs : ALIGN(4096) {
+        PROVIDE(_ramfs_start = .);
+        *(.initfs)
+        . = ALIGN(4096);
+        PROVIDE(_ramfs_end = .);
     } > RAM
 
     /DISCARD/ : {
