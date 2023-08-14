@@ -16,7 +16,8 @@ use crate::{
     println, sbi,
     task::{
         proc::{Process, ProcessHealth, ProcessMemoryError},
-        sched::{unfair::UnfairScheduler, Scheduler},
+        sched::{unfair::UnfairScheduler, ScheduleContext, Scheduler},
+        thread::Thread,
     },
     timer::{hart::HartTimer, Timer},
     trap::TrapCause,
@@ -50,10 +51,6 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
         }
     }
 
-    pub fn id(&self) -> usize {
-        self.id
-    }
-
     pub fn arranged_context(&mut self) -> (usize, Address) {
         if let Some((_, satp, trapframe)) = self.scheduler.context() {
             self.mode = HartMode::Scheduling;
@@ -73,8 +70,11 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
 
     pub fn clear_ipi(&self) {
         // clear sip.SSIP => sip[1] = 0
-        let mut sip = 0usize;
-        unsafe { asm!("csrr {o}, sip", "csrw sip, {i}", o = out(reg) sip, i = in(reg) sip & !2) }
+        let mut sip: usize;
+        unsafe {
+            asm!("csrr {o}, sip",  o = out(reg) sip);
+            asm!("csrw sip, {i}",i = in(reg) sip & !2);
+        }
     }
 
     pub fn go_idle(&mut self) -> ! {
@@ -97,16 +97,20 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
 
     pub fn trap(&mut self, cause: TrapCause) {
         let mut schedule_request = false;
+        // 同步 ecall 会直接操作并获得结果，PC+4
+        // 异步 ecall 则只会将 task 状态设置为 Pending，PC 保持原样。调度器在解除其 Pending 状态成为 Fed 后重新加入调度，并触发 ecall，写入结果
         match cause {
             TrapCause::TimerInterrupt => {
                 schedule_request = true;
             }
             TrapCause::Breakpoint => {
-                self.scheduler.with_context(|p, t, f| {
-                    f.move_next_instruction();
+                self.scheduler.with_context(|ctx| {
+                    ctx.trapframe().move_next_instruction();
                     println!(
-                        "#{} Pn={} Tn={} requested a breakpoint",
-                        self.id, p.name, t.name
+                        "#{} Pid={} Tid={} requested a breakpoint",
+                        self.id,
+                        ctx.pid(),
+                        ctx.tid()
                     );
                 });
             }
@@ -114,8 +118,8 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
                 if let Some(region) = self.scheduler.is_address_in(address) {
                     match region {
                         ProcessAddressRegion::Stack(_) => {
-                            self.scheduler.with_context(|p, _, _| {
-                                p.fill(
+                            self.scheduler.with_context(|ctx| {
+                                ctx.process().fill(
                                     address >> PAGE_BITS,
                                     1,
                                     MemoryRegionAttribute::Write | MemoryRegionAttribute::Read,
@@ -125,8 +129,8 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
                             });
                         }
                         ProcessAddressRegion::TrapFrame(_) => {
-                            self.scheduler.with_context(|p, _, _| {
-                                p.fill(
+                            self.scheduler.with_context(|ctx| {
+                                ctx.process().fill(
                                     address >> PAGE_BITS,
                                     1,
                                     MemoryRegionAttribute::Write | MemoryRegionAttribute::Read,
@@ -143,17 +147,20 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
                     )
                 }
             }
-            TrapCause::EnvironmentCall => self.scheduler.with_context(|p, t, f| {
-                f.move_next_instruction();
-                let mut syscall = f.extract_syscall().expect("invalid sys call triggered");
+            TrapCause::EnvironmentCall => self.scheduler.with_context(|ctx| {
+                
+                let trapframe = ctx.trapframe();
+                trapframe.move_next_instruction();
+                let process = ctx.process();
+                let mut syscall = trapframe.extract_syscall().expect("invalid sys call triggered");
                 match syscall.call {
                     SystemCall::Debug => {
                         let address = syscall.arg0;
                         let length = syscall.arg1;
-                        match p.read(address, length) {
+                        match process.read(address, length) {
                             Ok(buffer) => {
                                 if let Ok(str) = String::from_utf8(buffer) {
-                                    println!("DBG#{} {}/{}: {}", self.id, p.name, t.name, str);
+                                    println!("DBG#{} {}({}): {}", self.id, ctx.pid(), ctx.tid(), str);
                                     syscall.write_response(length)
                                 } else {
                                     syscall.write_error(SystemCallError::IllegalArgument)
@@ -169,13 +176,13 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
                     }
                     SystemCall::Exit => {
                         let code = syscall.arg0 as ExitCode;
-                        p.health = ProcessHealth::Dead(code);
+                        process.health = ProcessHealth::Dead(code);
                         schedule_request = true;
                         syscall.write_response(0);
                     }
                     SystemCall::Extend => {
                         let bytes = syscall.arg0;
-                        match p.extend(bytes) {
+                        match process.extend(bytes) {
                             Ok(position) => {
                                 syscall.write_response(position);
                             }
@@ -189,6 +196,12 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
                                 });
                             }
                         }
+                    }
+                    SystemCall::ThreadSpawn => {
+                        let func_pointer = syscall.arg0 as Address;
+                        let thread = Thread::new(func_pointer);
+                        let tid = ctx.add_thread(thread);
+                        syscall.write_response(tid as usize)
                     }
                     _ => unimplemented!("unimplemented syscall: {:?}", syscall.call),
                 }
@@ -264,6 +277,5 @@ pub fn this_hart() -> &'static mut Hart<TimerImpl, SchedulerImpl> {
 }
 
 pub fn add_process(proc: Process) {
-    println!("kernel process added: {}", proc.name);
     this_hart().scheduler.add(proc, None);
 }

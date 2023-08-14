@@ -8,7 +8,7 @@ use crate::call::sys_debug;
 macro_rules! dbg
 {
 	($($arg:tt)*) => {{
-		$crate::io::debug(format_args!($($arg)*));
+		$crate::dbg::debug(format_args!($($arg)*));
     }};
 }
 pub fn debug(args: Arguments) {

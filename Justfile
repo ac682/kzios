@@ -48,7 +48,7 @@ clean:
     	rm -r artifacts/initfs
     fi
 
-artifact_dir: 
+artifact_dir: clean
     #!/usr/bin/env bash
     if [ ! -d "artifacts" ]; then
     	mkdir artifacts
@@ -89,7 +89,7 @@ run_renode CONSOLE="--console":
     @renode {{CONSOLE}} "os/platforms/{{PLATFORM}}/{{PLATFORM}}.resc"
 
 run:
-    @just PLATFORM={{PLATFORM}} MODE={{MODE}} run_{{PLATFORM}}
+    @just PLATFORM={{PLATFORM}} MODE={{MODE}} run_{{PLATFORM}}    
 
 debug: build_kernel
     @tmux new-session -d "{{QEMU_LAUNCH}} -s -S" && tmux split-window -h "{{GDB_BINARY}} -ex 'file {{KERNEL_ELF}}' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'" && tmux -2 attach-session -d

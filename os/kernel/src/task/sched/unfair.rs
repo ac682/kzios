@@ -1,7 +1,4 @@
-use core::{
-    panic,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::sync::{Arc, Weak};
 use erhino_shared::{
@@ -13,6 +10,7 @@ use flagset::FlagSet;
 
 use crate::{
     external::_user_trap,
+    hart,
     mm::{
         page::{PageEntryImpl, PageTableEntry, PAGE_BITS, PAGE_SIZE},
         unit::{AddressSpace, MemoryUnit},
@@ -23,10 +21,10 @@ use crate::{
         proc::{Process, ProcessHealth},
         thread::Thread,
     },
-    trap::TrapFrame, hart,
+    trap::TrapFrame,
 };
 
-use super::Scheduler;
+use super::{ScheduleContext, Scheduler};
 
 // 日后替换成 InterruptSafeLock
 type Locked<T> = DataLock<T, SpinLock>;
@@ -38,6 +36,43 @@ const QUANTUM: usize = 2;
 static mut PROC_TABLE: ProcessTable = ProcessTable::new();
 
 const THREAD_STACK_SIZE: usize = 8 * 1024 * 1024;
+
+pub struct UnfairContext {
+    hartid: usize,
+    process: Arc<Shared<ProcessCell>>,
+    thread: Arc<Shared<ThreadCell>>,
+}
+
+impl ScheduleContext for UnfairContext {
+    fn pid(&self) -> Pid {
+        self.process.id
+    }
+
+    fn tid(&self) -> Tid {
+        self.thread.id
+    }
+
+    fn process(&self) -> &mut Process {
+        &mut self.process.get_mut().inner
+    }
+
+    fn thread(&self) -> &mut Thread {
+        &mut self.thread.get_mut().inner
+    }
+
+    fn trapframe(&self) -> &mut TrapFrame {
+        self.process.struct_at(self.thread.trapframe)
+    }
+
+    fn add_proc(&self, proc: Process) -> Pid {
+        let table = unsafe { &mut PROC_TABLE };
+        table.add(proc, Some(self.process.id), self.hartid)
+    }
+
+    fn add_thread(&self, thread: Thread) -> Tid {
+        self.process.get_mut().add(thread, self.hartid)
+    }
+}
 
 struct ProcessLayout {
     // 跳板地址向上是跳板页，向下是 TrapFrame
@@ -87,7 +122,7 @@ struct ProcessCell {
     id: Pid,
     parent: Pid,
     layout: ProcessLayout,
-    head: Arc<Shared<ThreadCell>>,
+    head: Option<Arc<Shared<ThreadCell>>>,
     head_lock: SpinLock,
     next: Option<Arc<Shared<ProcessCell>>>,
     prev: Option<Weak<Shared<ProcessCell>>>,
@@ -99,13 +134,7 @@ const TRAPFRAME_SIZE: usize = 1024;
 const TRAPFRAME_HOLD: usize = PAGE_SIZE / TRAPFRAME_SIZE;
 
 impl ProcessCell {
-    pub fn new(
-        proc: Process,
-        pid: Pid,
-        parent: Pid,
-        main: ThreadCell,
-        layout: ProcessLayout,
-    ) -> Self {
+    pub fn new(proc: Process, pid: Pid, parent: Pid, layout: ProcessLayout) -> Self {
         let mut mutable = proc;
         mutable
             .map(
@@ -123,7 +152,7 @@ impl ProcessCell {
             id: pid,
             parent: parent,
             layout: layout,
-            head: Arc::new(Shared::new(main)),
+            head: None,
             head_lock: SpinLock::new(),
             next: None,
             prev: None,
@@ -144,59 +173,104 @@ impl ProcessCell {
         stack - (id as usize * THREAD_STACK_SIZE) - 1
     }
 
-    pub fn move_next(
-        &self,
-        current: &Arc<Shared<ThreadCell>>,
-        lock_acquire: bool,
-    ) -> Option<Arc<Shared<ThreadCell>>> {
-        if lock_acquire {
-            current.ring_lock.lock();
-        } else {
-            if !current.ring_lock.try_lock() {
-                return self.move_next(current, lock_acquire);
-            }
-        }
+    pub fn move_next(&self, current: &Arc<Shared<ThreadCell>>) -> Option<Arc<Shared<ThreadCell>>> {
+        current.ring_lock.lock();
         if let Some(next) = &current.next {
             current.ring_lock.unlock();
             Some(next.clone())
         } else {
+            current.ring_lock.unlock();
             None
         }
+    }
+
+    pub fn move_next_until(
+        &self,
+        current: &Arc<Shared<ThreadCell>>,
+        pred: fn(&Arc<Shared<ThreadCell>>) -> bool,
+    ) -> Option<Arc<Shared<ThreadCell>>> {
+        let mut one = current.clone();
+        while !pred(&one) {
+            if let Some(next) = self.move_next(&one) {
+                one = next
+            } else {
+                return None;
+            }
+        }
+        Some(one)
     }
 
     pub fn count_if_match_until(&self, pred: fn(&Arc<Shared<ThreadCell>>) -> bool) -> usize {
         self.head_lock.lock();
         let mut count = 0usize;
-        let mut one = self.head.clone();
-        while pred(&one) {
-            count += 1;
-            if let Some(next) = self.move_next(&one, true) {
-                one = next;
-            } else {
-                break;
+        if let Some(head) = &self.head {
+            self.head_lock.unlock();
+            let mut one = head.clone();
+            while pred(&one) {
+                count += 1;
+                if let Some(next) = self.move_next(&one) {
+                    one = next;
+                } else {
+                    break;
+                }
             }
+        } else {
+            self.head_lock.unlock();
         }
-        self.head_lock.unlock();
         count
     }
 
-    fn find_gap(&self) -> Tid {
+    fn find_gap(&self) -> Option<Arc<Shared<ThreadCell>>> {
         self.head_lock.lock();
-        let mut current = self.head.clone();
-        let mut tid = current.id + 1;
-        while let Some(next) = self.move_next(&current, true) {
-            if tid == next.id {
-                tid = next.id + 1;
-                current = next;
-            } else {
-                break;
+        if let Some(head) = &self.head {
+            self.head_lock.unlock();
+            let mut current = head.clone();
+            while let Some(next) = self.move_next(&current) {
+                if current.id + 1 == next.id {
+                    current = next;
+                } else {
+                    break;
+                }
             }
+            Some(current)
+        } else {
+            self.head_lock.unlock();
+            None
         }
-        tid
     }
 
-    pub fn new_tid(&self) -> Tid {
-        self.find_gap()
+    pub fn add(&mut self, thread: Thread, hartid: usize) -> Tid {
+        let option = self.find_gap();
+        let tid = if let Some(gap) = &option {
+            gap.id + 1
+        } else {
+            0 as Tid
+        };
+        let generation = unsafe { &PROC_TABLE }.gen();
+        let trapframe = Self::address_of_trapframe::<PageEntryImpl>(self.layout.trampoline, tid);
+        let stack = ProcessCell::address_of_stack(self.layout.stack_point, tid);
+        let entry = thread.entry_point;
+        let mut cell = ThreadCell::new(thread, tid, generation, trapframe);
+        self.ensure_page_created(
+            trapframe >> PAGE_BITS,
+            MemoryRegionAttribute::Write | MemoryRegionAttribute::Read,
+            true,
+        );
+        self.struct_at::<TrapFrame>(trapframe)
+            .init(hartid, entry, stack, self.layout.trampoline);
+        if let Some(gap) = &option {
+            gap.ring_lock.lock();
+            let last = gap.get_mut();
+            let next = last.next.take();
+            cell.next = next;
+            last.next = Some(Arc::new(Shared::new(cell)));
+            gap.ring_lock.unlock();
+        } else {
+            self.head_lock.lock();
+            self.head = Some(Arc::new(Shared::new(cell)));
+            self.head_lock.unlock();
+        }
+        tid
     }
 
     pub fn ensure_page_created<A: Into<FlagSet<MemoryRegionAttribute>> + Copy>(
@@ -206,7 +280,9 @@ impl ProcessCell {
         reserved: bool,
     ) {
         self.state_lock.lock();
-        self.inner.fill(number, 1, attributes, reserved).expect("process memory for scheduling create failed");
+        self.inner
+            .fill(number, 1, attributes, reserved)
+            .expect("process memory for scheduling create failed");
         self.state_lock.unlock();
     }
 
@@ -222,7 +298,6 @@ impl ProcessCell {
 struct ThreadCell {
     inner: Thread,
     id: Tid,
-    proc: Weak<Shared<ProcessCell>>,
     generation: usize,
     trapframe: Address,
     next: Option<Arc<Shared<ThreadCell>>>,
@@ -235,7 +310,6 @@ impl ThreadCell {
         Self {
             inner,
             id: tid,
-            proc: Weak::new(),
             generation: initial_gen,
             trapframe,
             next: None,
@@ -285,7 +359,30 @@ impl ProcessTable {
         self.generation.load(Ordering::Relaxed)
     }
 
-    pub fn add_process(&mut self, mut cell: ProcessCell) -> Arc<Shared<ProcessCell>> {
+    pub fn new_pid(&self) -> Pid {
+        self.pid_generator.fetch_add(1, Ordering::Relaxed) as Pid
+    }
+
+    pub fn add(&mut self, proc: Process, parent: Option<Pid>, hartid: usize) -> Pid {
+        let pid = self.new_pid();
+        let parent_id = if let Some(parent) = parent {
+            parent
+        } else {
+            pid
+        };
+        let layout = ProcessLayout::new(
+            PageEntryImpl::top_address() & !0xFFF,
+            PageEntryImpl::space_size(),
+            proc.break_point,
+        );
+        let main = Thread::new(proc.entry_point);
+        let mut cell = ProcessCell::new(proc, pid, parent_id, layout);
+        cell.add(main, hartid);
+        self.add_cell(cell);
+        pid
+    }
+
+    pub fn add_cell(&mut self, mut cell: ProcessCell) {
         self.last_lock.lock();
         if let Some(last) = &self.last {
             let upgrade = last.upgrade().expect("last exists but pointers to null");
@@ -293,26 +390,24 @@ impl ProcessTable {
             let mutable = upgrade.get_mut();
             cell.prev = Some(last.clone());
             let sealed = Arc::new(Shared::new(cell));
-            mutable.next = Some(sealed.clone());
             self.last = Some(Arc::downgrade(&sealed));
             self.last_lock.unlock();
-            return sealed;
+            mutable.next = Some(sealed);
+            upgrade.ring_lock.unlock();
         } else {
             // head & last both None
             self.head_lock.lock();
             let sealed = Arc::new(Shared::new(cell));
             self.last = Some(Arc::downgrade(&sealed));
-            self.head = Some(sealed.clone());
+            self.head = Some(sealed);
             self.last_lock.unlock();
             self.head_lock.unlock();
-            return sealed;
         }
     }
 
     pub fn move_next_process(
         &self,
         current: &Arc<Shared<ProcessCell>>,
-        repeat: bool,
     ) -> Option<Arc<Shared<ProcessCell>>> {
         current.ring_lock.lock();
         if let Some(next) = &current.next {
@@ -320,16 +415,12 @@ impl ProcessTable {
             Some(next.clone())
         } else {
             current.ring_lock.unlock();
-            if repeat {
-                self.head_lock.lock();
-                if let Some(head) = &self.head {
-                    self.head_lock.unlock();
-                    Some(head.clone())
-                } else {
-                    self.head_lock.unlock();
-                    None
-                }
+            self.head_lock.lock();
+            if let Some(head) = &self.head {
+                self.head_lock.unlock();
+                Some(head.clone())
             } else {
+                self.head_lock.unlock();
                 None
             }
         }
@@ -340,33 +431,21 @@ impl ProcessTable {
         proc: &Arc<Shared<ProcessCell>>,
         thread: &Arc<Shared<ThreadCell>>,
     ) -> Option<(Arc<Shared<ProcessCell>>, Arc<Shared<ThreadCell>>)> {
-        thread.ring_lock.lock();
-        if let Some(next_thread) = &thread.next {
-            thread.ring_lock.unlock();
-            Some((proc.clone(), next_thread.clone()))
+        if let Some(next) = proc.move_next(thread) {
+            Some((proc.clone(), next))
         } else {
-            thread.ring_lock.unlock();
-            proc.ring_lock.lock();
-            if let Some(next_proc) = &proc.next {
-                proc.ring_lock.unlock();
+            let mut next_proc_option = self.move_next_process(proc);
+            while let Some(next_proc) = &next_proc_option {
                 next_proc.head_lock.lock();
-                let next_thread = next_proc.head.clone();
-                next_proc.head_lock.unlock();
-                Some((next_proc.clone(), next_thread))
-            } else {
-                proc.ring_lock.unlock();
-                self.head_lock.lock();
-                if let Some(head) = &self.head {
-                    self.head_lock.unlock();
-                    head.head_lock.lock();
-                    let next_thread = head.head.clone();
-                    head.head_lock.unlock();
-                    Some((head.clone(), next_thread))
+                if let Some(next_thread) = &next_proc.head {
+                    next_proc.head_lock.unlock();
+                    return Some((next_proc.clone(), next_thread.clone()));
                 } else {
-                    self.head_lock.unlock();
-                    unreachable!("head cannot be None in the whole scheduler life-cycle")
+                    next_proc.head_lock.unlock();
+                    next_proc_option = self.move_next_process(proc);
                 }
             }
+            None
         }
     }
 
@@ -409,14 +488,10 @@ impl UnfairScheduler {
         }
     }
 
-    fn new_pid(&self) -> Pid {
-        let table = unsafe { &PROC_TABLE };
-        table.pid_generator.fetch_add(1, Ordering::Relaxed) as Pid
-    }
-
     fn find_next(&self) -> Option<(Arc<Shared<ProcessCell>>, Arc<Shared<ThreadCell>>)> {
         let table = unsafe { &PROC_TABLE };
         let pred: fn(&Arc<Shared<ProcessCell>>, &Arc<Shared<ThreadCell>>) -> bool = |p, t| {
+            // state lock!
             if p.inner.health == ProcessHealth::Healthy {
                 if t.inner.state == ExecutionState::Ready && t.run_lock.try_lock() {
                     let mutable = t.get_mut();
@@ -438,52 +513,28 @@ impl UnfairScheduler {
             table.move_next_thread_until(p, t, pred, false)
         } else {
             table.head_lock.lock();
-            if let Some(process) = &table.head {
-                table.head_lock.unlock();
-                process.head_lock.lock();
-                let thread = &process.head;
-                process.head_lock.unlock();
-                table.move_next_thread_until(process, thread, pred, false)
-            } else {
-                panic!("head can not be None during scheduler life-cycle")
+            let mut next_proc_option = table.head.clone();
+            table.head_lock.unlock();
+            while let Some(next_proc) = next_proc_option {
+                next_proc.head_lock.lock();
+                if let Some(thread) = &next_proc.head {
+                    next_proc.head_lock.unlock();
+                    return table.move_next_thread_until(&next_proc, thread, pred, false);
+                } else {
+                    next_proc.head_lock.unlock();
+                    next_proc_option = table.move_next_process(&next_proc);
+                }
             }
+            None
         }
     }
 }
 
 impl Scheduler for UnfairScheduler {
+    type Context = UnfairContext;
     fn add(&mut self, proc: Process, parent: Option<Pid>) -> Pid {
         let table = unsafe { &mut PROC_TABLE };
-        let pid = self.new_pid();
-        let parent_id = if let Some(parent) = parent {
-            parent
-        } else {
-            pid
-        };
-        let layout = ProcessLayout::new(
-            PageEntryImpl::top_address() & !0xFFF,
-            PageEntryImpl::space_size(),
-            proc.break_point,
-        );
-        let entry_point = proc.entry_point;
-        let trampoline_address = layout.trampoline;
-        let stack_address = ProcessCell::address_of_stack(layout.stack_point, 0);
-        let trapframe_address =
-            ProcessCell::address_of_trapframe::<PageEntryImpl>(layout.trampoline, 0);
-        let thread = ThreadCell::new(Thread::new("main"), 0, table.gen(), trapframe_address);
-        let mut cell = ProcessCell::new(proc, pid, parent_id, thread, layout);
-        cell.ensure_page_created(
-            trapframe_address >> PAGE_BITS,
-            MemoryRegionAttribute::Write | MemoryRegionAttribute::Read,
-            true,
-        );
-        let trapframe = cell.struct_at::<TrapFrame>(trapframe_address);
-        trapframe.init(self.hartid, entry_point, stack_address, trampoline_address);
-        let sealed = table.add_process(cell);
-        sealed.head_lock.lock();
-        let mutable = sealed.head.get_mut();
-        mutable.proc = Arc::downgrade(&sealed);
-        sealed.head_lock.unlock();
+        let pid = table.add(proc, parent, self.hartid);
         hart::awake_idle();
         pid
     }
@@ -501,15 +552,20 @@ impl Scheduler for UnfairScheduler {
 
     fn schedule(&mut self) {
         // 采用 smooth 的代数算法，由于该算法存在进程间公平问题，干脆取消进程级别的公平比较，直接去保证线程公平，彻底放弃进程公平。
-        if let Some((_, t)) = &self.current {
-            let mutable = t.get_mut();
-            // ring unlocked, run locked
-            if mutable.check_and_set_if_behind() {
-                return;
-            } else {
-                mutable.run_lock.unlock();
-                mutable.inner.state = ExecutionState::Ready;
+        if let Some((p, t)) = &self.current {
+            p.state_lock.lock();
+            if p.inner.health == ProcessHealth::Healthy && t.inner.state == ExecutionState::Running
+            {
+                let mutable = t.get_mut();
+                // ring unlocked, run locked
+                if mutable.check_and_set_if_behind() {
+                    return;
+                } else {
+                    mutable.run_lock.unlock();
+                    mutable.inner.state = ExecutionState::Ready;
+                }
             }
+            p.state_lock.unlock();
         }
         let next = self.find_next();
         self.current = next;
@@ -528,12 +584,15 @@ impl Scheduler for UnfairScheduler {
         }
     }
 
-    fn with_context<F: FnMut(&mut Process, &mut Thread, &mut TrapFrame)>(&self, mut func: F) {
+    fn with_context<F: FnMut(&Self::Context)>(&self, mut func: F) {
         if let Some((p, t)) = &self.current {
             p.state_lock.lock();
-            let cell = p.get_mut();
-            let trapframe = cell.struct_at(t.trapframe);
-            func(&mut cell.inner, &mut t.get_mut().inner, trapframe);
+            let context = UnfairContext {
+                hartid: self.hartid,
+                process: p.clone(),
+                thread: t.clone(),
+            };
+            func(&context);
             p.state_lock.unlock();
             // TODO: 进程/线程状态被更新，这里可以做 clean up
         } else {

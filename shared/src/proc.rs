@@ -29,7 +29,7 @@ pub enum SystemSignal {
 flags! {
     /// Permission of the process
     /// Invalid when fork means copy the permissions from the parent
-    pub enum ProcessPermission: u8{
+    pub enum ProcessPermission: u32{
         /// Not available
         Invalid = 0b0,
         /// Should be always present

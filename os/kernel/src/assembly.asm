@@ -1,4 +1,5 @@
 .option norvc
+.attribute arch, "rv64gc"
 
 .section .text.init
 .global _start

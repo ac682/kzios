@@ -1,3 +1,4 @@
+#[derive(Debug, Clone)]
 pub struct MemoryUsage {
     pub page: usize,
     pub program: usize,

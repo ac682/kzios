@@ -3,7 +3,7 @@ use core::arch::asm;
 use erhino_shared::{
     call::{SystemCall, SystemCallError},
     mem::Address,
-    proc::ExitCode,
+    proc::{ExitCode, Tid},
 };
 use num_traits::FromPrimitive;
 
@@ -49,4 +49,8 @@ pub unsafe fn sys_extend(size: usize) -> Result<Address, SystemCallError> {
 // returns nothing
 pub unsafe fn sys_exit(code: ExitCode) -> Result<(), SystemCallError> {
     sys_call(SystemCall::Exit, code as usize, 0, 0).map(|_| ())
+}
+
+pub unsafe fn sys_thread_spawn(func_point: Address) -> Result<Tid, SystemCallError> {
+    sys_call(SystemCall::ThreadSpawn, func_point, 0, 0).map(|t| t as Tid)
 }

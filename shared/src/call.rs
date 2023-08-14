@@ -42,16 +42,8 @@ pub enum SystemCall {
     // Process control
     /// Finalized process notifies kernel to cleanup
     Exit = 0x10,
-    /// Be nice
-    Yield = 0x11,
-    /// Fork process itself
-    Fork = 0x12,
-    /// Wait for all child processes to exit
-    Wait = 0x13,
-    /// Wait for a certain process to exit
-    WaitFor = 0x14,
     /// Fetch a process's information and fill in the [super::proc::ProcessInfo] struct
-    Inspect = 0x15,
+    Inspect = 0x14,
     /// Fetch the current process's information and fill in the [super::proc::ProcessInfo] struct
     InspectMyself = 0x16,
     /// Replace the process's execution image with the new one from the bytes
@@ -59,12 +51,16 @@ pub enum SystemCall {
     /// Replace the process's execution image with the new one from the file
     ExecuteFile = 0x1B,
     // Thread
+    /// Finalized thread notifies kernel to cleanup
+    ThreadExit = 0x20,
+    /// Be nice
+    ThreadYield = 0x21,
     /// Create a thread for the process
-    ThreadSpawn = 0x20,
+    ThreadSpawn = 0x22,
     /// Wait another owned thread to exit
-    ThreadJoin = 0x21,
+    ThreadJoin = 0x23,
     /// Kill owned thread
-    ThreadKill = 0x22,
+    ThreadKill = 0x24,
     // Signal
     /// Return from signal handler
     SignalReturn = 0x30,

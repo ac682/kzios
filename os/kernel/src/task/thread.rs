@@ -1,15 +1,14 @@
-use alloc::{borrow::ToOwned, string::String};
-use erhino_shared::proc::ExecutionState;
+use erhino_shared::{proc::ExecutionState, mem::Address};
 
 pub struct Thread {
-    pub name: String,
+    pub entry_point: Address,
     pub state: ExecutionState,
 }
 
 impl Thread {
-    pub fn new(name: &str) -> Self {
+    pub fn new(entry: Address) -> Self {
         Self {
-            name: name.to_owned(),
+            entry_point: entry,
             state: ExecutionState::Ready,
         }
     }

@@ -109,10 +109,6 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         Self::map_internal(&mut self.root, vpn, Some(ppn), count, flags, E::DEPTH - 1)
     }
 
-    pub fn is_page_created(&self, vpn: PageNumber) -> bool {
-        self.locate(vpn).is_some()
-    }
-
     pub fn translate(&self, addr: Address) -> Option<(Address, PageAttributes)> {
         let offset = addr & 0xFFF;
         if let Some((ppn, attributes)) = self.locate(addr >> PAGE_BITS) {

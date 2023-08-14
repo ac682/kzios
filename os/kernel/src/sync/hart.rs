@@ -30,7 +30,7 @@ impl InteriorLock for HartLock {
         let hartid = hart::hartid();
         while self
             .lock
-            .compare_exchange(usize::MAX, hartid, Ordering::Acquire, Ordering::Relaxed)
+            .compare_exchange_weak(usize::MAX, hartid, Ordering::Acquire, Ordering::Relaxed)
             .is_err_and(|c| c != hartid)
         {
             while self.is_locked() {

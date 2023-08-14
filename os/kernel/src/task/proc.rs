@@ -1,16 +1,16 @@
-use alloc::{borrow::ToOwned, string::String, vec::Vec};
+use alloc::vec::Vec;
 use elf_rs::{Elf, ElfFile, ElfMachine, ElfType, ProgramHeaderFlags, ProgramType};
 use erhino_shared::{
     mem::{Address, MemoryRegionAttribute, PageNumber},
-    proc::{ProcessPermission, ExitCode},
+    proc::{ExitCode, ProcessPermission},
 };
 use flagset::FlagSet;
 
 use crate::mm::{
-        page::{PageEntryFlag, PageEntryImpl, PAGE_BITS, PAGE_SIZE},
-        unit::{MemoryUnit, MemoryUnitError},
-        usage::MemoryUsage,
-    };
+    page::{PageEntryFlag, PageEntryImpl, PAGE_BITS, PAGE_SIZE},
+    unit::{MemoryUnit, MemoryUnitError},
+    usage::MemoryUsage,
+};
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -18,6 +18,7 @@ pub enum ProcessSpawnError {
     BrokenBinary,
     WrongTarget,
     InvalidPermissions,
+    MemoryError(ProcessMemoryError),
 }
 
 #[derive(Debug)]
@@ -39,33 +40,31 @@ impl From<MemoryUnitError> for ProcessMemoryError {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum ProcessHealth{
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum ProcessHealth {
     Healthy,
-    Dead(ExitCode)
+    Dead(ExitCode),
 }
 
 pub struct Process {
-    pub name: String,
     memory: MemoryUnit<PageEntryImpl>,
     pub usage: MemoryUsage,
     pub entry_point: Address,
     pub break_point: Address,
     pub permissions: FlagSet<ProcessPermission>,
-    pub health: ProcessHealth
+    pub health: ProcessHealth,
 }
 
 impl Process {
-    pub fn from_elf(data: &[u8], name: &str) -> Result<Self, ProcessSpawnError> {
+    pub fn from_elf(data: &[u8]) -> Result<Self, ProcessSpawnError> {
         if let Ok(elf) = Elf::from_bytes(data) {
             let mut process = Self {
-                name: name.to_owned(),
                 permissions: ProcessPermission::All.into(),
                 entry_point: elf.entry_point() as Address,
                 break_point: 0,
                 memory: MemoryUnit::new().unwrap(),
                 usage: MemoryUsage::new(),
-                health: ProcessHealth::Healthy
+                health: ProcessHealth::Healthy,
             };
             let header = elf.elf_header();
             if header.machine() != ElfMachine::RISC_V || header.elftype() != ElfType::ET_EXEC {
@@ -89,11 +88,11 @@ impl Process {
                                 false,
                             )
                             .map(|w| page_used += w)
-                            .expect("create program segment space failed");
+                            .map_err(|e| ProcessSpawnError::MemoryError(e))?;
                         process
                             .write(addr as Address, content, length)
                             .map(|w| byte_used += w)
-                            .expect("write program segment to its process space failed");
+                            .map_err(|e| ProcessSpawnError::MemoryError(e))?;
                     }
                     if addr > max_addr {
                         max_addr = addr;
@@ -234,6 +233,10 @@ impl Process {
 
     pub fn usage(&self) -> &MemoryUsage {
         &self.usage
+    }
+
+    pub fn has_permission(&self, perm: ProcessPermission) -> bool {
+        self.permissions.contains(perm)
     }
 }
 
