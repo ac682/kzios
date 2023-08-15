@@ -15,7 +15,7 @@ use crate::{
     mm::{page::PAGE_BITS, ProcessAddressRegion, KERNEL_SATP},
     println, sbi,
     task::{
-        proc::{Process, ProcessHealth, ProcessMemoryError},
+        proc::{ProcessHealth, ProcessMemoryError},
         sched::{unfair::UnfairScheduler, ScheduleContext, Scheduler},
         thread::Thread,
     },
@@ -26,7 +26,7 @@ use crate::{
 type TimerImpl = HartTimer;
 type SchedulerImpl = UnfairScheduler;
 
-static mut HARTS: Vec<Hart<TimerImpl, SchedulerImpl>> = Vec::new();
+static mut HARTS: Vec<HartKind> = Vec::new();
 static IDLE_HARTS: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug, PartialEq, Eq)]
@@ -36,13 +36,18 @@ pub enum HartStatus {
     Started,
 }
 
-pub struct Hart<T: Timer, S: Scheduler> {
+pub enum HartKind {
+    Disabled,
+    Application(ApplicationHart<TimerImpl, SchedulerImpl>),
+}
+
+pub struct ApplicationHart<T: Timer, S: Scheduler> {
     id: usize,
     timer: T,
     scheduler: S,
 }
 
-impl<T: Timer, S: Scheduler> Hart<T, S> {
+impl<T: Timer, S: Scheduler> ApplicationHart<T, S> {
     pub const fn new(hartid: usize, timer: T, scheduler: S) -> Self {
         Self {
             id: hartid,
@@ -87,15 +92,15 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
 
     pub fn start(&self) -> bool {
         println!("#{} is awaking", self.id);
-        sbi::hart_start(self.id, _awaken as usize, 0).is_ok()
+        sbi::hart_start(self.id, _awaken as usize, enter_user as usize).is_ok()
     }
 
     pub fn suspend(&self) -> bool {
-        sbi::hart_suspend(self.id, _awaken as usize, 0).is_ok()
+        sbi::hart_suspend(0, _awaken as usize, 0).is_ok()
     }
 
     pub fn stop(&self) -> bool {
-        sbi::hart_stop(self.id).is_ok()
+        sbi::hart_stop().is_ok()
     }
 
     fn go_idle(&self) -> ! {
@@ -246,20 +251,16 @@ impl<T: Timer, S: Scheduler> Hart<T, S> {
     }
 }
 
-pub fn init(hart_num: usize, freq: &[usize]) {
-    unsafe {
-        for i in 0..hart_num {
-            HARTS.push(Hart::new(
-                i,
-                TimerImpl::new(if i < freq.len() {
-                    freq[i]
-                } else {
-                    freq[freq.len() - 1]
-                }),
-                SchedulerImpl::new(i),
-            ));
+pub fn register(hartid: usize, freq: usize) {
+    let harts = unsafe { &mut HARTS };
+    if hartid > harts.len(){
+        let diff = hartid - harts.len();
+        for _ in 0..diff{
+            harts.push(HartKind::Disabled);
         }
     }
+    let hart = ApplicationHart::new(hartid, TimerImpl::new(freq), UnfairScheduler::new(hartid));
+    harts.push(HartKind::Application(hart));
 }
 
 pub fn send_ipi(hart_mask: usize) -> bool {
@@ -272,8 +273,10 @@ pub fn send_ipi(hart_mask: usize) -> bool {
 
 pub fn start_all() {
     for i in unsafe { &HARTS } {
-        if let Some(HartStatus::Stopped) = i.get_status() {
-            i.start();
+        if let HartKind::Application(hart) = i {
+            if let Some(HartStatus::Stopped) = hart.get_status() {
+                hart.start();
+            }
         }
     }
 }
@@ -291,12 +294,12 @@ pub fn send_ipi_all() -> bool {
     }
 }
 
-pub fn get_hart(id: usize) -> &'static mut Hart<TimerImpl, SchedulerImpl> {
+pub fn get_hart(id: usize) -> &'static mut HartKind {
     unsafe {
         if id < HARTS.len() {
             &mut HARTS[id as usize]
         } else {
-            panic!("reference to hart id {} is out of bound", id);
+            panic!("reference to hart id {} is out of bound {}", id, HARTS.len());
         }
     }
 }
@@ -309,10 +312,15 @@ pub fn hartid() -> usize {
     tp
 }
 
-pub fn this_hart() -> &'static mut Hart<TimerImpl, SchedulerImpl> {
+pub fn this_hart() -> &'static mut HartKind {
     get_hart(hartid())
 }
 
-pub fn add_process(proc: Process) {
-    this_hart().scheduler.add(proc, None);
+#[no_mangle]
+pub fn enter_user() -> ! {
+    if let HartKind::Application(hart) = this_hart() {
+        hart.enter_user()
+    } else {
+        panic!("hart #{} does not support application mode", hartid())
+    }
 }

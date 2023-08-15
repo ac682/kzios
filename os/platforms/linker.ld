@@ -9,7 +9,7 @@ SECTIONS
     PROVIDE(_kernel_start = ORIGIN(RAM));
     PROVIDE(_stack_size = STACK_SIZE);
 
-    HART_NUM_LIMIT = 4;
+    HART_NUM_LIMIT = 8;
 
     .text : ALIGN(8) {
         *(.text.init)

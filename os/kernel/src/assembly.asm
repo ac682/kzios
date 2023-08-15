@@ -6,20 +6,9 @@
 _start:
     # 0 hart stack pointer & interrupt setup
     # store hartid in tp resgister
-    mv      tp, a0 
-    # locate stack pointer
-    mv      t0, tp
-    la      sp, _stack_size
-    mul     t0, t0, sp
-    la      sp, _kernel_end
-    sub     sp, sp, t0
-    # setup hart, sstatus.fs = 1(Initial), stvec = _kernel_trap(Direct)
-    la      t0, _kernel_trap
-    csrw    stvec, t0
-    li      t0, 0b01 << 13
-    csrw    sstatus, t0
-    # jump into rust_start
-    call    main
+    mv      a2, a1
+    la      a1, main
+    j       _awaken
 
 .section .text
 .global _park
@@ -41,10 +30,21 @@ _park:
 .section .text
 .global _awaken
 _awaken:
-    mv      tp, a0
+    mv      tp, a0 
+    # locate stack pointer
+    mv      t0, tp
+    la      sp, _stack_size
+    mul     t0, t0, sp
+    la      sp, _kernel_end
+    sub     sp, sp, t0
+    # setup hart, sstatus.fs = 1(Initial), stvec = _kernel_trap(Direct)
     la      t0, _kernel_trap
     csrw    stvec, t0
-    jal     _park
+    li      t0, 0b01 << 13
+    csrw    sstatus, t0
+    mv      ra, a1
+    mv      a1, a2
+    ret
 
 .section .text
 .align 4

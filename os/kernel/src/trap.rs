@@ -14,7 +14,7 @@ use riscv::register::{
 
 use crate::{
     external::{_kernel_end, _kernel_trap, _stack_size},
-    hart,
+    hart::{self, HartKind},
     mm::{KERNEL_SATP, KERNEL_UNIT},
 };
 
@@ -146,40 +146,38 @@ fn kernel_dump() -> ! {
 unsafe fn handle_kernel_trap(cause: Scause, _val: usize) {
     let hart = hart::this_hart();
     match cause.cause() {
-        Trap::Interrupt(Interrupt::SupervisorSoft) => {
-            // 从 kernel 进入 user
-            hart.clear_ipi();
-            hart.enter_user();
-        }
         _ => kernel_dump(),
     }
 }
 
 #[no_mangle]
 unsafe fn handle_user_trap(cause: Scause, val: usize) -> (usize, Address) {
-    let hart = hart::this_hart();
-    match cause.cause() {
-        Trap::Interrupt(Interrupt::UserTimer) => hart.trap(TrapCause::TimerInterrupt),
-        Trap::Interrupt(Interrupt::SupervisorTimer) => todo!("nested interrupt: timer"),
-        Trap::Interrupt(Interrupt::UserSoft) => todo!("impossible user soft interrupt"),
-        Trap::Exception(exception) => match exception {
-            Exception::Breakpoint => hart.trap(TrapCause::Breakpoint),
-            Exception::UserEnvCall => hart.trap(TrapCause::EnvironmentCall),
-            Exception::LoadPageFault => {
-                hart.trap(TrapCause::PageFault(val as Address, MemoryOperation::Read))
+    if let HartKind::Application(hart) = hart::this_hart() {
+        match cause.cause() {
+            Trap::Interrupt(Interrupt::UserTimer) => hart.trap(TrapCause::TimerInterrupt),
+            Trap::Interrupt(Interrupt::SupervisorTimer) => todo!("nested interrupt: timer"),
+            Trap::Interrupt(Interrupt::UserSoft) => todo!("impossible user soft interrupt"),
+            Trap::Exception(exception) => match exception {
+                Exception::Breakpoint => hart.trap(TrapCause::Breakpoint),
+                Exception::UserEnvCall => hart.trap(TrapCause::EnvironmentCall),
+                Exception::LoadPageFault => {
+                    hart.trap(TrapCause::PageFault(val as Address, MemoryOperation::Read))
+                }
+                Exception::StorePageFault => {
+                    hart.trap(TrapCause::PageFault(val as Address, MemoryOperation::Write))
+                }
+                Exception::InstructionPageFault => hart.trap(TrapCause::PageFault(
+                    val as Address,
+                    MemoryOperation::Execute,
+                )),
+                _ => todo!("unknown exception: {}", cause.bits()),
+            },
+            _ => {
+                unimplemented!("unknown trap from user: {}", cause.bits())
             }
-            Exception::StorePageFault => {
-                hart.trap(TrapCause::PageFault(val as Address, MemoryOperation::Write))
-            }
-            Exception::InstructionPageFault => hart.trap(TrapCause::PageFault(
-                val as Address,
-                MemoryOperation::Execute,
-            )),
-            _ => todo!("unknown exception: {}", cause.bits()),
-        },
-        _ => {
-            unimplemented!("unknown trap from user: {}", cause.bits())
         }
+        hart.arranged_context()
+    }else{
+        unimplemented!("only application hart would trigger user trap, how this hart get here?")
     }
-    hart.arranged_context()
 }

@@ -1,12 +1,11 @@
 use core::{alloc::Layout, panic::PanicInfo};
 
-use alloc::vec::Vec;
 use buddy_system_allocator::{Heap, LockedHeapWithRescue};
 use dtb_parser::{prop::PropertyValue, traits::HasNamedProperty};
 use erhino_shared::proc::Termination;
 
 use crate::{
-    external::{_heap_start, _park, _stack_start},
+    external::{_heap_start, _stack_start},
     hart,
     mm::{
         self,
@@ -42,10 +41,7 @@ fn rust_start<T: Termination + 'static>(
     kernel_init();
     main();
     hart::start_all();
-    hart::send_ipi_all();
-    unsafe {
-        _park();
-    }
+    hart::enter_user();
 }
 
 fn early_init(dtb_addr: usize) {
@@ -53,7 +49,6 @@ fn early_init(dtb_addr: usize) {
     frame::init();
     let tree = dtb_parser::device_tree::DeviceTree::from_address(dtb_addr).unwrap();
     let mut timebase_frequency: usize = 0;
-    let mut freq: Vec<usize> = Vec::new();
     for node in tree.into_iter() {
         if node.name() == "cpus" {
             if let Some(prop) = node.find_prop("timebase-frequency") {
@@ -65,17 +60,24 @@ fn early_init(dtb_addr: usize) {
                 if let Some(device) = cpu.find_prop("device_type") {
                     if let PropertyValue::String(string) = device.value() {
                         if *string == "cpu" {
-                            if let Some(clock) = cpu.find_prop("clock-frequency") {
-                                if let &PropertyValue::Integer(frequency) = clock.value() {
-                                    freq.push(frequency as usize);
-                                } else {
-                                    panic!("device tree clock-frequency has wrong data type")
+                            if let Some(cpuid) = cpu.find_prop("reg") {
+                                if let Some(isa_prop) = cpu.find_prop("riscv,isa"){
+                                    if let PropertyValue::String(isa) = isa_prop.value(){
+                                        if !(*isa).contains("imafdc"){
+                                            continue;
+                                        }
+                                    }
                                 }
-                            } else {
-                                if timebase_frequency != 0 {
-                                    freq.push(timebase_frequency);
-                                } else {
-                                    panic!("device tree cpu is missing clock-frequency prop");
+                                if let PropertyValue::Address(id, _) = cpuid.value() {
+                                    if let Some(clock) = cpu.find_prop("clock-frequency") {
+                                        if let &PropertyValue::Integer(frequency) = clock.value() {
+                                            hart::register(*id as usize, frequency as usize);
+                                        }
+                                    } else {
+                                        if timebase_frequency != 0 {
+                                            hart::register(*id as usize, timebase_frequency as usize);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -85,10 +87,6 @@ fn early_init(dtb_addr: usize) {
             break;
         }
     }
-    if timebase_frequency == 0 && freq.len() == 0 {
-        panic!("device tree provides no cpu information");
-    }
-    hart::init(freq.len(), &[timebase_frequency]);
 }
 
 fn kernel_init() {

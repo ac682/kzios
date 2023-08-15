@@ -124,19 +124,19 @@ pub fn hart_start(hartid: usize, start_addr: usize, opaque: usize) -> SbiResult 
     )
 }
 
-pub fn hart_stop(hartid: usize) -> SbiResult {
-    sbi_call(SbiExtension::HartStateManagement, 1, hartid, 0, 0)
+pub fn hart_stop() -> SbiResult {
+    sbi_call(SbiExtension::HartStateManagement, 1, 0, 0, 0)
 }
 
 pub fn hart_get_status(hartid: usize) -> SbiResult {
     sbi_call(SbiExtension::HartStateManagement, 2, hartid, 0, 0)
 }
 
-pub fn hart_suspend(hartid: usize, resume_addr: usize, opaque: usize) -> SbiResult {
+pub fn hart_suspend(suspend_type: u32, resume_addr: usize, opaque: usize) -> SbiResult {
     sbi_call(
         SbiExtension::HartStateManagement,
         3,
-        hartid,
+        suspend_type as usize,
         resume_addr,
         opaque,
     )
