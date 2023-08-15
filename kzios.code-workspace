@@ -118,6 +118,7 @@
 				"type": "shell",
 				"command": "just",
 				"args": [
+					"MODEL=virt",
 					"run_qemu",
 					"-s",
 					"-S"
@@ -152,7 +153,7 @@
 				"request": "launch",
 				"preLaunchTask": "launch_gdb_server",
 				"miDebuggerServerAddress": "localhost:1234",
-				"program": "artifacts/erhino_kernel",
+				"program": "${workspaceRoot}/artifacts/erhino_kernel",
 				"cwd": "${workspaceFolder}",
 				"launchCompleteCommand": "exec-continue",
 				"environment": [],
@@ -163,7 +164,7 @@
 				"MIMode": "gdb",
 				"miDebuggerPath": "gdb-multiarch",
 				"miDebuggerArgs": "-ex 'set arch riscv:rv64'",
-			}
+			},
 		]
 	}
 }

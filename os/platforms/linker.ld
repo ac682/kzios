@@ -8,7 +8,8 @@ SECTIONS
     PROVIDE(_memory_start = ORIGIN(SBI));
     PROVIDE(_kernel_start = ORIGIN(RAM));
     PROVIDE(_stack_size = STACK_SIZE);
-    PROVIDE(_hart_num = HART_NUM);
+
+    HART_NUM_LIMIT = 4;
 
     .text : ALIGN(8) {
         *(.text.init)
@@ -45,15 +46,9 @@ SECTIONS
         . = . + HEAP_SIZE;
         . = ALIGN(16);
         PROVIDE(_stack_start = .);
-        . = . + STACK_SIZE * HART_NUM;    
+        . = . + STACK_SIZE * HART_NUM_LIMIT;
+        . = ALIGN(4096);  
         PROVIDE(_kernel_end = .);
-    } > RAM
-
-    .ramfs : ALIGN(4096) {
-        PROVIDE(_ramfs_start = .);
-        *(.initfs)
-        . = ALIGN(4096);
-        PROVIDE(_ramfs_end = .);
     } > RAM
 
     /DISCARD/ : {

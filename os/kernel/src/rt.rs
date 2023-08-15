@@ -1,4 +1,4 @@
-use core::{alloc::Layout, hint::spin_loop, panic::PanicInfo};
+use core::{alloc::Layout, panic::PanicInfo};
 
 use alloc::vec::Vec;
 use buddy_system_allocator::{Heap, LockedHeapWithRescue};
@@ -22,47 +22,29 @@ const HEAP_ORDER: usize = 64;
 static mut HEAP_ALLOCATOR: LockedHeapWithRescue<HEAP_ORDER> =
     LockedHeapWithRescue::new(heap_rescue);
 
-static mut ENV_INIT: bool = false;
-
 #[lang = "start"]
 fn rust_start<T: Termination + 'static>(
     main: fn() -> T,
-    argc: isize,
+    _: isize,
     argv: *const *const u8,
     _sigpipe: u8,
 ) -> isize {
     // rust 1.73
     // ruins my code!
-    let hartid = argc as usize;
     let dtb_addr = argv as usize;
-    if hartid == 0 {
-        // rust initialization
-        unsafe {
-            let heap_start = _heap_start as usize;
-            let size = _stack_start as usize - heap_start;
-            HEAP_ALLOCATOR.lock().init(heap_start, size);
-        }
-        early_init(dtb_addr);
-        unsafe {
-            ENV_INIT = true;
-        }
-        println!("Hart #{} init completed, go kernel init", hartid);
-        kernel_init();
-        main();
-        hart::send_ipi_all();
-        unsafe {
-            _park();
-        }
-    } else {
-        unsafe {
-            while !ENV_INIT {
-                spin_loop();
-            }
-        }
-        println!("Hart #{} init completed, sleeping", hartid);
-        unsafe {
-            _park();
-        }
+    // rust initialization
+    unsafe {
+        let heap_start = _heap_start as usize;
+        let size = _stack_start as usize - heap_start;
+        HEAP_ALLOCATOR.lock().init(heap_start, size);
+    }
+    early_init(dtb_addr);
+    kernel_init();
+    main();
+    hart::start_all();
+    hart::send_ipi_all();
+    unsafe {
+        _park();
     }
 }
 
@@ -78,25 +60,35 @@ fn early_init(dtb_addr: usize) {
                 if let PropertyValue::Integer(frequency) = prop.value() {
                     timebase_frequency = *frequency as usize;
                 }
-            } else {
-                for cpu in node.nodes() {
-                    if let Some(clock) = cpu.find_prop("clock-frequency") {
-                        if let &PropertyValue::Integer(frequency) = clock.value() {
-                            freq.push(frequency as usize);
-                        } else {
-                            panic!("device tree clock-frequency has wrong data type")
+            }
+            for cpu in node.nodes() {
+                if let Some(device) = cpu.find_prop("device_type") {
+                    if let PropertyValue::String(string) = device.value() {
+                        if *string == "cpu" {
+                            if let Some(clock) = cpu.find_prop("clock-frequency") {
+                                if let &PropertyValue::Integer(frequency) = clock.value() {
+                                    freq.push(frequency as usize);
+                                } else {
+                                    panic!("device tree clock-frequency has wrong data type")
+                                }
+                            } else {
+                                if timebase_frequency != 0 {
+                                    freq.push(timebase_frequency);
+                                } else {
+                                    panic!("device tree cpu is missing clock-frequency prop");
+                                }
+                            }
                         }
-                    } else {
-                        panic!("device tree cpu is missing clock-frequency prop");
                     }
                 }
             }
+            break;
         }
     }
     if timebase_frequency == 0 && freq.len() == 0 {
         panic!("device tree provides no cpu information");
     }
-    hart::init(&[timebase_frequency]);
+    hart::init(freq.len(), &[timebase_frequency]);
 }
 
 fn kernel_init() {

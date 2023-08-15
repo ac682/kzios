@@ -1,0 +1,91 @@
+/dts-v1/;
+
+/include/ "generic.dtsi"
+
+/ {
+    #address-cells = <0x2>;
+    #size-cells = <0x2>;
+    model = "qemu,virt";
+	cpus {
+		#address-cells = <0x01>;
+		#size-cells = <0x00>;
+		timebase-frequency = <0x989680>;
+
+		cpu@0 {
+			device_type = "cpu";
+			phandle = <0x01>;
+			reg = <0x00>;
+			compatible = "riscv";
+			mmu-type = "riscv,sv39";
+		};
+
+		cpu@1 {
+			device_type = "cpu";
+			phandle = <0x02>;
+			reg = <0x01>;
+			compatible = "riscv";
+			mmu-type = "riscv,sv39";
+		};
+
+		cpu@2 {
+			device_type = "cpu";
+			phandle = <0x03>;
+			reg = <0x02>;
+			compatible = "riscv";
+			mmu-type = "riscv,sv39";
+		};
+
+		cpu@3 {
+			device_type = "cpu";
+			phandle = <0x04>;
+			reg = <0x03>;
+			compatible = "riscv";
+			mmu-type = "riscv,sv39";
+		};
+
+		cpu-map {
+
+			cluster0 {
+
+				core0 {
+					cpu = <0x01>;
+				};
+
+				core1 {
+					cpu = <0x02>;
+				};
+
+				core2 {
+					cpu = <0x03>;
+				};
+
+				core3 {
+					cpu = <0x04>;
+				};
+			};
+		};
+	};
+
+	soc {
+	};
+
+	flash@20000000 {
+		bank-width = <0x04>;
+		reg = <0x20000000 0x2000000 0x22000000 0x2000000>;
+		compatible = "cfi-flash";
+	};
+
+	poweroff {
+		value = <0x5555>;
+		offset = <0x00>;
+		regmap = <0x0a>;
+		compatible = "syscon-poweroff";
+	};
+
+	reboot {
+		value = <0x7777>;
+		offset = <0x00>;
+		regmap = <0x0a>;
+		compatible = "syscon-reboot";
+	};
+};

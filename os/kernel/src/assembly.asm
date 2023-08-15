@@ -1,14 +1,11 @@
 .option norvc
 .attribute arch, "rv64gc"
 
-.section .initfs
-.incbin "../artifacts/initfs.tar"
-
 .section .text.init
 .global _start
 _start:
     # 0 hart stack pointer & interrupt setup
-    # store hartid in tp resgister (done by SBI but here just to make sure)
+    # store hartid in tp resgister
     mv      tp, a0 
     # locate stack pointer
     mv      t0, tp
@@ -32,9 +29,22 @@ _park:
     li      t1, 0b10
     or      t0, t0, t1
     csrw    sstatus, t0
+    # set sie.ssie = 1
+    csrr    t0, sie
+    li      t1, 0b10
+    or      t0, t0, t1
+    csrw    sie, t0
 0:
     wfi
     j       0b
+
+.section .text
+.global _awaken
+_awaken:
+    mv      tp, a0
+    la      t0, _kernel_trap
+    csrw    stvec, t0
+    jal     _park
 
 .section .text
 .align 4

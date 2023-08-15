@@ -59,5 +59,4 @@ pub fn init() {
         KERNEL_UNIT.call_once(|| unit);
         KERNEL_SATP = satp;
     }
-    satp::write(satp);
 }

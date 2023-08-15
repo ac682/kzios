@@ -114,6 +114,34 @@ pub fn debug_console_write_byte(byte: u8) -> SbiResult {
     sbi_call(SbiExtension::DebugConsole, 2, byte as usize, 0 as usize, 0)
 }
 
+pub fn hart_start(hartid: usize, start_addr: usize, opaque: usize) -> SbiResult {
+    sbi_call(
+        SbiExtension::HartStateManagement,
+        0,
+        hartid,
+        start_addr,
+        opaque,
+    )
+}
+
+pub fn hart_stop(hartid: usize) -> SbiResult {
+    sbi_call(SbiExtension::HartStateManagement, 1, hartid, 0, 0)
+}
+
+pub fn hart_get_status(hartid: usize) -> SbiResult {
+    sbi_call(SbiExtension::HartStateManagement, 2, hartid, 0, 0)
+}
+
+pub fn hart_suspend(hartid: usize, resume_addr: usize, opaque: usize) -> SbiResult {
+    sbi_call(
+        SbiExtension::HartStateManagement,
+        3,
+        hartid,
+        resume_addr,
+        opaque,
+    )
+}
+
 pub fn set_timer(time: usize) -> SbiResult {
     sbi_call(SbiExtension::Time, 0, time, 0, 0)
 }
