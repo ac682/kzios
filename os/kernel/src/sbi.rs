@@ -142,6 +142,16 @@ pub fn hart_suspend(suspend_type: u32, resume_addr: usize, opaque: usize) -> Sbi
     )
 }
 
+pub fn system_reset(reset_type: u32, reset_reason: u32) -> SbiResult {
+    sbi_call(
+        SbiExtension::SystemReset,
+        0,
+        reset_type as usize,
+        reset_reason as usize,
+        0,
+    )
+}
+
 pub fn set_timer(time: usize) -> SbiResult {
     sbi_call(SbiExtension::Time, 0, time, 0, 0)
 }

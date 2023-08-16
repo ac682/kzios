@@ -91,7 +91,6 @@ impl<T: Timer, S: Scheduler> ApplicationHart<T, S> {
     }
 
     pub fn start(&self) -> bool {
-        println!("#{} is awaking", self.id);
         sbi::hart_start(self.id, _awaken as usize, enter_user as usize).is_ok()
     }
 
@@ -105,7 +104,6 @@ impl<T: Timer, S: Scheduler> ApplicationHart<T, S> {
 
     fn go_idle(&self) -> ! {
         IDLE_HARTS.fetch_or(1 << self.id, Ordering::Relaxed);
-        println!("#{} enter idle", self.id);
         self.suspend();
         unsafe { _park() }
     }

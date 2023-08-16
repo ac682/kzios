@@ -44,7 +44,8 @@ just run
 
 ### 调试
 
-用 gdb 调试会有字长问题，这里用`riscv64-elf-gdb`
+~~~用 gdb 调试会有字长问题，这里用`riscv64-elf-gdb`~~~
+用 riscv64-elf-gdb 调试会有 rust-testsuit 问题，这里用 `git-multiarch`
 
 ```sh
 just debug

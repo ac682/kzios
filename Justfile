@@ -7,7 +7,7 @@ PLATFORM := "generic"
 MODEL := "sifive_u"
 DEBUGGER_OPTIONS := if MODEL == "sifive_u" { "-ex 'add-inferior' -ex 'inferior 2' -ex 'attach 2' -ex 'set schedule-multiple'" } else { "" }
 FIRMWARE := "jump"
-BOOTLOADER := invocation_directory()/"os/opensbi/build/platform"/PLATFORM/"firmware/fw"+"_"+FIRMWARE+".elf"
+BOOTLOADER := invocation_directory()/"submodules/opensbi/build/platform"/PLATFORM/"firmware/fw"+"_"+FIRMWARE+".elf"
 DTS := invocation_directory()/"os/platforms"/PLATFORM/"models"/MODEL+".dts"
 LINKER_SCRIPT := invocation_directory()/"os/platforms"/PLATFORM/"memory.ld"
 
@@ -67,7 +67,7 @@ build_initfs: build_user
     @cd "{{TARGET_DIR}}/initfs" && tar -cf ../initfs.tar *
 
 build_opensbi *fw_options="":
-    cd os/opensbi && make CROSS_COMPILE=riscv64-linux-gnu- PLATFORM={{PLATFORM}} {{fw_options}}
+    cd submodules/opensbi && make CROSS_COMPILE=riscv64-linux-gnu- PLATFORM={{PLATFORM}} {{fw_options}}
 
 build_kernel: build_initfs
     @echo -e "\033[0;36mBuild: {{PLATFORM}}\033[0m"

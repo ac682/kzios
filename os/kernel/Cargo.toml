@@ -1,7 +1,7 @@
 [package]
 name = "erhino_kernel"
 version = "0.1.0"
-authors = [ "Chien Zhang (zqy0224@live.com)"]
+authors = ["Chien Zhang (zqy0224@live.com)"]
 description = "kernel.bin"
 edition = "2021"
 
@@ -10,14 +10,20 @@ edition = "2021"
 [dependencies]
 riscv = "0.10"
 erhino_shared = { path = "../../shared" }
-buddy_system_allocator = { version = "0.9", default-features = false, features = ["const_fn", "use_spin"] }
-num-traits = { version = "0.2", default-features = false}
+buddy_system_allocator = { version = "0.9", default-features = false, features = [
+    "const_fn",
+    "use_spin",
+] }
+num-traits = { version = "0.2", default-features = false }
 num-derive = "0.4"
 # will colored supports no_std? https://github.com/colored-rs/colored/issues/140
 # colored = "2.0"
-dtb_parser = "0.1"
+dtb_parser = { path = "../../submodules/dtb_parser" }
 spin = "0.9"
 hashbrown = "0.14"
 flagset = "0.4"
 elf_rs = "0.3"
 tar-no-std = "0.2"
+embedded-hal = "1.0.0-rc.1"
+embedded-hal-bus = "0.1.0-rc.1"
+embedded-sdmmc = "0.5.0"

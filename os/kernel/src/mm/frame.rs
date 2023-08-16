@@ -1,10 +1,15 @@
+use core::mem::size_of;
+
 use buddy_system_allocator::LockedFrameAllocator;
 use erhino_shared::mem::PageNumber;
 use spin::Once;
 
-use crate::{external::{_memory_end, _kernel_end}, println};
+use crate::{
+    external::{_kernel_end, _memory_end},
+    println,
+};
 
-use super::page::PAGE_BITS;
+use super::page::{PAGE_BITS, PAGE_SIZE};
 
 static mut FRAME_ALLOCATOR: Once<LockedFrameAllocator> = Once::new();
 
@@ -47,7 +52,17 @@ pub fn init() {
 }
 
 pub fn alloc(count: usize) -> Option<PageNumber> {
-    unsafe { FRAME_ALLOCATOR.get_mut().unwrap().lock().alloc(count) }
+    unsafe {
+        let ret = FRAME_ALLOCATOR.get_mut().unwrap().lock().alloc(count);
+        if let Some(result) = ret{
+            let size = count * (PAGE_SIZE / size_of::<u64>());
+            let ptr = (result << PAGE_BITS) as *mut u64;
+            for i in 0..size{
+                ptr.add(i).write(0);
+            }
+        }
+        ret
+    }
 }
 
 pub fn dealloc(frame: PageNumber, count: usize) {

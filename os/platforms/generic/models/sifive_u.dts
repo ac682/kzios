@@ -10,6 +10,7 @@
 
 	chosen {
 		stdout-path = "/soc/serial@10010000";
+		boot_device = "/soc/spi@10050000/mmc@0";
 	};
 
 	aliases {
