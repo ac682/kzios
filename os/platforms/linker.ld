@@ -1,7 +1,7 @@
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
 
-INCLUDE "../artifacts/memory.ld"
+INCLUDE "../artifacts/memory.x"
 
 SECTIONS
 {

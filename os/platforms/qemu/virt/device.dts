@@ -1,6 +1,6 @@
 /dts-v1/;
 
-/include/ "generic.dtsi"
+/include/ "../generic.dtsi"
 
 / {
     	#address-cells = <0x02>;
