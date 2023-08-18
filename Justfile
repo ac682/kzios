@@ -8,6 +8,7 @@ MODEL := "sifive_u"
 DEBUGGER_OPTIONS := if MODEL == "sifive_u" { "-ex 'add-inferior' -ex 'inferior 2' -ex 'attach 2' -ex 'set schedule-multiple'" } else { "" }
 DTS := invocation_directory()/"os/platforms"/PLATFORM/MODEL/"device.dts"
 LINKER_SCRIPT := invocation_directory()/"os/platforms/linker.ld"
+MEMORY_SCRIPT := invocation_directory()/"os/platforms"/PLATFORM/MODEL/"memory.x"
 RENODE_SCRIPT := invocation_directory()/"os/platforms"/PLATFORM/MODEL/"renode.resc"
 
 # compile
@@ -36,7 +37,7 @@ GDB_BINARY := "gdb-multiarch"
 alias b := build_kernel
 alias c := clean
 alias d := debug
-alias r := run_qemu
+alias r := run_sifive_u
 alias f := flash
 
 clean:
@@ -67,12 +68,12 @@ build_initfs: build_user
 
 build_opensbi options:
     @echo -e "\033[0;36mBuild OpenSBI: {{options}}\033[0m"
-    @cd submodules/opensbi && make CROSS_COMPILE=riscv64-linux-gnu- {{options}}
+    cd submodules/opensbi && make CROSS_COMPILE=riscv64-linux-gnu- {{options}}
     @echo -e "\033[0;32mOpenSBI build successfully!\033[0m"
 
 build_kernel: 
     @echo -e "\033[0;36mBuild kernel: {{PLATFORM}}\033[0m"
-    @cp "{{LINKER_SCRIPT}}" "{{TARGET_DIR}}"
+    @cp "{{MEMORY_SCRIPT}}" "{{TARGET_DIR}}"
     @cd os && RUSTFLAGS="{{RUSTFLAGS_OS}}" cargo build --bin erhino_kernel {{RELEASE}} -Z unstable-options --out-dir {{TARGET_DIR}}
     @rust-objcopy {{KERNEL_ELF}} -S -O binary {{KERNEL_BIN}} -B=riscv64
     @echo -e "\033[0;32mKernel build successfully!\033[0m"
@@ -82,7 +83,7 @@ build_k210: && (build_opensbi "PLATFORM=kendryte/k210 FW_PAYLOAD=y FW_PAYLOAD_OF
     @just PLATFORM=kendryte MODEL=k210 make_dtb
     @cp '{{OPENSBI_BUILD_DIR}}/platform/kendryte/k210/firmware/fw_payload.bin' '{{TARGET_DIR}}'
 
-run_qemu +EXPOSE="": make_dtb build_kernel
+run_qemu +EXPOSE="":
     @echo -e "\033[0;36mQEMU: Simulating\033[0m"
     @{{QEMU_LAUNCH}} {{EXPOSE}}
 
@@ -94,8 +95,18 @@ run_qemu_dump_dtb:
     @{{QEMU_LAUNCH}} -machine dumpdtb="{{TARGET_DIR}}/dump.dtb"
     @dtc -O dts -o "{{TARGET_DIR}}/dump.dts" -I dtb "{{TARGET_DIR}}/dump.dtb"
 
+build_generic: && (build_opensbi "PLATFORM=generic FW_JUMP=y FW_JUMP_ADDR=0x80200000")
+    @just PLATFORM=qemu MODEL={{MODEL}} make_dtb
+    @just PLATFORM=qemu MODEL={{MODEL}} build_kernel
+
 run_k210: build_k210
     @just PLATFORM=kendryte MODEL=k210 run_renode
+
+run_sifive_u: build_generic
+    @just PLATFORM=qemu MODEL=sifive_u run_qemu
+
+run_virt: build_generic
+    @just PLATFORM=qemu MODEL=virt run_qemu
 
 flash_k210: build_k210
     @python3 -m kflash -p /dev/ttyUSB1 -b 1500000 "{{KERNEL_ELF}}_merged.bin"

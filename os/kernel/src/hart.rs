@@ -56,6 +56,10 @@ impl<T: Timer, S: Scheduler> ApplicationHart<T, S> {
         }
     }
 
+    pub fn id(&self) -> usize{
+        self.id
+    }
+
     pub fn arranged_context(&mut self) -> (usize, Address) {
         if let Some((_, satp, trapframe)) = self.scheduler.context() {
             (satp, trapframe)
@@ -106,6 +110,10 @@ impl<T: Timer, S: Scheduler> ApplicationHart<T, S> {
         IDLE_HARTS.fetch_or(1 << self.id, Ordering::Relaxed);
         self.suspend();
         unsafe { _park() }
+    }
+
+    pub fn uptime(&self) -> usize{
+        self.timer.uptime() / self.timer.tick_freq()
     }
 
     pub fn enter_user(&mut self) -> ! {

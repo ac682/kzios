@@ -144,7 +144,6 @@ fn kernel_dump() -> ! {
 
 #[no_mangle]
 unsafe fn handle_kernel_trap(cause: Scause, _val: usize) {
-    let hart = hart::this_hart();
     match cause.cause() {
         _ => kernel_dump(),
     }
@@ -177,7 +176,7 @@ unsafe fn handle_user_trap(cause: Scause, val: usize) -> (usize, Address) {
             }
         }
         hart.arranged_context()
-    }else{
+    } else {
         unimplemented!("only application hart would trigger user trap, how this hart get here?")
     }
 }

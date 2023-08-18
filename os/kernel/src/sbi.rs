@@ -1,26 +1,28 @@
 use core::arch::asm;
-use num_derive::{FromPrimitive, ToPrimitive};
-use num_traits::FromPrimitive;
+use strum_macros::EnumIter;
 
 #[repr(isize)]
-#[derive(Debug, FromPrimitive, ToPrimitive)]
+#[derive(Debug)]
 pub enum SbiError {
-    Success = 0,
-    Failed = -1,
-    NotSupported = -2,
-    InvalidParameter = -3,
-    Denied = -4,
-    InvalidAddress = -5,
-    AlreadyAvailable = -6,
-    AlreadyStarted = -7,
-    AlreadyStopped = -8,
-    NoSharedMemory = -9,
+    Success,
+    Failed,
+    NotSupported,
+    InvalidParameter,
+    Denied,
+    InvalidAddress,
+    AlreadyAvailable,
+    AlreadyStarted,
+    AlreadyStopped,
+    NoSharedMemory,
+
+    Undefined(isize),
 }
 
 pub type SbiResult = Result<isize, SbiError>;
 
 #[repr(usize)]
 #[allow(unused)]
+#[derive(Debug, Clone, Copy, EnumIter)]
 pub enum SbiExtension {
     LegacySetTimer = 0x0,
     LegacyConsolePutchar = 0x01,
@@ -31,6 +33,7 @@ pub enum SbiExtension {
     LegacyRemoteSFenceVma = 0x06,
     LegacyRemoteSFenceVmaAsid = 0x07,
     LegacySystemShutdown = 0x08,
+    Base = 0x10,
     Time = 0x54494D45,
     InterProcessInterrupt = 0x735049,
     RemoteFence = 0x52464E43,
@@ -42,11 +45,36 @@ pub enum SbiExtension {
     CollaborativeProcessorPerformanceControl = 0x43505043,
     NestedAcceleration = 0x4E41434C,
     StealTimeAccounting = 0x535441,
-    Base = 0x10,
 }
 
-static mut TIME_SUPPORTED: bool = false;
-static mut DEBUG_CONSOLE_SUPPORTED: bool = false;
+impl SbiExtension {
+    #[inline]
+    pub fn to_index(&self) -> u32 {
+        match self {
+            SbiExtension::LegacySetTimer => 0,
+            SbiExtension::LegacyConsolePutchar => 1,
+            SbiExtension::LegacyConsoleGetchar => 2,
+            SbiExtension::LegacyClearIPI => 3,
+            SbiExtension::LegacySendIPI => 4,
+            SbiExtension::LegacyRemoteFenceI => 5,
+            SbiExtension::LegacyRemoteSFenceVma => 6,
+            SbiExtension::LegacyRemoteSFenceVmaAsid => 7,
+            SbiExtension::LegacySystemShutdown => 8,
+            SbiExtension::Base => 9,
+            SbiExtension::Time => 10,
+            SbiExtension::InterProcessInterrupt => 11,
+            SbiExtension::RemoteFence => 12,
+            SbiExtension::HartStateManagement => 13,
+            SbiExtension::SystemReset => 14,
+            SbiExtension::PerformanceMonitorUnit => 15,
+            SbiExtension::DebugConsole => 16,
+            SbiExtension::SystemSuspend => 17,
+            SbiExtension::CollaborativeProcessorPerformanceControl => 18,
+            SbiExtension::NestedAcceleration => 19,
+            SbiExtension::StealTimeAccounting => 20,
+        }
+    }
+}
 
 #[inline]
 fn raw_call(
@@ -71,6 +99,7 @@ fn raw_call(
     (error, value)
 }
 
+#[inline]
 fn legacy_call(eid: SbiExtension, arg0: usize, arg1: usize, arg2: usize) -> usize {
     let mut ret: usize;
     unsafe {
@@ -88,11 +117,19 @@ fn sbi_call(eid: SbiExtension, fid: usize, arg0: usize, arg1: usize, arg2: usize
     if error == 0 {
         Ok(value)
     } else {
-        if let Some(res) = SbiError::from_isize(error) {
-            Err(res)
-        } else {
-            Err(SbiError::NotSupported)
-        }
+        Err(match error {
+            0 => SbiError::Success,
+            -1 => SbiError::Failed,
+            -2 => SbiError::NotSupported,
+            -3 => SbiError::InvalidParameter,
+            -4 => SbiError::Denied,
+            -5 => SbiError::InvalidAddress,
+            -6 => SbiError::AlreadyAvailable,
+            -7 => SbiError::AlreadyStarted,
+            -8 => SbiError::AlreadyStopped,
+            -9 => SbiError::NoSharedMemory,
+            _ => SbiError::Undefined(error),
+        })
     }
 }
 
@@ -104,15 +141,55 @@ pub fn legacy_console_putchar(char: u8) {
     legacy_call(SbiExtension::LegacyConsolePutchar, char as usize, 0, 0);
 }
 
-pub fn debug_console_write(text: &str) -> SbiResult {
-    let ptr = text.as_ptr();
-    let count = text.len();
-    sbi_call(SbiExtension::DebugConsole, 0, count, ptr as usize, 0)
+// Base extension #0x10
+
+pub fn sbi_get_spec_version() -> SbiResult {
+    sbi_call(SbiExtension::Base, 0, 0, 0, 0)
 }
 
-pub fn debug_console_write_byte(byte: u8) -> SbiResult {
-    sbi_call(SbiExtension::DebugConsole, 2, byte as usize, 0 as usize, 0)
+pub fn sbi_get_impl_id() -> SbiResult {
+    sbi_call(SbiExtension::Base, 1, 0, 0, 0)
 }
+
+pub fn sbi_get_impl_version() -> SbiResult {
+    sbi_call(SbiExtension::Base, 2, 0, 0, 0)
+}
+
+pub fn sbi_probe_extension(eid: SbiExtension) -> SbiResult {
+    sbi_call(SbiExtension::Base, 3, eid as usize, 0, 0)
+}
+
+pub fn sbi_get_mach_vendor_id() -> SbiResult {
+    sbi_call(SbiExtension::Base, 4, 0, 0, 0)
+}
+
+pub fn sbi_get_mach_arch_id() -> SbiResult {
+    sbi_call(SbiExtension::Base, 5, 0, 0, 0)
+}
+
+pub fn sbi_get_mach_impl_id() -> SbiResult {
+    sbi_call(SbiExtension::Base, 6, 0, 0, 0)
+}
+
+// Timer extension #0x53394D45
+
+pub fn set_timer(time: usize) -> SbiResult {
+    sbi_call(SbiExtension::Time, 0, time, 0, 0)
+}
+
+// IPI extension #0x735049
+
+pub fn send_ipi(hart_mask: usize, hart_mask_base: isize) -> SbiResult {
+    sbi_call(
+        SbiExtension::InterProcessInterrupt,
+        0x0,
+        hart_mask,
+        hart_mask_base as usize,
+        0,
+    )
+}
+
+// Hart State Management extension #0x48534D
 
 pub fn hart_start(hartid: usize, start_addr: usize, opaque: usize) -> SbiResult {
     sbi_call(
@@ -142,6 +219,8 @@ pub fn hart_suspend(suspend_type: u32, resume_addr: usize, opaque: usize) -> Sbi
     )
 }
 
+// System Reset extension $0x53525354
+
 pub fn system_reset(reset_type: u32, reset_reason: u32) -> SbiResult {
     sbi_call(
         SbiExtension::SystemReset,
@@ -152,43 +231,14 @@ pub fn system_reset(reset_type: u32, reset_reason: u32) -> SbiResult {
     )
 }
 
-pub fn set_timer(time: usize) -> SbiResult {
-    sbi_call(SbiExtension::Time, 0, time, 0, 0)
+// Debug Console extension #0x4442434E
+
+pub fn debug_console_write(text: &str) -> SbiResult {
+    let ptr = text.as_ptr();
+    let count = text.len();
+    sbi_call(SbiExtension::DebugConsole, 0, count, ptr as usize, 0)
 }
 
-/// Value: Returns 0 if the given SBI extension ID (EID) is not available, or 1 if it is available unless defined as
-/// any other non-zero value by the implementation.
-pub fn probe_extension(eid: SbiExtension) -> SbiResult {
-    sbi_call(SbiExtension::Base, 3, eid as usize, 0, 0)
-}
-
-pub fn send_ipi(hart_mask: usize, hart_mask_base: isize) -> SbiResult {
-    sbi_call(
-        SbiExtension::InterProcessInterrupt,
-        0x0,
-        hart_mask,
-        hart_mask_base as usize,
-        0,
-    )
-}
-
-pub fn init() {
-    if let Ok(res) = probe_extension(SbiExtension::DebugConsole) {
-        unsafe {
-            DEBUG_CONSOLE_SUPPORTED = res != 0;
-        }
-    }
-    if let Ok(res) = probe_extension(SbiExtension::Time) {
-        unsafe {
-            TIME_SUPPORTED = res != 0;
-        }
-    }
-}
-
-pub fn is_debug_console_supported() -> bool {
-    unsafe { DEBUG_CONSOLE_SUPPORTED }
-}
-
-pub fn is_time_supported() -> bool {
-    unsafe { TIME_SUPPORTED }
+pub fn debug_console_write_byte(byte: u8) -> SbiResult {
+    sbi_call(SbiExtension::DebugConsole, 2, byte as usize, 0 as usize, 0)
 }

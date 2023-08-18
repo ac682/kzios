@@ -1,10 +1,10 @@
 use core::{alloc::Layout, panic::PanicInfo};
 
 use buddy_system_allocator::{Heap, LockedHeapWithRescue};
-use dtb_parser::{prop::PropertyValue, traits::HasNamedProperty};
 use erhino_shared::proc::Termination;
 
 use crate::{
+    board::{self, device::cpu::MmuType},
     external::{_heap_start, _stack_start},
     hart,
     mm::{
@@ -12,7 +12,7 @@ use crate::{
         frame::{self, alloc},
         page::PAGE_SIZE,
     },
-    print, println, sbi,
+    println,
 };
 
 const HEAP_ORDER: usize = 64;
@@ -28,8 +28,6 @@ fn rust_start<T: Termination + 'static>(
     argv: *const *const u8,
     _sigpipe: u8,
 ) -> isize {
-    // rust 1.73
-    // ruins my code!
     let dtb_addr = argv as usize;
     // rust initialization
     unsafe {
@@ -45,46 +43,25 @@ fn rust_start<T: Termination + 'static>(
 }
 
 fn early_init(dtb_addr: usize) {
-    sbi::init();
     frame::init();
     let tree = dtb_parser::device_tree::DeviceTree::from_address(dtb_addr).unwrap();
-    let mut timebase_frequency: usize = 0;
-    for node in tree.into_iter() {
-        if node.name() == "cpus" {
-            if let Some(prop) = node.find_prop("timebase-frequency") {
-                if let PropertyValue::Integer(frequency) = prop.value() {
-                    timebase_frequency = *frequency as usize;
-                }
+    board::init(tree);
+    let board = board::this_board();
+    for cpu in board.devices().cpus() {
+        if cpu.isa().len == 64
+            && cpu.isa().a
+            && cpu.isa().c
+            && cpu.isa().d
+            && cpu.isa().f
+            && cpu.isa().i
+            && cpu.isa().m
+        {
+            if match cpu.mmu() {
+                MmuType::Sv39 | MmuType::Sv48 | MmuType::Sv57 => true,
+                _ => false,
+            } {
+                hart::register(cpu.id(), cpu.freq());
             }
-            for cpu in node.nodes() {
-                if let Some(device) = cpu.find_prop("device_type") {
-                    if let PropertyValue::String(string) = device.value() {
-                        if *string == "cpu" {
-                            if let Some(cpuid) = cpu.find_prop("reg") {
-                                if let Some(isa_prop) = cpu.find_prop("riscv,isa"){
-                                    if let PropertyValue::String(isa) = isa_prop.value(){
-                                        if !(*isa).contains("imafdc"){
-                                            continue;
-                                        }
-                                    }
-                                }
-                                if let PropertyValue::Address(id, _) = cpuid.value() {
-                                    if let Some(clock) = cpu.find_prop("clock-frequency") {
-                                        if let &PropertyValue::Integer(frequency) = clock.value() {
-                                            hart::register(*id as usize, frequency as usize);
-                                        }
-                                    } else {
-                                        if timebase_frequency != 0 {
-                                            hart::register(*id as usize, timebase_frequency as usize);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            break;
         }
     }
 }

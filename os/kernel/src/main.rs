@@ -17,6 +17,7 @@ mod sync;
 mod task;
 mod timer;
 mod trap;
+mod board;
 
 global_asm!(include_str!("assembly.asm"));
 

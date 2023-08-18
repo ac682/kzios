@@ -2,7 +2,11 @@ use core::fmt::{Arguments, Error, Result, Write};
 
 use erhino_shared::sync::DataLock;
 
-use crate::{sbi, sync::hart::HartLock};
+use crate::{
+    board,
+    sbi::{self, SbiExtension},
+    sync::hart::HartLock,
+};
 
 static mut LOCKED_CONSOLE: DataLock<Console, HartLock> = DataLock::new(Console, HartLock::new());
 
@@ -18,24 +22,64 @@ macro_rules! print
 macro_rules! println
 {
 	() => ({
-        use $crate::print;
-		print!("\r\n")
+		$crate::print!("\n")
 	});
 	($fmt:expr) => ({
-        use $crate::print;
-		print!(concat!($fmt, "\r\n"))
+		$crate::print!(concat!($fmt, "\n"))
 	});
 	($fmt:expr, $($args:tt)+) => ({
-        use $crate::print;
-		print!(concat!($fmt, "\r\n"), $($args)+)
+		$crate::print!(concat!($fmt, "\n"), $($args)+)
 	});
+}
+
+#[macro_export]
+macro_rules! debug {
+    ($fmt:expr) => ({
+        $crate::print!(concat!("\x1b[0;35mDEBG\x1b[0m ", $fmt, "\n"))
+    });
+    ($fmt:expr, $($args:tt)+) => ({
+        $crate::print!(concat!("\x1b[0;35mDEBG\x1b[0m ", $fmt, "\n"), $($args)+)
+    });
+}
+
+#[macro_export]
+macro_rules! info {
+    ($fmt:expr) => ({
+        $crate::print!(concat!("\x1b[0;32mINFO\x1b[0m ", $fmt, "\n"))
+    });
+    ($fmt:expr, $($args:tt)+) => ({
+        $crate::print!(concat!("\x1b[0;32mINFO\x1b[0m ", $fmt, "\n"), $($args)+)
+    });
+}
+
+#[macro_export]
+macro_rules! warning {
+    ($fmt:expr) => ({
+        $crate::print!(concat!("\x1b[0;33mWARN\x1b[0m ", $fmt, "\n"))
+    });
+    ($fmt:expr, $($args:tt)+) => ({
+        $crate::print!(concat!("\x1b[0;33mWARN\x1b[0m ", $fmt, "\n"), $($args)+)
+    });
+}
+
+#[macro_export]
+macro_rules! error {
+    ($fmt:expr) => ({
+        $crate::print!(concat!("\x1b[0;31mERRO\x1b[0m ", $fmt, "\n"))
+    });
+    ($fmt:expr, $($args:tt)+) => ({
+        $crate::print!(concat!("\x1b[0;31mERRO\x1b[0m ", $fmt, "\n"), $($args)+)
+    });
 }
 
 pub struct Console;
 
 impl Write for Console {
     fn write_str(&mut self, s: &str) -> Result {
-        if sbi::is_debug_console_supported() {
+        if board::this_board()
+            .see()
+            .is_extension_supported(SbiExtension::DebugConsole)
+        {
             match sbi::debug_console_write(s) {
                 Ok(_res) => Ok(()),
                 Err(_err) => Err(Error::default()),
