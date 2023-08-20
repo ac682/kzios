@@ -1,22 +1,22 @@
 use core::fmt::Display;
 
 use alloc::{borrow::ToOwned, string::String};
-use dtb_parser::{prop::PropertyValue, DeviceTree};
+use dtb_parser::{prop::PropertyValue, traits::FindPropertyValue, DeviceTree};
 use spin::Once;
 
-use crate::info;
+use self::{device::DeviceMap, see::SbiInfo};
 
-use self::{see::SbiInfo, device::DeviceMap};
-
-pub mod see;
 pub mod device;
+pub mod see;
 
 static mut BOARD: Once<Board> = Once::new();
+static mut IS_BOARD_READY: bool = false;
 
 pub struct Board {
     model: String,
     see: SbiInfo,
-    devices: DeviceMap
+    tree: DeviceTree,
+    devices: DeviceMap,
 }
 
 impl Board {
@@ -26,10 +26,12 @@ impl Board {
         } else {
             "Unknown"
         };
+        let map = DeviceMap::from_device_tree(&device);
         Ok(Self {
             model: model.to_owned(),
             see: SbiInfo::new(),
-            devices: DeviceMap::from_device_tree(device)
+            tree: device,
+            devices: map,
         })
     }
 
@@ -41,7 +43,11 @@ impl Board {
         &self.see
     }
 
-    pub fn devices(&self) -> &DeviceMap{
+    pub fn tree(&self) -> &DeviceTree {
+        &self.tree
+    }
+
+    pub fn devices(&self) -> &DeviceMap {
         &self.devices
     }
 }
@@ -58,19 +64,23 @@ impl Display for Board {
             self.see.impl_version()
         )?;
         writeln!(f, "Device: ")?;
-        writeln!(f, "Cpu Count: {}", self.devices.cpus().len())
+        writeln!(f, "Cpu count: {}", self.devices.cpus().len())?;
+        writeln!(f, "Peripheral count: {}", self.devices.peripherals().len())
     }
 }
 
-pub fn init(dtb: DeviceTree){
+pub fn init(dtb: DeviceTree) {
     let board = Board::from_device_tree(dtb).unwrap();
     unsafe {
+        IS_BOARD_READY = true;
         BOARD.call_once(|| board);
-        let reference = BOARD.get().unwrap();
-        info!("Board information\n{}", reference);
     }
 }
 
 pub fn this_board() -> &'static Board {
     unsafe { BOARD.get().unwrap() }
+}
+
+pub fn is_board_ready() -> bool {
+    unsafe { IS_BOARD_READY }
 }

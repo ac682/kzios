@@ -21,6 +21,8 @@ const HEAP_ORDER: usize = 64;
 static mut HEAP_ALLOCATOR: LockedHeapWithRescue<HEAP_ORDER> =
     LockedHeapWithRescue::new(heap_rescue);
 
+const LOGO: &str = include_str!("../banner.txt");
+
 #[lang = "start"]
 fn rust_start<T: Termination + 'static>(
     main: fn() -> T,
@@ -36,6 +38,7 @@ fn rust_start<T: Termination + 'static>(
         HEAP_ALLOCATOR.lock().init(heap_start, size);
     }
     early_init(dtb_addr);
+    println!("{}", LOGO);
     kernel_init();
     main();
     hart::start_all();
@@ -64,6 +67,10 @@ fn early_init(dtb_addr: usize) {
             }
         }
     }
+    // debug!(
+    //     "{}",
+    //     board::this_board().devices()
+    // );
 }
 
 fn kernel_init() {

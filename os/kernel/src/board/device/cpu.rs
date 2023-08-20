@@ -1,4 +1,4 @@
-use dtb_parser::{node::DeviceTreeNode, prop::PropertyValue};
+use dtb_parser::{node::DeviceTreeNode, prop::PropertyValue, traits::FindPropertyValue};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MmuType {
@@ -71,7 +71,7 @@ impl Cpu {
                     return None;
                 };
                 let mmu = if let Some(PropertyValue::String(m)) = node.value("mmu-type") {
-                    match *m {
+                    match (*m).as_str() {
                         "riscv,sv32" => MmuType::Sv32,
                         "riscv,sv39" => MmuType::Sv39,
                         "riscv,sv48" => MmuType::Sv48,
@@ -82,7 +82,7 @@ impl Cpu {
                     MmuType::Bare
                 };
                 let isa = if let Some(PropertyValue::String(isa_str)) = node.value("riscv,isa") {
-                    if let Some(i) = Isa::from_str(*isa_str) {
+                    if let Some(i) = Isa::from_str((*isa_str).as_str()) {
                         i
                     } else {
                         return None;
@@ -90,12 +90,12 @@ impl Cpu {
                 } else {
                     return None;
                 };
-                let freq = if let Some(PropertyValue::Integer(f)) = node.value("clock-frequency"){
+                let freq = if let Some(PropertyValue::Integer(f)) = node.value("clock-frequency") {
                     *f as usize
-                }else{
-                    if let Some(t) = timebase_frequency{
+                } else {
+                    if let Some(t) = timebase_frequency {
                         *t
-                    }else{
+                    } else {
                         return None;
                     }
                 };
@@ -113,19 +113,19 @@ impl Cpu {
         }
     }
 
-    pub fn id(&self) -> usize{
+    pub fn id(&self) -> usize {
         self.hartid
     }
 
-    pub fn freq(&self) -> usize{
+    pub fn freq(&self) -> usize {
         self.freq
     }
 
-    pub fn mmu(&self) -> MmuType{
+    pub fn mmu(&self) -> MmuType {
         self.mmu
     }
 
-    pub fn isa(&self) -> &Isa{
+    pub fn isa(&self) -> &Isa {
         &self.isa
     }
 }

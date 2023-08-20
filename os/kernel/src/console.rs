@@ -76,9 +76,10 @@ pub struct Console;
 
 impl Write for Console {
     fn write_str(&mut self, s: &str) -> Result {
-        if board::this_board()
-            .see()
-            .is_extension_supported(SbiExtension::DebugConsole)
+        if board::is_board_ready()
+            && board::this_board()
+                .see()
+                .is_extension_supported(SbiExtension::DebugConsole)
         {
             match sbi::debug_console_write(s) {
                 Ok(_res) => Ok(()),

@@ -18,7 +18,7 @@ num-traits = { version = "0.2", default-features = false }
 num-derive = "0.4"
 # will colored supports no_std? https://github.com/colored-rs/colored/issues/140
 # colored = "2.0"
-dtb_parser = { path = "../../submodules/dtb_parser" }
+dtb_parser = { path = "../../submodules/dtb_parser", default-features = false}
 spin = "0.9"
 hashbrown = "0.14"
 flagset = "0.4"
