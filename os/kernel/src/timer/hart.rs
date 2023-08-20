@@ -1,4 +1,4 @@
-use crate::{board, sbi};
+use crate::sbi;
 
 use super::Timer;
 
@@ -46,10 +46,7 @@ impl Timer for HartTimer {
         }
         self.last_ticks = ticks;
         let interval = ticks * self.frequency / TICKS_PER_SEC;
-        if board::this_board()
-            .see()
-            .is_extension_supported(sbi::SbiExtension::Time)
-        {
+        if sbi::is_time_supported() {
             sbi::set_timer(interval).expect("sbi timer system broken");
         } else {
             sbi::legacy_set_timer(interval);

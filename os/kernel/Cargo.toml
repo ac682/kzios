@@ -23,7 +23,6 @@ spin = "0.9"
 hashbrown = "0.14"
 flagset = "0.4"
 elf_rs = "0.3"
-tar-no-std = "0.2"
 strum = {version = "0.25", default-features = false}
 strum_macros = "0.25"
 semver = {version = "1.0", default-features = false}

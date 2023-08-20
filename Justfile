@@ -19,7 +19,7 @@ TARGET_OS := "riscv64gc-unknown-none-elf"
 TARGET_USER := "riscv64gc-unknown-erhino-elf"
 TARGET_DIR := invocation_directory()/"artifacts"
 
-KERNEL_ELF := TARGET_DIR/"erhino_kernel"
+KERNEL_ELF := TARGET_DIR/"erhino_"+MODEL
 KERNEL_BIN := KERNEL_ELF+".bin"
 
 DTB := TARGET_DIR/"device.dtb"
@@ -74,7 +74,7 @@ build_opensbi options:
 build_kernel: 
     @echo -e "\033[0;36mBuild kernel: {{PLATFORM}}\033[0m"
     @cp "{{MEMORY_SCRIPT}}" "{{TARGET_DIR}}"
-    @cd os && RUSTFLAGS="{{RUSTFLAGS_OS}}" cargo build --bin erhino_kernel {{RELEASE}} -Z unstable-options --out-dir {{TARGET_DIR}}
+    @cd os && RUSTFLAGS="{{RUSTFLAGS_OS}}" cargo build --bin erhino_{{MODEL}} {{RELEASE}} -Z unstable-options --out-dir {{TARGET_DIR}}
     @rust-objcopy {{KERNEL_ELF}} -S -O binary {{KERNEL_BIN}} -B=riscv64
     @echo -e "\033[0;32mKernel build successfully!\033[0m"
 
@@ -83,7 +83,7 @@ build_k210: && (build_opensbi "PLATFORM=kendryte/k210 FW_PAYLOAD=y FW_PAYLOAD_OF
     @just PLATFORM=kendryte MODEL=k210 make_dtb
     @cp '{{OPENSBI_BUILD_DIR}}/platform/kendryte/k210/firmware/fw_payload.bin' '{{TARGET_DIR}}'
 
-run_qemu +EXPOSE="":
+run_qemu +EXPOSE="": build_generic
     @echo -e "\033[0;36mQEMU: Simulating\033[0m"
     @{{QEMU_LAUNCH}} {{EXPOSE}}
 
@@ -102,10 +102,10 @@ build_generic: && (build_opensbi "PLATFORM=generic FW_JUMP=y FW_JUMP_ADDR=0x8020
 run_k210: build_k210
     @just PLATFORM=kendryte MODEL=k210 run_renode
 
-run_sifive_u: build_generic
+run_sifive_u: 
     @just PLATFORM=qemu MODEL=sifive_u run_qemu
 
-run_virt: build_generic
+run_virt: 
     @just PLATFORM=qemu MODEL=virt run_qemu
 
 flash_k210: build_k210

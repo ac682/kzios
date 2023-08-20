@@ -1,5 +1,4 @@
 use erhino_shared::proc::Tid;
-use riscv::register::satp;
 use spin::Once;
 
 use crate::{

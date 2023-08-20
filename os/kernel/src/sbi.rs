@@ -242,3 +242,26 @@ pub fn debug_console_write(text: &str) -> SbiResult {
 pub fn debug_console_write_byte(byte: u8) -> SbiResult {
     sbi_call(SbiExtension::DebugConsole, 2, byte as usize, 0 as usize, 0)
 }
+
+static mut TIME_SUPPORTED: bool = false;
+static mut DEBUG_CONSOLE_SUPPORTED: bool = false;
+
+pub fn is_debug_console_supported() -> bool {
+    unsafe { DEBUG_CONSOLE_SUPPORTED }
+}
+
+pub fn is_time_supported() -> bool {
+    unsafe { TIME_SUPPORTED }
+}
+pub fn init() {
+    if let Ok(res) = sbi_probe_extension(SbiExtension::DebugConsole) {
+        unsafe {
+            DEBUG_CONSOLE_SUPPORTED = res != 0;
+        }
+    }
+    if let Ok(res) = sbi_probe_extension(SbiExtension::Time) {
+        unsafe {
+            TIME_SUPPORTED = res != 0;
+        }
+    }
+}

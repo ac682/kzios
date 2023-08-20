@@ -1,10 +1,9 @@
-use core::fmt::{Arguments, Error, Result, Write};
+use core::fmt::{Arguments, Write};
 
 use erhino_shared::sync::DataLock;
 
 use crate::{
-    board,
-    sbi::{self, SbiExtension},
+    sbi::{self},
     sync::hart::HartLock,
 };
 
@@ -75,15 +74,11 @@ macro_rules! error {
 pub struct Console;
 
 impl Write for Console {
-    fn write_str(&mut self, s: &str) -> Result {
-        if board::is_board_ready()
-            && board::this_board()
-                .see()
-                .is_extension_supported(SbiExtension::DebugConsole)
-        {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        if sbi::is_debug_console_supported() {
             match sbi::debug_console_write(s) {
                 Ok(_res) => Ok(()),
-                Err(_err) => Err(Error::default()),
+                Err(_err) => Err(core::fmt::Error::default()),
             }
         } else {
             for i in s.chars() {
