@@ -1,7 +1,5 @@
 /dts-v1/;
 
-/include/ "../generic.dtsi"
-
 / {
     #address-cells = <0x02>;
 	#size-cells = <0x02>;
@@ -149,6 +147,11 @@
 				};
 			};
 		};
+	};
+
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x00 0x80000000 0x00 0x8000000>;
 	};
 
 	soc {

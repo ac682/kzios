@@ -41,7 +41,6 @@ fn rust_start<T: Termination + 'static>(
     println!("{}", LOGO);
     kernel_init();
     main();
-    println!("\x1b[0;32m=LINK^START=\x1b[0m");
     hart::start_all();
     hart::enter_user();
 }

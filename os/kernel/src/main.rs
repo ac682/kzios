@@ -4,19 +4,21 @@
 
 use core::arch::global_asm;
 
-pub use erhino_shared as shared;
-
 extern crate alloc;
 
-pub mod console;
+mod console;
 mod external;
 mod hart;
 mod mm;
 mod rt;
-pub mod sbi;
+mod sbi;
 mod sync;
 mod task;
 mod timer;
 mod trap;
 
 global_asm!(include_str!("assembly.asm"));
+
+pub fn main() {
+    println!("\x1b[0;32m=LINK^START=\x1b[0m");
+}

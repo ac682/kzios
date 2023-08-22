@@ -64,6 +64,7 @@
 			"PUTCHAR",
 			"RAII",
 			"ramfs",
+			"renode",
 			"rinlib",
 			"riscv",
 			"Rootfs",
