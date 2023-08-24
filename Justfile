@@ -46,6 +46,8 @@ clean:
     if [ -d "artifacts" ]; then
     	rm -r artifacts
     fi
+    cargo clean --manifest-path os/Cargo.toml
+    cargo clean --manifest-path user/Cargo.toml
 
 artifact_dir: 
     #!/usr/bin/env bash
@@ -71,7 +73,7 @@ build_user: artifact_dir
     @cd user && RUSTFLAGS="{{RUSTFLAGS_USER}}" cargo build --bins {{RELEASE}} -Z unstable-options --out-dir "{{TARGET_DIR}}/initfs"
     @echo -e "\033[0;32mUser space programs build successfully!\033[0m"
 
-build_initfs: build_user
+make_initfs: build_user
     @cd "{{TARGET_DIR}}/initfs" && tar -cf ../initfs.tar *
 
 build_opensbi options:
@@ -81,7 +83,7 @@ build_opensbi options:
     @cp {{OPENSBI_BUILD_DIR}}/platform/generic/firmware/fw_*.elf '{{TARGET_DIR}}'
     @echo -e "\033[0;32mOpenSBI build successfully!\033[0m"
 
-build_kernel: artifact_dir build_initfs
+build_kernel: make_initfs
     @echo -e "\033[0;36mBuild kernel: {{PLATFORM}}\033[0m"
     @cp "{{MEMORY_SCRIPT}}" "{{TARGET_DIR}}"
     @cd os && RUSTFLAGS="{{RUSTFLAGS_OS}}" cargo build --bin erhino_kernel {{RELEASE}} -Z unstable-options --out-dir {{TARGET_DIR}}
@@ -93,7 +95,8 @@ build_k210: && (build_opensbi "PLATFORM=kendryte/k210 FW_PAYLOAD=y FW_PAYLOAD_OF
     @just PLATFORM=kendryte MODEL=k210 make_dtb
     @cp '{{OPENSBI_BUILD_DIR}}/platform/kendryte/k210/firmware/fw_payload.bin' '{{TARGET_DIR}}'
 
-run_qemu +EXPOSE="": build_generic make_sdcard
+# make_sdcard 可以先稍稍
+run_qemu +EXPOSE="": build_generic
     @echo -e "\033[0;36mQEMU: Simulating\033[0m"
     @{{QEMU_LAUNCH}} {{EXPOSE}}
 

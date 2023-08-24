@@ -4,7 +4,7 @@ use buddy_system_allocator::LockedFrameAllocator;
 use erhino_shared::mem::PageNumber;
 use spin::Once;
 
-use crate::external::{_memory_end, _ramfs_end};
+use crate::external::{_memory_end, _ramfs_end, _frame_start};
 
 use super::page::{PAGE_BITS, PAGE_SIZE};
 
@@ -39,7 +39,7 @@ impl Drop for FrameTracker {
 }
 
 pub fn init() {
-    let free_start: usize = _ramfs_end as usize >> PAGE_BITS;
+    let free_start: usize = _frame_start as usize >> PAGE_BITS;
     let free_end = _memory_end as usize >> PAGE_BITS;
     unsafe {
         let allocator = LockedFrameAllocator::new();

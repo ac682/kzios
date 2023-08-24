@@ -10,6 +10,7 @@ extern "C" {
     pub fn _kernel_end();
     pub fn _ramfs_start();
     pub fn _ramfs_end();
+    pub fn _frame_start();
     pub fn _memory_end();
 
     pub fn _kernel_trap();

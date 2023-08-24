@@ -52,10 +52,9 @@ SECTIONS
     } > RAM
 
     .ramfs : ALIGN(4096) {
-        PROVIDE(_ramfs_start = .);
         *(.initfs)
         . = ALIGN(4096);
-        PROVIDE(_ramfs_end = .);
+        PROVIDE(_frame_start = .);
     } > RAM
 
     /DISCARD/ : {

@@ -2,7 +2,11 @@
 .attribute arch, "rv64gc"
 
 .section .initfs
-.incbin "../artifacts/initfs.tar"
+.global _ramfs_end
+.global _ramfs_start
+_ramfs_start:
+    .incbin "../artifacts/initfs.tar"
+_ramfs_end:
 
 .section .text.init
 .global _start

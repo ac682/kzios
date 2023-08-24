@@ -6,7 +6,12 @@ use core::{arch::global_asm, ptr::slice_from_raw_parts};
 
 use tar_no_std::TarArchiveRef;
 
-use crate::{external::{_ramfs_start, _ramfs_end}, task::proc::Process, mm::{frame, page::PAGE_BITS}, hart::add_process};
+use crate::{
+    external::{_frame_start, _ramfs_end, _ramfs_start},
+    hart::add_process,
+    mm::{frame, page::PAGE_BITS},
+    task::proc::Process,
+};
 
 extern crate alloc;
 
@@ -27,7 +32,6 @@ global_asm!(include_str!("assembly.asm"));
 
 pub fn main() {
     println!("{}", BANNER);
-    // device
     // load program with tar-no-std
     let ramfs = unsafe {
         &*slice_from_raw_parts(
@@ -38,15 +42,14 @@ pub fn main() {
     let archive = TarArchiveRef::new(ramfs);
     let systems = archive.entries();
     for system in systems {
-        println!("{}", system.filename());
         let process = Process::from_elf(system.data()).unwrap();
         add_process(process);
     }
     // create initfs in vfs
     // recycle initfs
     frame::add_frame(
-        _ramfs_start as usize >> PAGE_BITS,
         _ramfs_end as usize >> PAGE_BITS,
+        _frame_start as usize >> PAGE_BITS,
     );
     println!("\x1b[0;32m=LINK^START=\x1b[0m");
 }
