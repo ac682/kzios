@@ -28,8 +28,8 @@ SDCARD := TARGET_DIR/"sdcard.img"
 OPENSBI_BUILD_DIR := invocation_directory()/"submodules/opensbi/build"
 
 # qemu
-QEMU_OPTIONS := if MODEL == "sifive_u" { "-smp cores=5 -dtb '"+DTB+"'" } else { "-smp cores=4" }
-QEMU_LAUNCH := "qemu-system-riscv64 -M "+MODEL+" -nographic -kernel '"+KERNEL_ELF+"' -drive file='"+SDCARD+"',if=sd,format=raw "+QEMU_OPTIONS
+QEMU_OPTIONS := if MODEL == "sifive_u" { "-smp cores=5 -dtb '"+DTB+"' -drive file='"+SDCARD+"',if=sd,format=raw" } else { "-smp cores=4" }
+QEMU_LAUNCH := "qemu-system-riscv64 -M "+MODEL+" -nographic -kernel '"+KERNEL_ELF+"' "+QEMU_OPTIONS
 
 # gdb
 GDB_BINARY := "gdb-multiarch"
@@ -81,14 +81,12 @@ build_opensbi options:
     @cp {{OPENSBI_BUILD_DIR}}/platform/generic/firmware/fw_*.elf '{{TARGET_DIR}}'
     @echo -e "\033[0;32mOpenSBI build successfully!\033[0m"
 
-build_kernel: artifact_dir
+build_kernel: artifact_dir build_initfs
     @echo -e "\033[0;36mBuild kernel: {{PLATFORM}}\033[0m"
     @cp "{{MEMORY_SCRIPT}}" "{{TARGET_DIR}}"
     @cd os && RUSTFLAGS="{{RUSTFLAGS_OS}}" cargo build --bin erhino_kernel {{RELEASE}} -Z unstable-options --out-dir {{TARGET_DIR}}
     @rust-objcopy {{KERNEL_ELF}} -S -O binary {{KERNEL_BIN}} -B=riscv64
     @echo -e "\033[0;32mKernel build successfully!\033[0m"
-
-
 
 build_k210: && (build_opensbi "PLATFORM=kendryte/k210 FW_PAYLOAD=y FW_PAYLOAD_OFFSET=0x20000 FW_PAYLOAD_PATH="+KERNEL_BIN+" FW_PAYLOAD_FDT_PATH="+DTB+"") 
     @just PLATFORM=kendryte MODEL=k210 build_kernel

@@ -15,7 +15,7 @@ use crate::{
     mm::{page::PAGE_BITS, ProcessAddressRegion, KERNEL_SATP},
     println, sbi,
     task::{
-        proc::{ProcessHealth, ProcessMemoryError},
+        proc::{Process, ProcessHealth, ProcessMemoryError},
         sched::{unfair::UnfairScheduler, ScheduleContext, Scheduler},
         thread::Thread,
     },
@@ -56,7 +56,7 @@ impl<T: Timer, S: Scheduler> ApplicationHart<T, S> {
         }
     }
 
-    pub fn id(&self) -> usize{
+    pub fn id(&self) -> usize {
         self.id
     }
 
@@ -112,7 +112,7 @@ impl<T: Timer, S: Scheduler> ApplicationHart<T, S> {
         unsafe { _park() }
     }
 
-    pub fn uptime(&self) -> usize{
+    pub fn uptime(&self) -> usize {
         self.timer.uptime() / self.timer.tick_freq()
     }
 
@@ -259,9 +259,9 @@ impl<T: Timer, S: Scheduler> ApplicationHart<T, S> {
 
 pub fn register(hartid: usize, freq: usize) {
     let harts = unsafe { &mut HARTS };
-    if hartid > harts.len(){
+    if hartid > harts.len() {
         let diff = hartid - harts.len();
-        for _ in 0..diff{
+        for _ in 0..diff {
             harts.push(HartKind::Disabled);
         }
     }
@@ -305,7 +305,11 @@ pub fn get_hart(id: usize) -> &'static mut HartKind {
         if id < HARTS.len() {
             &mut HARTS[id as usize]
         } else {
-            panic!("reference to hart id {} is out of bound {}", id, HARTS.len());
+            panic!(
+                "reference to hart id {} is out of bound {}",
+                id,
+                HARTS.len()
+            );
         }
     }
 }
@@ -328,5 +332,11 @@ pub fn enter_user() -> ! {
         hart.enter_user()
     } else {
         panic!("hart #{} does not support application mode", hartid())
+    }
+}
+
+pub fn add_process(proc: Process) {
+    if let HartKind::Application(hart) = this_hart() {
+        hart.scheduler.add(proc, None);
     }
 }

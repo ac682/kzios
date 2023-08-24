@@ -51,6 +51,13 @@ SECTIONS
         PROVIDE(_kernel_end = .);
     } > RAM
 
+    .ramfs : ALIGN(4096) {
+        PROVIDE(_ramfs_start = .);
+        *(.initfs)
+        . = ALIGN(4096);
+        PROVIDE(_ramfs_end = .);
+    } > RAM
+
     /DISCARD/ : {
         *(.eh_frame)
     }

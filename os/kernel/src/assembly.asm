@@ -1,6 +1,9 @@
 .option norvc
 .attribute arch, "rv64gc"
 
+.section .initfs
+.incbin "../artifacts/initfs.tar"
+
 .section .text.init
 .global _start
 _start:
