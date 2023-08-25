@@ -3,21 +3,21 @@ ENTRY(main)
 
 SECTIONS
 {
-  .text : ALIGN(8) {
+  .text : ALIGN(16) {
     *(.text)
   }
 
-  .rodata : ALIGN(8) {
+  .rodata : ALIGN(16) {
     *(.srodata)
     *(.rodata)
   }
 
-  .data : ALIGN(8) {
+  .data : ALIGN(16) {
     *(.sdata)
     *(.data)
   }
 
-  .bss (NOLOAD) : ALIGN(8) {
+  .bss (NOLOAD) : ALIGN(16) {
     PROVIDE(_bss_start = .);
     *(.sbss)
     *(.bss)

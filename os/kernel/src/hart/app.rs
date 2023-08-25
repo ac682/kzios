@@ -192,6 +192,7 @@ impl<T: Timer, S: Scheduler, R: RandomGenerator> ApplicationHart<T, S, R> {
                         let length = syscall.arg1;
                         match process.read(address, length) {
                             Ok(buffer) => {
+                                println!("addr_{:#x}:{:?}", address, buffer);
                                 if let Ok(str) = String::from_utf8(buffer) {
                                     println!(
                                         "DBG#{} {}({}): {}",

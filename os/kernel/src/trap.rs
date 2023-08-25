@@ -170,10 +170,10 @@ unsafe fn handle_user_trap(cause: Scause, val: usize) -> (usize, Address) {
                     val as Address,
                     MemoryOperation::Execute,
                 )),
-                _ => todo!("unknown exception: {}", cause.bits()),
+                _ => unimplemented!("unknown exception: {}:{:#x}", cause.bits(), val),
             },
             _ => {
-                unimplemented!("unknown trap from user: {}", cause.bits())
+                unimplemented!("unknown trap from user: {}:{:#x}", cause.bits(), val)
             }
         }
         hart.arranged_context()

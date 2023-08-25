@@ -13,7 +13,9 @@ macro_rules! debug
 }
 pub fn debug(args: Arguments) {
     let str = format(args);
-    unsafe { if let Err(_) = sys_debug(&str) {
-        // nothing happens
-    } }
+    unsafe {
+        if let Err(_) = sys_debug(str.as_str()) {
+            // nothing happens
+        }
+    }
 }

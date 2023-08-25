@@ -1,4 +1,4 @@
-use core::{alloc::Layout, panic::PanicInfo};
+use core::{alloc::Layout, arch::asm, panic::PanicInfo};
 
 use buddy_system_allocator::{Heap, LockedHeapWithRescue};
 use erhino_shared::proc::Termination;
@@ -23,16 +23,6 @@ fn lang_start<T: Termination + 'static>(
     _: u8,
 ) -> isize {
     unsafe {
-        extern "C" {
-            fn _bss_start();
-            fn _bss_end();
-        }
-        let pointer = _bss_start as *mut u8;
-        for i in 0..(_bss_end as usize - _bss_start as usize) {
-            pointer.add(i).write(0);
-        }
-    }
-    unsafe {
         let offset = sys_extend(INITIAL_HEAP_SIZE).expect("the first extend call failed");
         HEAP_ALLOCATOR
             .lock()
@@ -50,9 +40,10 @@ fn lang_start<T: Termination + 'static>(
 fn handle_panic(info: &PanicInfo) -> ! {
     if let Some(location) = info.location() {
         debug!(
-            "Panicking: file {}, {}",
+            "Panicking: file {}, {}: {}",
             location.file(),
-            location.line()
+            location.line(),
+            info.message().unwrap()
         );
     } else {
         debug!("Panicking: no information available.");
