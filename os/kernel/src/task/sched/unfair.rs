@@ -347,7 +347,7 @@ impl ProcessTable {
     pub const fn new() -> Self {
         Self {
             generation: AtomicUsize::new(0),
-            pid_generator: AtomicUsize::new(0),
+            pid_generator: AtomicUsize::new(1),
             head: None,
             head_lock: SpinLock::new(),
             last: None,
@@ -372,10 +372,10 @@ impl ProcessTable {
         };
         let layout = ProcessLayout::new(
             PageEntryImpl::top_address() & !0xFFF,
-            PageEntryImpl::space_size(),
-            proc.break_point,
+            proc.stack_point(),
+            proc.break_point(),
         );
-        let main = Thread::new(proc.entry_point);
+        let main = Thread::new(proc.entry_point());
         let mut cell = ProcessCell::new(proc, pid, parent_id, layout);
         cell.add(main, hartid);
         self.add_cell(cell);
@@ -535,7 +535,7 @@ impl Scheduler for UnfairScheduler {
     fn add(&mut self, proc: Process, parent: Option<Pid>) -> Pid {
         let table = unsafe { &mut PROC_TABLE };
         let pid = table.add(proc, parent, self.hartid);
-        hart::awake_idle();
+        hart::app::awake_idle();
         pid
     }
 

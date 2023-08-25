@@ -23,6 +23,11 @@ pub enum SystemCallError {
     MisalignedAddress = 0x21,
     /// The region accessed is not available
     MemoryNotAccessible = 0x22,
+    // Special operations
+    /// Specific operation cannot be applied due to bad reference
+    ObjectNotFound = 0x30,
+    /// Found but owned by others
+    ObjectNotAccessible = 0x31,
 }
 
 /// Predefined system calls
@@ -35,21 +40,17 @@ pub enum SystemCall {
     // System reserved
     /// Undefined behavior in release environment
     Debug = 0x00,
-    /// Write to defined output stream
-    Write = 0x01,
-    /// Read from defined input stream
-    Read = 0x02,
     // Process control
     /// Finalized process notifies kernel to cleanup
     Exit = 0x10,
     /// Fetch a process's information and fill in the [super::proc::ProcessInfo] struct
     Inspect = 0x14,
     /// Fetch the current process's information and fill in the [super::proc::ProcessInfo] struct
-    InspectMyself = 0x16,
-    /// Replace the process's execution image with the new one from the bytes
-    ExecuteBytes = 0x1A,
-    /// Replace the process's execution image with the new one from the file
-    ExecuteFile = 0x1B,
+    InspectMyself = 0x15,
+    /// Spawn a process from the given bytes
+    ExecuteBytes = 0x16,
+    /// Spawn a process from the file
+    ExecuteFile = 0x17,
     // Thread
     /// Finalized thread notifies kernel to cleanup
     ThreadExit = 0x20,
@@ -68,24 +69,26 @@ pub enum SystemCall {
     SignalSend = 0x31,
     /// Set signal handler for the current process
     SignalSet = 0x32,
-    // IPC
+    // Messaging
     /// Send a message carrying a huge payload then block until message received
     Send = 0x40,
     /// Block and check if a message enter then retrieve payload
     Receive = 0x41,
     /// IDK
     Notify = 0x42,
-    // IPC for services
-    /// Register a service. Requires Service permission
-    ServiceRegister = 0x4A,
-    /// Find a service's pid
-    ServiceQuery = 0x4B,
     // Process memory
     /// Map a range of virtual addresses for the process with kernel served pages
-    Extend = 0x60,
+    Extend = 0x50,
     /// Map a range of virtual addresses for the process with specific range of physical addresses
     /// Aka. IOMap, Memory permission required
     Map = 0x51,
     /// Discard and tell kernel to reuse a range of virtual addresses
     Free = 0x52,
+    //  Tunnel
+    /// Allocate a key-marked random page
+    TunnelBuild = 0x60,
+    /// Link a allocated page with a key
+    TunnelLink = 0x61,
+    /// Dispose the tunnel and restore the slot
+    TunnelDispose = 0x62
 }

@@ -17,3 +17,5 @@ pub mod proc;
 pub mod service;
 /// Locks
 pub mod sync;
+/// Filesystem abstract layer
+pub mod fal;

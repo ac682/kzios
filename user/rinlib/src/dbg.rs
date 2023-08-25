@@ -5,7 +5,7 @@ use alloc::fmt::format;
 use crate::call::sys_debug;
 
 #[macro_export]
-macro_rules! dbg
+macro_rules! debug
 {
 	($($arg:tt)*) => {{
 		$crate::dbg::debug(format_args!($($arg)*));

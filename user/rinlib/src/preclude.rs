@@ -1,1 +1,1 @@
-pub use crate::dbg;
+pub use crate::debug;

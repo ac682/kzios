@@ -23,4 +23,8 @@ SECTIONS
     *(.bss)
     PROVIDE(_bss_end = .);
   }
+
+  /DISCARD/ : {
+    *(.eh_frame)
+  }
 }

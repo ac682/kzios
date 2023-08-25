@@ -3,5 +3,6 @@
 use rinlib::preclude::*;
 
 fn main() {
-    dbg!("Hello, pm!");
+    debug!("Hello, pm!");
+    panic!("Panic in panic");
 }

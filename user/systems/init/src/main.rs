@@ -3,5 +3,5 @@
 use rinlib::preclude::*;
 
 fn main() {
-    dbg!("Hello, init!");
+    debug!("Hello, init!");
 }

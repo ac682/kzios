@@ -29,6 +29,7 @@ pub struct SystemCallRequest<'context> {
 impl<'context> SystemCallRequest<'context> {
     pub fn write_error(&mut self, error: SystemCallError) {
         self.trapframe.x[10] = error as u64;
+        self.trapframe.x[11] = 0;
     }
 
     pub fn write_response(&mut self, ret: usize) {

@@ -52,7 +52,7 @@ SECTIONS
     } > RAM
 
     .ramfs : ALIGN(4096) {
-        *(.initfs)
+        KEEP(*(.initfs))
         . = ALIGN(4096);
         PROVIDE(_frame_start = .);
     } > RAM

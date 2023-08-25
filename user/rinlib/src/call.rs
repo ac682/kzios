@@ -54,3 +54,15 @@ pub unsafe fn sys_exit(code: ExitCode) -> Result<(), SystemCallError> {
 pub unsafe fn sys_thread_spawn(func_point: Address) -> Result<Tid, SystemCallError> {
     sys_call(SystemCall::ThreadSpawn, func_point, 0, 0).map(|t| t as Tid)
 }
+
+pub unsafe fn sys_tunnel_build() -> Result<usize, SystemCallError> {
+    sys_call(SystemCall::TunnelBuild, 0, 0, 0)
+}
+
+pub unsafe fn sys_tunnel_link(key: usize) -> Result<Address, SystemCallError> {
+    sys_call(SystemCall::TunnelLink, key, 0, 0)
+}
+
+pub unsafe fn sys_tunnel_dispose(key: usize) -> Result<(), SystemCallError>{
+    sys_call(SystemCall::TunnelDispose, key, 0, 0).map(|_| {})
+}

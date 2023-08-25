@@ -47,7 +47,7 @@ clean:
     	rm -r artifacts
     fi
     cargo clean --manifest-path os/Cargo.toml
-    cargo clean --manifest-path user/Cargo.toml
+    #cargo clean --manifest-path user/Cargo.toml
 
 artifact_dir: 
     #!/usr/bin/env bash
@@ -96,7 +96,7 @@ build_k210: && (build_opensbi "PLATFORM=kendryte/k210 FW_PAYLOAD=y FW_PAYLOAD_OF
     @cp '{{OPENSBI_BUILD_DIR}}/platform/kendryte/k210/firmware/fw_payload.bin' '{{TARGET_DIR}}'
 
 # make_sdcard 可以先稍稍
-run_qemu +EXPOSE="": build_generic
+run_qemu +EXPOSE="": build_kernel
     @echo -e "\033[0;36mQEMU: Simulating\033[0m"
     @{{QEMU_LAUNCH}} {{EXPOSE}}
 

@@ -1,7 +1,7 @@
 .option norvc
 .attribute arch, "rv64gc"
 
-.section .initfs
+.section .initfs, "ax", %progbits
 .global _ramfs_end
 .global _ramfs_start
 _ramfs_start:

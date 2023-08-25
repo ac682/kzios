@@ -8,7 +8,7 @@ use tar_no_std::TarArchiveRef;
 
 use crate::{
     external::{_frame_start, _ramfs_end, _ramfs_start},
-    hart::add_process,
+    hart::app::add_process,
     mm::{frame, page::PAGE_BITS},
     task::proc::Process,
 };
@@ -25,6 +25,7 @@ mod sync;
 mod task;
 mod timer;
 mod trap;
+mod rng;
 
 const BANNER: &str = include_str!("../banner.txt");
 
@@ -45,7 +46,7 @@ pub fn main() {
         let process = Process::from_elf(system.data()).unwrap();
         add_process(process);
     }
-    // create initfs in vfs
+    // create initfs in fal
     // recycle initfs
     frame::add_frame(
         _ramfs_end as usize >> PAGE_BITS,

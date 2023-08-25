@@ -7,10 +7,12 @@ use erhino_shared::{
 use flagset::FlagSet;
 
 use crate::mm::{
-    page::{PageEntryFlag, PageEntryImpl, PAGE_BITS, PAGE_SIZE},
+    page::{PageEntryFlag, PageEntryImpl, PAGE_BITS, PAGE_SIZE, PageTableEntry},
     unit::{MemoryUnit, MemoryUnitError},
     usage::MemoryUsage,
 };
+
+
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -49,9 +51,10 @@ pub enum ProcessHealth {
 pub struct Process {
     memory: MemoryUnit<PageEntryImpl>,
     pub usage: MemoryUsage,
-    pub entry_point: Address,
-    pub break_point: Address,
-    pub permissions: FlagSet<ProcessPermission>,
+    entry_point: Address,
+    break_point: Address,
+    stack_point: Address,
+    permissions: FlagSet<ProcessPermission>,
     pub health: ProcessHealth,
 }
 
@@ -62,6 +65,7 @@ impl Process {
                 permissions: ProcessPermission::All.into(),
                 entry_point: elf.entry_point() as Address,
                 break_point: 0,
+                stack_point: PageEntryImpl::space_size(),
                 memory: MemoryUnit::new().unwrap(),
                 usage: MemoryUsage::new(),
                 health: ProcessHealth::Healthy,
@@ -231,12 +235,20 @@ impl Process {
         self.memory.satp()
     }
 
-    pub fn usage(&self) -> &MemoryUsage {
-        &self.usage
-    }
-
     pub fn has_permission(&self, perm: ProcessPermission) -> bool {
         self.permissions.contains(perm)
+    }
+
+    pub fn stack_point(&self) -> Address{
+        self.stack_point
+    }
+
+    pub fn break_point(&self) -> Address{
+        self.break_point
+    }
+
+    pub fn entry_point(&self) -> Address{
+        self.entry_point
     }
 }
 

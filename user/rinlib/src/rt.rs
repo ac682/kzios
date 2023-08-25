@@ -3,7 +3,10 @@ use core::{alloc::Layout, panic::PanicInfo};
 use buddy_system_allocator::{Heap, LockedHeapWithRescue};
 use erhino_shared::proc::Termination;
 
-use crate::{call::{sys_extend, sys_exit}, dbg};
+use crate::{
+    call::{sys_exit, sys_extend},
+    debug,
+};
 
 const INITIAL_HEAP_SIZE: usize = 1 * 0x1000;
 const HEAP_ORDER: usize = 64;
@@ -20,6 +23,16 @@ fn lang_start<T: Termination + 'static>(
     _: u8,
 ) -> isize {
     unsafe {
+        extern "C" {
+            fn _bss_start();
+            fn _bss_end();
+        }
+        let pointer = _bss_start as *mut u8;
+        for i in 0..(_bss_end as usize - _bss_start as usize) {
+            pointer.add(i).write(0);
+        }
+    }
+    unsafe {
         let offset = sys_extend(INITIAL_HEAP_SIZE).expect("the first extend call failed");
         HEAP_ALLOCATOR
             .lock()
@@ -35,22 +48,20 @@ fn lang_start<T: Termination + 'static>(
 
 #[panic_handler]
 fn handle_panic(info: &PanicInfo) -> ! {
-    dbg!("Process panicking...\n");
     if let Some(location) = info.location() {
-        dbg!(
-            "file {}, {}: {}\n",
+        debug!(
+            "Panicking: file {}, {}",
             location.file(),
-            location.line(),
-            info.message().unwrap()
+            location.line()
         );
     } else {
-        dbg!("no information available.\n");
+        debug!("Panicking: no information available.");
     }
     loop {}
 }
 
 fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
-    dbg!("rescue: ");
+    debug!("rescue: ");
     let owned = heap.stats_total_bytes();
     let mut size = owned;
     while layout.size() > size {
