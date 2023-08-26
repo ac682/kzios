@@ -318,7 +318,7 @@ impl ThreadCell {
         }
     }
 
-    pub fn check_and_set_if_behind(&mut self) -> bool {
+    pub fn check_grow(&mut self) -> bool {
         let table = unsafe { &PROC_TABLE };
         if table
             .generation
@@ -330,6 +330,10 @@ impl ThreadCell {
         } else {
             false
         }
+    }
+
+    pub fn grow(&mut self) {
+        self.generation += 1;
     }
 }
 
@@ -426,6 +430,27 @@ impl ProcessTable {
         }
     }
 
+    pub fn move_next_process_until<F: Fn(&Arc<Shared<ProcessCell>>) -> bool>(
+        &self,
+        proc: &Arc<Shared<ProcessCell>>,
+        pred: F,
+        repeat: bool,
+    ) -> Option<Arc<Shared<ProcessCell>>> {
+        let mut one_proc = proc.clone();
+        let start_proc = proc.id;
+        while !pred(&one_proc) {
+            if let Some(next_proc) = self.move_next_process(&one_proc) {
+                if !repeat && next_proc.id == start_proc {
+                    return None;
+                }
+                one_proc = next_proc;
+            } else {
+                return None;
+            }
+        }
+        Some(one_proc)
+    }
+
     pub fn move_next_thread(
         &self,
         proc: &Arc<Shared<ProcessCell>>,
@@ -488,26 +513,61 @@ impl UnfairScheduler {
         }
     }
 
+    fn find_proc(&self, pid: Pid) -> Option<Arc<Shared<ProcessCell>>> {
+        let table = unsafe { &PROC_TABLE };
+        let pred = |p: &Arc<Shared<ProcessCell>>| pid == p.id;
+        if let Some((proc, _)) = &self.current {
+            table.move_next_process_until(proc, pred, false)
+        } else {
+            table.head_lock.lock();
+            let mut next_proc_option = table.head.clone();
+            table.head_lock.unlock();
+            while let Some(next_proc) = next_proc_option {
+                next_proc.head_lock.lock();
+                if let Some(thread) = &next_proc.head {
+                    next_proc.head_lock.unlock();
+                    return table.move_next_process_until(&next_proc, pred, false);
+                } else {
+                    next_proc.head_lock.unlock();
+                    next_proc_option = table.move_next_process(&next_proc);
+                }
+            }
+            None
+        }
+    }
+
     fn find_next(&self) -> Option<(Arc<Shared<ProcessCell>>, Arc<Shared<ThreadCell>>)> {
         let table = unsafe { &PROC_TABLE };
         let pred: fn(&Arc<Shared<ProcessCell>>, &Arc<Shared<ThreadCell>>) -> bool = |p, t| {
-            // state lock!
+            let mut pass = false;
+            p.state_lock.lock();
             if p.inner.health == ProcessHealth::Healthy {
                 if t.inner.state == ExecutionState::Ready && t.run_lock.try_lock() {
-                    let mutable = t.get_mut();
-                    if mutable.check_and_set_if_behind() {
-                        mutable.inner.state = ExecutionState::Running;
-                        true
+                    let thread = t.get_mut();
+                    // 如果是主线程，不在处理信号且有信号要处理则获得优先权无视代数判定（但会增加代数
+                    if t.id == 0
+                        && p.inner.signal.has_pending()
+                        && !p.inner.signal.is_handling()
+                        && p.inner.signal.has_handler()
+                    {
+                        let process = p.get_mut();
+                        let trapframe = p.struct_at::<TrapFrame>(t.trapframe);
+                        process.inner.signal.backup(trapframe);
+                        trapframe.x[10] = process.inner.signal.dequeue();
+                        trapframe.pc = p.inner.signal.handler().unwrap() as u64;
+                        thread.grow();
+                        thread.inner.state = ExecutionState::Running;
+                        pass = true;
+                    } else if thread.check_grow() {
+                        thread.inner.state = ExecutionState::Running;
+                        pass = true;
                     } else {
                         t.run_lock.unlock();
-                        false
                     }
-                } else {
-                    false
                 }
-            } else {
-                false
             }
+            p.state_lock.unlock();
+            pass
         };
         if let Some((p, t)) = &self.current {
             table.move_next_thread_until(p, t, pred, false)
@@ -539,6 +599,18 @@ impl Scheduler for UnfairScheduler {
         pid
     }
 
+    fn find<F: FnMut(&mut Process)>(&self, pid: Pid, mut action: F) -> bool {
+        if let Some(p) = self.find_proc(pid) {
+            p.state_lock.lock();
+            let mutable = p.get_mut();
+            action(&mut mutable.inner);
+            p.state_lock.unlock();
+            true
+        } else {
+            false
+        }
+    }
+
     fn is_address_in(&self, addr: Address) -> Option<ProcessAddressRegion> {
         if let Some((p, _)) = &self.current {
             p.state_lock.lock();
@@ -553,19 +625,7 @@ impl Scheduler for UnfairScheduler {
     fn schedule(&mut self) {
         // 采用 smooth 的代数算法，由于该算法存在进程间公平问题，干脆取消进程级别的公平比较，直接去保证线程公平，彻底放弃进程公平。
         if let Some((p, t)) = &self.current {
-            p.state_lock.lock();
-            if p.inner.health == ProcessHealth::Healthy && t.inner.state == ExecutionState::Running
-            {
-                let mutable = t.get_mut();
-                // ring unlocked, run locked
-                if mutable.check_and_set_if_behind() {
-                    return;
-                } else {
-                    mutable.run_lock.unlock();
-                    mutable.inner.state = ExecutionState::Ready;
-                }
-            }
-            p.state_lock.unlock();
+            t.run_lock.unlock();
         }
         let next = self.find_next();
         self.current = next;
@@ -593,8 +653,13 @@ impl Scheduler for UnfairScheduler {
                 thread: t.clone(),
             };
             func(&context);
+            if context.process.inner.signal.has_complete_uncleared() {
+                let mutable = context.process.get_mut();
+                let trapframe = mutable.struct_at::<TrapFrame>(t.trapframe);
+                mutable.inner.signal.restore(trapframe);
+                mutable.inner.signal.clear_complete();
+            }
             p.state_lock.unlock();
-            // TODO: 进程/线程状态被更新，这里可以做 clean up
         } else {
             unreachable!("it's only be called when a process requesting some system function")
         }

@@ -1,4 +1,4 @@
-use crate::sbi;
+use crate::{debug, sbi, hart};
 
 use super::Timer;
 
@@ -46,10 +46,12 @@ impl Timer for HartTimer {
         }
         self.last_ticks = ticks;
         let interval = ticks * self.frequency / TICKS_PER_SEC;
+        let time = time() + interval;
+        debug!("{},{}", hart::hartid(), time);
         if sbi::is_time_supported() {
-            sbi::set_timer(interval).expect("sbi timer system broken");
+            sbi::set_timer(time).expect("sbi timer system broken");
         } else {
-            sbi::legacy_set_timer(interval);
+            sbi::legacy_set_timer(time);
         }
     }
 }

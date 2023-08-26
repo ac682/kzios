@@ -2,17 +2,17 @@ use alloc::vec::Vec;
 use elf_rs::{Elf, ElfFile, ElfMachine, ElfType, ProgramHeaderFlags, ProgramType};
 use erhino_shared::{
     mem::{Address, MemoryRegionAttribute, PageNumber},
-    proc::{ExitCode, ProcessPermission},
+    proc::{ExitCode, ProcessPermission, SignalMap},
 };
 use flagset::FlagSet;
 
 use crate::mm::{
-    page::{PageEntryFlag, PageEntryImpl, PAGE_BITS, PAGE_SIZE, PageTableEntry},
+    page::{PageEntryFlag, PageEntryImpl, PageTableEntry, PAGE_BITS, PAGE_SIZE},
     unit::{MemoryUnit, MemoryUnitError},
     usage::MemoryUsage,
 };
 
-
+use super::ipc::signal::SignalControlBlock;
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -56,6 +56,7 @@ pub struct Process {
     stack_point: Address,
     permissions: FlagSet<ProcessPermission>,
     pub health: ProcessHealth,
+    pub signal: SignalControlBlock,
 }
 
 impl Process {
@@ -69,6 +70,7 @@ impl Process {
                 memory: MemoryUnit::new().unwrap(),
                 usage: MemoryUsage::new(),
                 health: ProcessHealth::Healthy,
+                signal: SignalControlBlock::new(),
             };
             let header = elf.elf_header();
             if header.machine() != ElfMachine::RISC_V || header.elftype() != ElfType::ET_EXEC {
@@ -239,15 +241,15 @@ impl Process {
         self.permissions.contains(perm)
     }
 
-    pub fn stack_point(&self) -> Address{
+    pub fn stack_point(&self) -> Address {
         self.stack_point
     }
 
-    pub fn break_point(&self) -> Address{
+    pub fn break_point(&self) -> Address {
         self.break_point
     }
 
-    pub fn entry_point(&self) -> Address{
+    pub fn entry_point(&self) -> Address {
         self.entry_point
     }
 }

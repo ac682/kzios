@@ -13,6 +13,8 @@ pub enum SystemCallError {
     InternalError = 0x02,
     /// Argument out of range or illegal
     IllegalArgument = 0x3,
+    /// System call can not be performed
+    FunctionNotAvailable = 0x04,
     // Role of process
     /// Process must need the permission to do the system call
     PermissionRequired = 0x10,

@@ -1,6 +1,5 @@
 use alloc::string::String;
 use flagset::{flags, FlagSet};
-use num_derive::{FromPrimitive, ToPrimitive};
 
 /// ExitCode(i64) type for process
 pub type ExitCode = isize;
@@ -10,20 +9,18 @@ pub type Pid = u32;
 /// If uniform thread-id required, It is uni_tid = ((pid << 32) + tid)
 pub type Tid = u32;
 /// SignalMap(u64) for process
-pub type Signal = u64;
+pub type SignalMap = u64;
 
-#[repr(u64)]
-#[derive(FromPrimitive, ToPrimitive)]
-/// Predefined signal numbers
-pub enum SystemSignal {
-    /// Do nothing
-    Nop = 0b1,
-    /// Interrupt current workflow but not quit
-    Interrupt = 0b10,
-    /// Request to finalize the job and quit
-    Terminate = 0b100,
-    /// Kill the process after signal handled within a period of time
-    Stop = 0b1000,
+flags! {
+    /// Predefined signal numbers
+    pub enum SystemSignal: SignalMap {
+        /// Reserved
+        None = 0,
+        /// Request to finalize the job and quit. It's a REQUEST! Use kill syscall to finalize a process without notifying
+        Terminate = 1 << 0,
+        /// Notify the process should check itself for (device interrupts, events listened)
+        Notify = 1 << 1,
+    }
 }
 
 flags! {

@@ -8,11 +8,12 @@ use alloc::{string::String, vec::Vec};
 use erhino_shared::{
     call::{SystemCall, SystemCallError},
     mem::{Address, MemoryRegionAttribute},
-    proc::ExitCode,
+    proc::{ExitCode, Pid, SignalMap},
     sync::DataLock,
 };
 
 use crate::{
+    debug,
     external::{_awaken, _park, _switch},
     mm::{
         frame,
@@ -106,6 +107,7 @@ impl<T: Timer, S: Scheduler, R: RandomGenerator> ApplicationHart<T, S, R> {
     }
 
     fn go_idle(&self) -> ! {
+        debug!("#{} idle", self.id());
         IDLE_HARTS.fetch_or(1 << self.id, Ordering::Relaxed);
         self.suspend();
         unsafe { _park() }
@@ -116,6 +118,7 @@ impl<T: Timer, S: Scheduler, R: RandomGenerator> ApplicationHart<T, S, R> {
     }
 
     pub fn enter_user(&mut self) -> ! {
+        debug!("#{} awaken", self.id());
         self.scheduler.schedule();
         self.timer.schedule_next(self.scheduler.next_timeslice());
         if let Some((trampoline, satp, trapframe)) = self.scheduler.context() {
@@ -319,6 +322,35 @@ impl<T: Timer, S: Scheduler, R: RandomGenerator> ApplicationHart<T, S, R> {
                             }
                         } else {
                             syscall.write_error(SystemCallError::ObjectNotFound);
+                        }
+                    }
+                    SystemCall::SignalSet => {
+                        let mask = syscall.arg0;
+                        let handler = syscall.arg1;
+                        ctx.process().signal.set_handler(mask as SignalMap, handler);
+                        syscall.write_response(0);
+                    }
+                    SystemCall::SignalSend => {
+                        let pid = syscall.arg0 as Pid;
+                        let signal = syscall.arg1 as SignalMap;
+                        if !self.scheduler.find(pid, |target| {
+                            if target.signal.is_accepted(signal) {
+                                target.signal.enqueue(signal);
+                                syscall.write_response(1);
+                            } else {
+                                syscall.write_response(0);
+                            }
+                        }) {
+                            syscall.write_error(SystemCallError::ObjectNotFound);
+                        }
+                    }
+                    SystemCall::SignalReturn => {
+                        let proc = ctx.process();
+                        if proc.signal.is_handling() {
+                            proc.signal.complete();
+                            syscall.write_response(0);
+                        } else {
+                            syscall.write_error(SystemCallError::FunctionNotAvailable);
                         }
                     }
                     _ => unimplemented!("unimplemented syscall: {:?}", syscall.call),

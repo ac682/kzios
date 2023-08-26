@@ -22,6 +22,7 @@ pub trait ScheduleContext {
 pub trait Scheduler {
     type Context: ScheduleContext;
     fn add(&mut self, proc: Process, parent: Option<Pid>) -> Pid;
+    fn find<F: FnMut(&mut Process)>(&self, pid: Pid, action: F) -> bool;
     fn is_address_in(&self, addr: Address) -> Option<ProcessAddressRegion>;
     fn schedule(&mut self);
     fn next_timeslice(&self) -> usize;

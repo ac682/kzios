@@ -154,7 +154,7 @@
 				"request": "launch",
 				"preLaunchTask": "launch_gdb_server",
 				"miDebuggerServerAddress": "localhost:1234",
-				"program": "${workspaceRoot}/artifacts/initfs/pm",
+				"program": "${workspaceRoot}/artifacts/erhino_kernel",
 				"cwd": "${workspaceFolder}",
 				"launchCompleteCommand": "exec-continue",
 				"environment": [],
