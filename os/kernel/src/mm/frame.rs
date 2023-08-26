@@ -4,11 +4,11 @@ use buddy_system_allocator::LockedFrameAllocator;
 use erhino_shared::mem::PageNumber;
 use spin::Once;
 
-use crate::external::{_memory_end, _ramfs_end, _frame_start};
+use crate::external::{_memory_end, _frame_start};
 
 use super::page::{PAGE_BITS, PAGE_SIZE};
 
-static mut FRAME_ALLOCATOR: Once<LockedFrameAllocator> = Once::new();
+static mut FRAME_ALLOCATOR: Once<LockedFrameAllocator<32>> = Once::new();
 
 pub struct FrameTracker {
     number: PageNumber,

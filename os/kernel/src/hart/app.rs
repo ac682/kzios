@@ -192,19 +192,9 @@ impl<T: Timer, S: Scheduler, R: RandomGenerator> ApplicationHart<T, S, R> {
                         let length = syscall.arg1;
                         match process.read(address, length) {
                             Ok(buffer) => {
-                                println!("addr_{:#x}:{:?}", address, buffer);
-                                if let Ok(str) = String::from_utf8(buffer) {
-                                    println!(
-                                        "DBG#{} {}({}): {}",
-                                        self.id,
-                                        ctx.pid(),
-                                        ctx.tid(),
-                                        str
-                                    );
-                                    syscall.write_response(length)
-                                } else {
-                                    syscall.write_error(SystemCallError::IllegalArgument)
-                                }
+                                let str = unsafe { String::from_utf8_unchecked(buffer) };
+                                println!("DBG#{} {}({}): {}", self.id, ctx.pid(), ctx.tid(), str);
+                                syscall.write_response(length)
                             }
                             Err(e) => syscall.write_error(match e {
                                 ProcessMemoryError::InaccessibleRegion => {

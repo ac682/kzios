@@ -209,7 +209,7 @@ impl Process {
         while read < length {
             if let Some(base) = self.translate(address + read) {
                 let offset = base & (PAGE_SIZE - 1);
-                let start = (base + offset) as *const u8;
+                let start = base as *const u8;
                 let space = PAGE_SIZE - offset;
                 let count = if length - read > space {
                     space

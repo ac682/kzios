@@ -98,7 +98,7 @@ fn kernel_init() {
 fn handle_panic(info: &PanicInfo) -> ! {
     if let Some(location) = info.location() {
         println!(
-            "\x1b[0;31mKernel panicking at #{}: \x1b[0m\nfile {}, {}: {}",
+            "\x1b[0;31mKernel panicking #{} \x1b[0m\nin file {} at line {}: {}",
             hart::hartid(),
             location.file(),
             location.line(),
@@ -106,7 +106,7 @@ fn handle_panic(info: &PanicInfo) -> ! {
         );
     } else {
         println!(
-            "\x1b[0;31mKernel panicking at #{}: \x1b[0mno information available.",
+            "\x1b[0;31mKernel panicking #{}: \x1b[0mno information available.",
             hart::hartid()
         );
     }

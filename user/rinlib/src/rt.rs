@@ -9,7 +9,7 @@ use crate::{
 };
 
 const INITIAL_HEAP_SIZE: usize = 1 * 0x1000;
-const HEAP_ORDER: usize = 64;
+const HEAP_ORDER: usize = 32;
 
 #[global_allocator]
 static mut HEAP_ALLOCATOR: LockedHeapWithRescue<HEAP_ORDER> =
@@ -40,7 +40,7 @@ fn lang_start<T: Termination + 'static>(
 fn handle_panic(info: &PanicInfo) -> ! {
     if let Some(location) = info.location() {
         debug!(
-            "Panicking: file {}, {}: {}",
+            "Panicking in {} at line {}: {}",
             location.file(),
             location.line(),
             info.message().unwrap()
@@ -48,7 +48,11 @@ fn handle_panic(info: &PanicInfo) -> ! {
     } else {
         debug!("Panicking: no information available.");
     }
-    loop {}
+    unsafe {
+        loop {
+            sys_exit(-1).expect("this can't be wrong");
+        }
+    }
 }
 
 fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
