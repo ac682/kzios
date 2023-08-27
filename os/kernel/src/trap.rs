@@ -133,19 +133,16 @@ fn kernel_dump() -> ! {
     let val = stval::read();
     let pc = sepc::read();
     let satp = satp::read().bits();
-    let mut memory = "memory unavailable".to_owned();
-    if let Some(unit) = unsafe { KERNEL_UNIT.get() } {
-        memory = format!("{}", unit);
-    }
     panic!(
-        "trapped!!!\ncause={},val={:#x}\nsatp={:#x},pc={:#x}\n{}",
-        cause, val, satp, pc, memory
+        "kernel trapped!\ncause={:#x},val={:#x}\nsatp={:#x},pc={:#x}",
+        cause, val, satp, pc
     )
 }
 
 #[no_mangle]
 unsafe fn handle_kernel_trap(cause: Scause, _val: usize) {
     match cause.cause() {
+        Trap::Interrupt(Interrupt::SupervisorTimer) => todo!("nested supervisor timer"),
         _ => kernel_dump(),
     }
 }
@@ -154,8 +151,8 @@ unsafe fn handle_kernel_trap(cause: Scause, _val: usize) {
 unsafe fn handle_user_trap(cause: Scause, val: usize) -> (usize, Address) {
     if let HartKind::Application(hart) = hart::this_hart() {
         match cause.cause() {
-            Trap::Interrupt(Interrupt::UserTimer) => hart.trap(TrapCause::TimerInterrupt),
-            Trap::Interrupt(Interrupt::SupervisorTimer) => todo!("nested interrupt: timer"),
+            Trap::Interrupt(Interrupt::UserTimer) => todo!("user timer"),
+            Trap::Interrupt(Interrupt::SupervisorTimer) => hart.trap(TrapCause::TimerInterrupt),
             Trap::Interrupt(Interrupt::UserSoft) => todo!("impossible user soft interrupt"),
             Trap::Exception(exception) => match exception {
                 Exception::Breakpoint => hart.trap(TrapCause::Breakpoint),

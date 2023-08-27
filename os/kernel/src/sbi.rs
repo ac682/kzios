@@ -112,6 +112,7 @@ fn legacy_call(eid: SbiExtension, arg0: usize, arg1: usize, arg2: usize) -> usiz
     }
 }
 
+#[inline]
 fn sbi_call(eid: SbiExtension, fid: usize, arg0: usize, arg1: usize, arg2: usize) -> SbiResult {
     let (error, value) = raw_call(eid, fid, arg0, arg1, arg2);
     if error == 0 {

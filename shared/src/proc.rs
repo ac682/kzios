@@ -1,5 +1,6 @@
 use alloc::string::String;
 use flagset::{flags, FlagSet};
+use num_derive::{FromPrimitive, ToPrimitive};
 
 /// ExitCode(i64) type for process
 pub type ExitCode = isize;
@@ -13,6 +14,7 @@ pub type SignalMap = u64;
 
 flags! {
     /// Predefined signal numbers
+    #[derive(FromPrimitive, ToPrimitive)]
     pub enum SystemSignal: SignalMap {
         /// Reserved
         None = 0,

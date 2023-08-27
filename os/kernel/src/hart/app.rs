@@ -106,8 +106,9 @@ impl<T: Timer, S: Scheduler, R: RandomGenerator> ApplicationHart<T, S, R> {
         sbi::hart_stop().is_ok()
     }
 
-    fn go_idle(&self) -> ! {
+    fn go_idle(&mut self) -> ! {
         debug!("#{} idle", self.id());
+        self.timer.put_off();
         IDLE_HARTS.fetch_or(1 << self.id, Ordering::Relaxed);
         self.suspend();
         unsafe { _park() }
@@ -117,7 +118,7 @@ impl<T: Timer, S: Scheduler, R: RandomGenerator> ApplicationHart<T, S, R> {
         self.timer.uptime() / self.timer.tick_freq()
     }
 
-    pub fn enter_user(&mut self) -> ! {
+    pub fn go_awaken(&mut self) -> ! {
         debug!("#{} awaken", self.id());
         self.scheduler.schedule();
         self.timer.schedule_next(self.scheduler.next_timeslice());
@@ -196,7 +197,7 @@ impl<T: Timer, S: Scheduler, R: RandomGenerator> ApplicationHart<T, S, R> {
                         match process.read(address, length) {
                             Ok(buffer) => {
                                 let str = unsafe { String::from_utf8_unchecked(buffer) };
-                                println!("DBG#{} {}({}): {}", self.id, ctx.pid(), ctx.tid(), str);
+                                println!("\x1b[0;34mUSER\x1b[0m {}({}): {}", ctx.pid(), ctx.tid(), str);
                                 syscall.write_response(length)
                             }
                             Err(e) => syscall.write_error(match e {

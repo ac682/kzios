@@ -1,4 +1,4 @@
-use crate::{debug, sbi, hart};
+use crate::{debug, hart, sbi};
 
 use super::Timer;
 
@@ -26,6 +26,14 @@ impl HartTimer {
             last_count: 0,
         }
     }
+
+    fn set_timer(&self, cycle: usize) {
+        if sbi::is_time_supported() {
+            sbi::set_timer(cycle).expect("sbi timer system broken");
+        } else {
+            sbi::legacy_set_timer(cycle);
+        }
+    }
 }
 
 impl Timer for HartTimer {
@@ -47,11 +55,11 @@ impl Timer for HartTimer {
         self.last_ticks = ticks;
         let interval = ticks * self.frequency / TICKS_PER_SEC;
         let time = time() + interval;
-        debug!("{},{}", hart::hartid(), time);
-        if sbi::is_time_supported() {
-            sbi::set_timer(time).expect("sbi timer system broken");
-        } else {
-            sbi::legacy_set_timer(time);
-        }
+        self.set_timer(time);
+    }
+
+    fn put_off(&mut self) {
+        // NOTE: 设置 time = usize::MAX 之后会 time++ 变成 0usize，直接触发，导致 put_off 失效
+        self.set_timer(usize::MAX - 1);
     }
 }

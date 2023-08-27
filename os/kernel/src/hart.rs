@@ -109,7 +109,7 @@ pub fn this_hart() -> &'static mut HartKind {
 #[no_mangle]
 pub fn enter_user() -> ! {
     if let HartKind::Application(hart) = this_hart() {
-        hart.enter_user()
+        hart.go_awaken()
     } else {
         panic!("hart #{} does not support application mode", hartid())
     }

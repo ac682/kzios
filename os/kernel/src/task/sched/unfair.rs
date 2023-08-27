@@ -9,6 +9,7 @@ use erhino_shared::{
 use flagset::FlagSet;
 
 use crate::{
+    debug,
     external::_user_trap,
     hart,
     mm::{
@@ -624,7 +625,10 @@ impl Scheduler for UnfairScheduler {
 
     fn schedule(&mut self) {
         // 采用 smooth 的代数算法，由于该算法存在进程间公平问题，干脆取消进程级别的公平比较，直接去保证线程公平，彻底放弃进程公平。
-        if let Some((p, t)) = &self.current {
+        if let Some((_, t)) = &self.current {
+            if t.inner.state == ExecutionState::Running {
+                t.get_mut().inner.state = ExecutionState::Ready;
+            }
             t.run_lock.unlock();
         }
         let next = self.find_next();

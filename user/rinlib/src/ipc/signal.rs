@@ -3,6 +3,7 @@ use erhino_shared::{
     proc::{Pid, SystemSignal},
 };
 use flagset::FlagSet;
+use num_traits::ToPrimitive;
 
 use crate::call::{sys_signal_send, sys_signal_set};
 
@@ -21,8 +22,13 @@ pub fn set_handler<S: Into<FlagSet<SystemSignal>>>(mask: S, handler: fn(SystemSi
 
 pub fn send(pid: Pid, signal: SystemSignal) -> Result<bool, SignalError> {
     unsafe {
-        let flag: FlagSet<SystemSignal> = signal.into();
-        sys_signal_send(pid, flag.bits()).map_err(|e| match e {
+        sys_signal_send(
+            pid,
+            signal
+                .to_u64()
+                .expect("cast system signal to signal map wont failed"),
+        )
+        .map_err(|e| match e {
             SystemCallError::ObjectNotFound => SignalError::ProcessNotFound,
             _ => SignalError::InternalError,
         })

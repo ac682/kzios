@@ -91,8 +91,8 @@ build_kernel: make_initfs
     @echo -e "\033[0;32mKernel build successfully!\033[0m"
 
 build_k210: && (build_opensbi "PLATFORM=kendryte/k210 FW_PAYLOAD=y FW_PAYLOAD_OFFSET=0x20000 FW_PAYLOAD_PATH="+KERNEL_BIN+" FW_PAYLOAD_FDT_PATH="+DTB+"") 
-    @just PLATFORM=kendryte MODEL=k210 build_kernel
-    @just PLATFORM=kendryte MODEL=k210 make_dtb
+    @just PLATFORM=kendryte MODEL=k210 MODE=release build_kernel
+    @just PLATFORM=kendryte MODEL=k210 MODE=release make_dtb
     @cp '{{OPENSBI_BUILD_DIR}}/platform/kendryte/k210/firmware/fw_payload.bin' '{{TARGET_DIR}}'
 
 # make_sdcard 可以先稍稍
@@ -109,21 +109,21 @@ run_qemu_dump_dtb:
     @dtc -O dts -o "{{TARGET_DIR}}/dump.dts" -I dtb "{{TARGET_DIR}}/dump.dtb"
 
 build_generic: && (build_opensbi "PLATFORM=generic FW_JUMP=y FW_JUMP_ADDR=0x80200000")
-    @just PLATFORM={{PLATFORM}} MODEL={{MODEL}} make_dtb
-    @just PLATFORM={{PLATFORM}} MODEL={{MODEL}} build_kernel
+    @just PLATFORM={{PLATFORM}} MODEL={{MODEL}} MODE={{MODE}} make_dtb
+    @just PLATFORM={{PLATFORM}} MODEL={{MODEL}} MODE={{MODE}} build_kernel
 
 run_k210: build_k210
-    @just PLATFORM=kendryte MODEL=k210 run_renode
+    @just PLATFORM=kendryte MODEL=k210 MODE=release run_renode
 
 run:
-    @just PLATFORM={{PLATFORM}} MODEL={{MODEL}} run_{{PLATFORM}}
+    @just PLATFORM={{PLATFORM}} MODEL={{MODEL}} MODE={{MODE}} run_{{PLATFORM}}
 
 flash_k210: build_k210
     @python3 -m kflash -p /dev/ttyUSB1 -b 1500000 "{{KERNEL_ELF}}_merged.bin"
     @python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct /dev/ttyUSB1 115200
 
 flash:
-    @just PLATFORM={{PLATFORM}} MODE={{MODE}} flash_{{PLATFORM}}
+    @just PLATFORM={{PLATFORM}} MODEL={{MODEL}} MODE={{MODE}} flash_{{PLATFORM}}
 
 debug: make_dtb build_kernel
     @tmux new-session -d "{{QEMU_LAUNCH}} -s -S" && tmux split-window -h "{{GDB_BINARY}} -ex 'set arch riscv:rv64' -ex 'target extended-remote localhost:1234' {{DEBUGGER_OPTIONS}} -ex 'set confirm no' -ex 'file {{KERNEL_ELF}}' -ex 'set confirm yes'" && tmux -2 attach-session -d

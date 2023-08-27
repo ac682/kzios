@@ -34,9 +34,11 @@ macro_rules! println
 #[macro_export]
 macro_rules! debug {
     ($fmt:expr) => ({
+        #[cfg(debug_assertions)]
         $crate::print!(concat!("\x1b[0;35mDEBG\x1b[0m ", $fmt, "\n"))
     });
     ($fmt:expr, $($args:tt)+) => ({
+        #[cfg(debug_assertions)]
         $crate::print!(concat!("\x1b[0;35mDEBG\x1b[0m ", $fmt, "\n"), $($args)+)
     });
 }

@@ -1,4 +1,4 @@
-use core::mem::{size_of, size_of_val};
+use core::mem::size_of;
 
 use erhino_shared::{mem::Address, proc::SignalMap};
 

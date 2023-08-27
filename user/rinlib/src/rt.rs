@@ -3,12 +3,13 @@ use core::{alloc::Layout, panic::PanicInfo};
 use buddy_system_allocator::{Heap, LockedHeapWithRescue};
 use erhino_shared::{
     mem::Address,
-    proc::{SystemSignal, Termination},
+    proc::{SignalMap, SystemSignal, Termination},
 };
+use num_traits::FromPrimitive;
 
 use crate::{
     call::{sys_exit, sys_extend, sys_signal_return},
-    debug,
+    debug, ipc::signal,
 };
 
 const INITIAL_HEAP_SIZE: usize = 1 * 0x1000;
@@ -32,6 +33,7 @@ fn lang_start<T: Termination + 'static>(
             .lock()
             .init(offset - INITIAL_HEAP_SIZE, INITIAL_HEAP_SIZE);
     }
+    signal::set_handler(SystemSignal::Terminate, default_signal_handler);
     let code = main().to_exit_code();
     unsafe {
         loop {
@@ -87,14 +89,25 @@ pub fn set_signal_handler(handler: fn(SystemSignal)) -> Address {
     unsafe {
         SIGNAL_HANDLER = Some(handler);
     }
-    signal_handler as usize
+    signal_handler_wrapper as usize
 }
 
-fn signal_handler(signal: SystemSignal) {
+fn signal_handler_wrapper(map: SignalMap) {
     if let Some(handler) = unsafe { SIGNAL_HANDLER } {
-        handler(signal)
+        if let Some(signal) = SystemSignal::from_u64(map) {
+            handler(signal)
+        }
     }
     unsafe {
         sys_signal_return().expect("wont failed if signal_handler called only by kernel");
     }
+}
+
+fn default_signal_handler(signal: SystemSignal) {
+    match signal {
+        SystemSignal::Terminate => unsafe {
+            sys_exit(1).expect("no wish to die");
+        },
+        _ => {}
+    };
 }

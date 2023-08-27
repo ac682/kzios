@@ -462,6 +462,9 @@ _switch_internal:
     not     t1, t1
     and     t0, t0, t1
     csrw    sstatus, t0
+    # enable stie, ssie
+    li      t0, 0b100010
+    csrw    sie, t0
     # install page table
     csrw    satp, a1
     la      t0, _restore
