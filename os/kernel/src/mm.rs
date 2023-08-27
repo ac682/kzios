@@ -30,9 +30,10 @@ pub enum ProcessAddressRegion {
 }
 
 pub fn init() {
+    // NOTE: 有些实现要求 PTE 的 AD 位在访问前得是 1 否则会触发 page fault。内核必须设置 AD 强制全为 1。
     let memory_start = _memory_start as usize >> PAGE_BITS;
     let memory_end = _memory_end as usize >> PAGE_BITS;
-    let mut unit = MemoryUnit::<PageEntryImpl>::new().unwrap();
+    let mut unit = MemoryUnit::<PageEntryImpl>::new(0).unwrap();
     // mmio device space
     unit.map(0x0, 0x0, memory_start, PageEntryFlag::PrefabKernelDevice)
         .expect("map mmio device failed");

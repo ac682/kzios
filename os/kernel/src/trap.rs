@@ -1,6 +1,5 @@
 use core::fmt::Display;
 
-use alloc::{borrow::ToOwned, format};
 use erhino_shared::{
     call::{SystemCall, SystemCallError},
     mem::{Address, MemoryOperation},
@@ -15,7 +14,7 @@ use riscv::register::{
 use crate::{
     external::{_kernel_end, _kernel_trap, _stack_size},
     hart::{self, HartKind},
-    mm::{KERNEL_SATP, KERNEL_UNIT},
+    mm::KERNEL_SATP,
 };
 
 pub struct SystemCallRequest<'context> {

@@ -17,7 +17,7 @@
 - [ ] k210: 2 cores 8MB ram with MMU *内存太少了哇*
 - [ ] D1s(F133): single core 64MB with MMU
 
-在重构，以上连模拟器都还没测
+只有 virt 能跑，其他的会遇到莫名bug
 
 ## 标准库
 

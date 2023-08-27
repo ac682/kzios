@@ -28,13 +28,13 @@ flags! {
         Cow = 0b100000000,
         CowWriteable = 0b1000000000,
 
-        PrefabKernelDevice = (PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable).bits(),
-        PrefabKernelProgram = (PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable | PageEntryFlag::Executable).bits(),
-        PrefabKernelTrapframe = (PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable).bits(),
-        PrefabKernelTrampoline = (PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable | PageEntryFlag::Executable).bits(),
+        PrefabKernelDevice = (PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable | PageEntryFlag::Accessed | PageEntryFlag::Dirty).bits(),
+        PrefabKernelProgram = (PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable | PageEntryFlag::Executable | PageEntryFlag::Accessed | PageEntryFlag::Dirty).bits(),
+        PrefabKernelTrapframe = (PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable | PageEntryFlag::Accessed | PageEntryFlag::Dirty).bits(),
+        PrefabKernelTrampoline = (PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable | PageEntryFlag::Executable | PageEntryFlag::Accessed | PageEntryFlag::Dirty).bits(),
         PrefabUserStack = (PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable | PageEntryFlag::User).bits(),
-        PrefabUserTrapframe = (PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable).bits(),
-        PrefabUserTrampoline = (PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable | PageEntryFlag::Executable).bits(),
+        PrefabUserTrapframe = (PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable | PageEntryFlag::Accessed | PageEntryFlag::Dirty).bits(),
+        PrefabUserTrampoline = (PageEntryFlag::Valid | PageEntryFlag::Readable | PageEntryFlag::Writeable | PageEntryFlag::Executable | PageEntryFlag::Accessed | PageEntryFlag::Dirty).bits(),
     }
 }
 
@@ -226,7 +226,7 @@ impl<E: PageTableEntry + 'static> PageTable<E> {
         } else {
             if let Some(tracker) = tracker_factory() {
                 self.create_managed_leaf(index, tracker, flags)
-                    .map(|f| true)
+                    .map(|_| true)
             } else {
                 Err(PageEntryWriteError::TrackerUnavailable)
             }

@@ -29,7 +29,7 @@ OPENSBI_BUILD_DIR := invocation_directory()/"submodules/opensbi/build"
 
 # qemu
 QEMU_OPTIONS := if MODEL == "sifive_u" { "-smp cores=5 -dtb '"+DTB+"' -drive file='"+SDCARD+"',if=sd,format=raw" } else { "-smp cores=4" }
-QEMU_LAUNCH := "qemu-system-riscv64 -M "+MODEL+" -nographic -kernel '"+KERNEL_ELF+"' "+QEMU_OPTIONS
+QEMU_LAUNCH := "qemu-system-riscv64 -M "+MODEL+" -m 128M -nographic -kernel '"+KERNEL_ELF+"' "+QEMU_OPTIONS
 
 # gdb
 GDB_BINARY := "gdb-multiarch"
@@ -96,7 +96,7 @@ build_k210: && (build_opensbi "PLATFORM=kendryte/k210 FW_PAYLOAD=y FW_PAYLOAD_OF
     @cp '{{OPENSBI_BUILD_DIR}}/platform/kendryte/k210/firmware/fw_payload.bin' '{{TARGET_DIR}}'
 
 # make_sdcard 可以先稍稍
-run_qemu +EXPOSE="": build_kernel
+run_qemu +EXPOSE="": make_dtb make_sdcard build_kernel
     @echo -e "\033[0;36mQEMU: Simulating\033[0m"
     @{{QEMU_LAUNCH}} {{EXPOSE}}
 
@@ -108,7 +108,7 @@ run_qemu_dump_dtb:
     @{{QEMU_LAUNCH}} -machine dumpdtb="{{TARGET_DIR}}/dump.dtb"
     @dtc -O dts -o "{{TARGET_DIR}}/dump.dts" -I dtb "{{TARGET_DIR}}/dump.dtb"
 
-build_generic: && (build_opensbi "PLATFORM=generic FW_JUMP=y FW_JUMP_ADDR=0x80200000")
+build_generic: && (build_opensbi "PLATFORM=generic FW_PAYLOAD=y FW_PAYLOAD_OFFSET=0x200000 FW_PAYLOAD_PATH="+KERNEL_BIN+" FW_PAYLOAD_FDT_PATH="+DTB+"")
     @just PLATFORM={{PLATFORM}} MODEL={{MODEL}} MODE={{MODE}} make_dtb
     @just PLATFORM={{PLATFORM}} MODEL={{MODEL}} MODE={{MODE}} build_kernel
 

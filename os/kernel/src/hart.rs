@@ -1,7 +1,4 @@
-use core::{
-    arch::asm,
-    sync::atomic::Ordering,
-};
+use core::arch::asm;
 
 use alloc::vec::Vec;
 
@@ -106,7 +103,6 @@ pub fn this_hart() -> &'static mut HartKind {
     get_hart(hartid())
 }
 
-#[no_mangle]
 pub fn enter_user() -> ! {
     if let HartKind::Application(hart) = this_hart() {
         hart.go_awaken()

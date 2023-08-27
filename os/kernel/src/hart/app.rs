@@ -1,6 +1,5 @@
 use core::{
     arch::asm,
-    ops::Index,
     sync::atomic::{AtomicUsize, Ordering},
 };
 
@@ -99,7 +98,7 @@ impl<T: Timer, S: Scheduler, R: RandomGenerator> ApplicationHart<T, S, R> {
     }
 
     pub fn suspend(&self) -> bool {
-        sbi::hart_suspend(0, _awaken as usize, 0).is_ok()
+        sbi::hart_suspend(0, _awaken as usize, enter_user as usize).is_ok()
     }
 
     pub fn stop(&self) -> bool {
@@ -197,7 +196,12 @@ impl<T: Timer, S: Scheduler, R: RandomGenerator> ApplicationHart<T, S, R> {
                         match process.read(address, length) {
                             Ok(buffer) => {
                                 let str = unsafe { String::from_utf8_unchecked(buffer) };
-                                println!("\x1b[0;34mUSER\x1b[0m {}({}): {}", ctx.pid(), ctx.tid(), str);
+                                println!(
+                                    "\x1b[0;34mUSER\x1b[0m {}({}): {}",
+                                    ctx.pid(),
+                                    ctx.tid(),
+                                    str
+                                );
                                 syscall.write_response(length)
                             }
                             Err(e) => syscall.write_error(match e {

@@ -9,7 +9,6 @@ use erhino_shared::{
 use flagset::FlagSet;
 
 use crate::{
-    debug,
     external::_user_trap,
     hart,
     mm::{

@@ -1,5 +1,5 @@
 use core::{
-    cell::{RefCell, UnsafeCell},
+    cell::UnsafeCell,
     ops::{Deref, DerefMut},
 };
 

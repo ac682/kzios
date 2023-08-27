@@ -47,14 +47,16 @@ impl From<&FlagSet<PageEntryFlag>> for PageAttributes {
 }
 
 pub struct MemoryUnit<E: PageTableEntry + Sized + 'static> {
+    identity: u16,
     root: PageTable<E>,
     where_the_frame_tracker_of_root_for_recycling_put: FrameTracker,
 }
 
 impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
-    pub fn new() -> Result<Self, MemoryUnitError> {
+    pub fn new(id: u16) -> Result<Self, MemoryUnitError> {
         if let Some(frame) = frame::borrow(1) {
             Ok(Self {
+                identity: id,
                 root: PageTable::<E>::from(frame.start()),
                 where_the_frame_tracker_of_root_for_recycling_put: frame,
             })
@@ -68,12 +70,13 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         let mode_code = match mode {
             32 => 1,
             39 => 8,
-            47 => 9,
+            48 => 9,
             56 => 10,
             _ => 0,
         };
         (mode_code << 60)
-            + self
+            | ((self.identity as usize) << 44)
+            | self
                 .where_the_frame_tracker_of_root_for_recycling_put
                 .start()
     }

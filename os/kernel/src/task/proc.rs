@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 use elf_rs::{Elf, ElfFile, ElfMachine, ElfType, ProgramHeaderFlags, ProgramType};
 use erhino_shared::{
     mem::{Address, MemoryRegionAttribute, PageNumber},
-    proc::{ExitCode, ProcessPermission, SignalMap},
+    proc::{ExitCode, ProcessPermission},
 };
 use flagset::FlagSet;
 
@@ -67,7 +67,7 @@ impl Process {
                 entry_point: elf.entry_point() as Address,
                 break_point: 0,
                 stack_point: PageEntryImpl::space_size(),
-                memory: MemoryUnit::new().unwrap(),
+                memory: MemoryUnit::new(0).unwrap(),
                 usage: MemoryUsage::new(),
                 health: ProcessHealth::Healthy,
                 signal: SignalControlBlock::new(),
@@ -269,8 +269,11 @@ fn attrs_to_flags<A: Into<FlagSet<MemoryRegionAttribute>>>(
     if attr.contains(MemoryRegionAttribute::Execute) {
         flags |= PageEntryFlag::Executable;
     }
+    // NOTE: 对用户页面也添加 AD 是暂时的，因为目前 halcyon 没有对用户 AD 的应用，直接设置 1 免去麻烦
     if !reserved {
-        flags |= PageEntryFlag::User;
+        flags |= PageEntryFlag::User | PageEntryFlag::Accessed | PageEntryFlag::Dirty;
+    } else {
+        flags |= PageEntryFlag::Accessed | PageEntryFlag::Dirty;
     }
     flags
 }

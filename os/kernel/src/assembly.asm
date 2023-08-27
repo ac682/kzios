@@ -327,6 +327,7 @@ _user_trap:
     csrw    stvec, t6
     # install kernel page table
     ld      t6, 536(a0)
+    sfence.vma
     csrw    satp, t6
     sfence.vma
     # prepare arguments
@@ -337,6 +338,7 @@ _user_trap:
     # a0 -> satp
     # a1 -> &trapframe(inaccessible before satp install)
     # install context
+    sfence.vma
     csrw    satp, a0
     sfence.vma
 # _restore(satp: usize, trampframe: &TrampFrame)
@@ -439,6 +441,7 @@ _handle_user_trap: .dword handle_user_trap
 .global _switch
 # _switch(kernel_satp, trampoline: Address, satp: usize, trapframe: &TrapFrame)
 _switch:
+    sfence.vma
     csrw    satp, a0
     sfence.vma
     la      t0, _switch_internal
@@ -454,15 +457,16 @@ _switch:
 .global _switch_internal
 # _jump(trampoline: Address, satp: usize, trapframe: &TrapFrame)
 _switch_internal:
-    # modify sstatus.spie to 1 .spp to 0
+    # set sstatus.sum to 1 .spie to 1
     csrr    t0, sstatus
-    li      t1, 0b10000
+    li      t1, (1 << 5) | (1 << 18)
+    # set sstatus.spp to 0
     or      t0, t0, t1
     li      t1, (1 << 8)
     not     t1, t1
     and     t0, t0, t1
     csrw    sstatus, t0
-    # enable stie, ssie
+    # enable sie.stie .ssie
     li      t0, 0b100010
     csrw    sie, t0
     # install page table
@@ -473,5 +477,5 @@ _switch_internal:
     add     ra, a0, t0
     mv      a0, a1
     mv      a1, a2
-    sfence.vma
+    sfence.vma  zero,zero
     ret
