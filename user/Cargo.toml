@@ -1,0 +1,3 @@
+[workspace]
+members = ["rinlib", "systems/init", "systems/fs", "systems/pm"]
+resolver = "2"

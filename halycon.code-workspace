@@ -1,0 +1,171 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"rust-analyzer.cargo.target": "riscv64gc-unknown-none-elf",
+		"cSpell.words": [
+			"abiname",
+			"Aclint",
+			"ASID",
+			"bitor",
+			"builtins",
+			"consts",
+			"cppdbg",
+			"cpus",
+			"csrr",
+			"csrw",
+			"cstring",
+			"dealloc",
+			"Deque",
+			"ebreak",
+			"ebss",
+			"ecall",
+			"ekernel",
+			"elftype",
+			"erhino",
+			"Errno",
+			"flagset",
+			"GETCHAR",
+			"Gibi",
+			"GIGA",
+			"gpio",
+			"hartid",
+			"hashbrown",
+			"impls",
+			"initfs",
+			"Justfile",
+			"kendryte",
+			"kinlib",
+			"kzios",
+			"Mcause",
+			"memsz",
+			"mepc",
+			"mhartid",
+			"misa",
+			"mmap",
+			"mmio",
+			"mscratch",
+			"msip",
+			"Mstatus",
+			"mswi",
+			"mtimecmp",
+			"mtimer",
+			"mtval",
+			"mtvec",
+			"paddr",
+			"plic",
+			"pmpaddr",
+			"pmpcfg",
+			"Pmpcsr",
+			"println",
+			"PUTCHAR",
+			"RAII",
+			"ramfs",
+			"renode",
+			"rinlib",
+			"riscv",
+			"Rootfs",
+			"rustflags",
+			"satp",
+			"sbss",
+			"Scause",
+			"sched",
+			"sepc",
+			"SFENCE",
+			"sifive",
+			"sigpipe",
+			"sigreturn",
+			"singlethread",
+			"skernel",
+			"sscratch",
+			"sstatus",
+			"STIE",
+			"stimer",
+			"stval",
+			"stvec",
+			"sysbus",
+			"syscall",
+			"timebase",
+			"timeslice",
+			"trapframe",
+			"tval",
+			"uart",
+			"UARTHS",
+			"unimp",
+			"upie",
+			"userspace",
+			"utimer",
+			"utvec",
+			"vaddr",
+			"xlen"
+		],
+		"cSpell.language": "en,lorem",
+		"rust-analyzer.imports.prefer.no.std": true,
+		"rust-analyzer.linkedProjects": [
+			"./shared/Cargo.toml",
+			"./os/Cargo.toml",
+			"./user/Cargo.toml"
+		],
+		"rust-analyzer.showUnlinkedFileNotification": false,
+	},
+	"tasks": {
+		"version": "2.0.0",
+		"tasks": [
+			{
+				"label": "launch_gdb_server",
+				"type": "shell",
+				"command": "just",
+				"args": [
+					"MODEL=virt",
+					"run_qemu",
+					"-s",
+					"-S"
+				],
+				"isBackground": true,
+				"problemMatcher": [
+					{
+						"pattern": [
+							{
+								"regexp": ".",
+								"file": 1,
+								"location": 2,
+								"message": 3
+							}
+						],
+						"background": {
+							"activeOnStart": true,
+							"beginsPattern": ".",
+							"endsPattern": "."
+						}
+					}
+				]
+			},
+		]
+	},
+	"launch": {
+		"version": "0.2.0",
+		"configurations": [
+			{
+				"name": "kernel-debug",
+				"type": "cppdbg",
+				"request": "launch",
+				"preLaunchTask": "launch_gdb_server",
+				"miDebuggerServerAddress": "localhost:1234",
+				"program": "${workspaceRoot}/artifacts/erhino_kernel",
+				"cwd": "${workspaceFolder}",
+				"launchCompleteCommand": "exec-continue",
+				"environment": [],
+				"externalConsole": false,
+				"logging": {
+					"engineLogging": false
+				},
+				"MIMode": "gdb",
+				"miDebuggerPath": "gdb-multiarch",
+				"miDebuggerArgs": "-ex 'set arch riscv:rv64'",
+			},
+		]
+	}
+}
