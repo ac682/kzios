@@ -64,11 +64,11 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
         }
     }
 
-    pub fn send_ipi(&self) -> bool {
+    pub fn _send_ipi(&self) -> bool {
         sbi::send_ipi(1, self.id as isize).is_ok()
     }
 
-    pub fn clear_ipi(&self) {
+    pub fn _clear_ipi(&self) {
         // clear sip.SSIP => sip[1] = 0
         let mut sip: usize;
         unsafe {
@@ -98,7 +98,7 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
         sbi::hart_suspend(0, _awaken as usize, enter_user as usize).is_ok()
     }
 
-    pub fn stop(&self) -> bool {
+    pub fn _stop(&self) -> bool {
         sbi::hart_stop().is_ok()
     }
 
@@ -120,14 +120,14 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
         }
     }
 
-    fn handle_remote_call() {}
+    fn _handle_remote_call() {}
 
     fn handle_system_call(
         context: &mut S::Context,
         call: SystemCall,
         arg0: usize,
         arg1: usize,
-        arg2: usize,
+        _arg2: usize,
         random: &mut R
     ) -> Result<usize, SystemCallError> {
         let process = context.process();

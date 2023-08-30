@@ -1,11 +1,9 @@
 [package]
-name = "fs"
+name = "libdeev"
 version = "0.1.0"
-authors = ["Chien Zhang (zqy0224@live.com)"]
-description = "Filesystem in userspace"
+authors = [ "Chien Zhang (zqy0224@live.com)"]
+description = "Device framework"
 edition = "2021"
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rinlib = { path = "../../rinlib" }

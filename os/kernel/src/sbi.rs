@@ -47,35 +47,6 @@ pub enum SbiExtension {
     StealTimeAccounting = 0x535441,
 }
 
-impl SbiExtension {
-    #[inline]
-    pub fn to_index(&self) -> u32 {
-        match self {
-            SbiExtension::LegacySetTimer => 0,
-            SbiExtension::LegacyConsolePutchar => 1,
-            SbiExtension::LegacyConsoleGetchar => 2,
-            SbiExtension::LegacyClearIPI => 3,
-            SbiExtension::LegacySendIPI => 4,
-            SbiExtension::LegacyRemoteFenceI => 5,
-            SbiExtension::LegacyRemoteSFenceVma => 6,
-            SbiExtension::LegacyRemoteSFenceVmaAsid => 7,
-            SbiExtension::LegacySystemShutdown => 8,
-            SbiExtension::Base => 9,
-            SbiExtension::Time => 10,
-            SbiExtension::InterProcessInterrupt => 11,
-            SbiExtension::RemoteFence => 12,
-            SbiExtension::HartStateManagement => 13,
-            SbiExtension::SystemReset => 14,
-            SbiExtension::PerformanceMonitorUnit => 15,
-            SbiExtension::DebugConsole => 16,
-            SbiExtension::SystemSuspend => 17,
-            SbiExtension::CollaborativeProcessorPerformanceControl => 18,
-            SbiExtension::NestedAcceleration => 19,
-            SbiExtension::StealTimeAccounting => 20,
-        }
-    }
-}
-
 #[inline]
 fn raw_call(
     eid: SbiExtension,

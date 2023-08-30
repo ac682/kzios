@@ -16,3 +16,4 @@ pub mod preclude;
 mod rt;
 pub mod thread;
 pub mod process;
+pub mod fs;

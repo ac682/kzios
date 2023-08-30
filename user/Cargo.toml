@@ -1,3 +1,10 @@
 [workspace]
-members = ["rinlib", "systems/init", "systems/fs", "systems/pm"]
+members = [
+    "rinlib",
+    "systems/init",
+    "systems/fs",
+    "systems/pm",
+    "frameworks/libsrv",
+    "frameworks/libdrv",
+]
 resolver = "2"

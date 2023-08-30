@@ -68,14 +68,6 @@ pub fn start_all() {
     }
 }
 
-pub fn send_ipi_all() -> bool {
-    if let Ok(_) = sbi::send_ipi(0, -1) {
-        true
-    } else {
-        false
-    }
-}
-
 pub fn get_hart(id: usize) -> &'static mut HartKind {
     unsafe {
         if id < HARTS.len() {

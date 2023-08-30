@@ -28,7 +28,7 @@ use crate::{
 use super::{ScheduleContext, Scheduler};
 
 // 日后替换成 InterruptSafeLock
-type Locked<T> = DataLock<T, SpinLock>;
+type _Locked<T> = DataLock<T, SpinLock>;
 type Shared<T> = UpSafeCell<T>;
 
 // timeslice in ms
@@ -138,7 +138,7 @@ impl ProcessLayout {
 struct ProcessCell {
     inner: Process,
     id: Pid,
-    parent: Pid,
+    _parent: Pid,
     layout: ProcessLayout,
     head: Option<Arc<Shared<ThreadCell>>>,
     head_lock: SpinLock,
@@ -168,7 +168,7 @@ impl ProcessCell {
         Self {
             inner: mutable,
             id: pid,
-            parent: parent,
+            _parent: parent,
             layout: layout,
             head: None,
             head_lock: SpinLock::new(),
@@ -202,7 +202,7 @@ impl ProcessCell {
         }
     }
 
-    pub fn move_next_until(
+    pub fn _move_next_until(
         &self,
         current: &Arc<Shared<ThreadCell>>,
         pred: fn(&Arc<Shared<ThreadCell>>) -> bool,
@@ -218,7 +218,7 @@ impl ProcessCell {
         Some(one)
     }
 
-    pub fn count_if_match_until(&self, pred: fn(&Arc<Shared<ThreadCell>>) -> bool) -> usize {
+    pub fn _count_if_match_until(&self, pred: fn(&Arc<Shared<ThreadCell>>) -> bool) -> usize {
         self.head_lock.lock();
         let mut count = 0usize;
         if let Some(head) = &self.head {
@@ -696,7 +696,7 @@ impl<T: Timer> Scheduler for UnfairScheduler<T> {
             schedule_request = context.scheduled;
             p.state_lock.unlock();
         } else {
-            unreachable!("it's only be called when a process requesting some system function")
+            unreachable!("it's called only when a process requesting some system function")
         }
         if schedule_request {
             self.schedule();

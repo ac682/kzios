@@ -289,8 +289,13 @@ impl Process {
         }
     }
 
-    pub fn tunnel_eject(&mut self, key: usize) {
-        todo!()
+    pub fn tunnel_eject(&mut self, key: usize) -> bool {
+        if let Some(index) = self.tunnels.iter().position(|t| t.key() == key) {
+            self.tunnels.remove(index);
+            true
+        } else {
+            false
+        }
     }
 }
 
