@@ -7,7 +7,7 @@ use crate::{
     sync::hart::HartLock,
 };
 
-static mut LOCKED_CONSOLE: DataLock<Console, HartLock> = DataLock::new(Console, HartLock::new());
+static LOCKED_CONSOLE: DataLock<Console, HartLock> = DataLock::new(Console, HartLock::new());
 
 #[macro_export]
 macro_rules! print
@@ -94,8 +94,6 @@ impl Write for Console {
 pub fn console_write(args: Arguments) {
     // SpinLock is causing deadlock while trap occurred
     // However HartLock is too expensive
-    unsafe {
-        let mut console = LOCKED_CONSOLE.lock();
-        console.write_fmt(args).unwrap();
-    }
+    let mut console = LOCKED_CONSOLE.lock();
+    console.write_fmt(args).unwrap();
 }

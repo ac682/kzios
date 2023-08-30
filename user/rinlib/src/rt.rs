@@ -1,16 +1,10 @@
 use core::{alloc::Layout, panic::PanicInfo};
 
 use buddy_system_allocator::{Heap, LockedHeapWithRescue};
-use erhino_shared::{
-    mem::Address,
-    proc::{SignalMap, SystemSignal, Termination},
-};
-use num_traits::FromPrimitive;
+use erhino_shared::proc::{SystemSignal, Termination};
 
-use crate::{
-    call::{sys_exit, sys_extend, sys_signal_return},
-    debug, ipc::signal,
-};
+use crate::call::sys_extend;
+use crate::{call::sys_exit, debug, ipc::signal};
 
 const INITIAL_HEAP_SIZE: usize = 1 * 0x1000;
 const HEAP_ORDER: usize = 32;
@@ -18,7 +12,6 @@ const HEAP_ORDER: usize = 32;
 #[global_allocator]
 static mut HEAP_ALLOCATOR: LockedHeapWithRescue<HEAP_ORDER> =
     LockedHeapWithRescue::new(heap_rescue);
-static mut SIGNAL_HANDLER: Option<fn(SystemSignal)> = None;
 
 #[lang = "start"]
 fn lang_start<T: Termination + 'static>(
@@ -83,24 +76,6 @@ fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
 #[alloc_error_handler]
 fn handle_alloc_error(layout: Layout) -> ! {
     panic!("Heap allocation error, layout = {:?}", layout);
-}
-
-pub fn set_signal_handler(handler: fn(SystemSignal)) -> Address {
-    unsafe {
-        SIGNAL_HANDLER = Some(handler);
-    }
-    signal_handler_wrapper as usize
-}
-
-fn signal_handler_wrapper(map: SignalMap) {
-    if let Some(handler) = unsafe { SIGNAL_HANDLER } {
-        if let Some(signal) = SystemSignal::from_u64(map) {
-            handler(signal)
-        }
-    }
-    unsafe {
-        sys_signal_return().expect("wont failed if signal_handler called only by kernel");
-    }
 }
 
 fn default_signal_handler(signal: SystemSignal) {

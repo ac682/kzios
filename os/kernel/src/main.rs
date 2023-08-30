@@ -26,6 +26,7 @@ mod task;
 mod timer;
 mod trap;
 mod rng;
+mod fal;
 
 const BANNER: &str = include_str!("../banner.txt");
 
@@ -46,8 +47,7 @@ pub fn main() {
         let process = Process::from_elf(system.data()).unwrap();
         add_process(process);
     }
-    // create initfs in fal
-    // recycle initfs
+    // 由于内核无法在 fal 中创建流文件，这部分只能交由 init 来作为 initfs，需要 init 进程用系统调用来认领
     frame::add_frame(
         _ramfs_end as usize >> PAGE_BITS,
         _frame_start as usize >> PAGE_BITS,

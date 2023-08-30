@@ -30,18 +30,20 @@ flags! {
     /// Invalid when fork means copy the permissions from the parent
     pub enum ProcessPermission: u32{
         /// Not available
-        Invalid = 0b0,
+        Invalid = 0,
         /// Should be always present
-        Valid = 0b1,
+        Valid = 1 << 0,
         /// Process operations
-        Process = 0b10,
+        Process = 1 << 1,
         /// It's a service and can be registered as service
-        Service = 0b100,
+        Service = 1 << 2,
         /// Map
-        Memory = 0b1000,
+        Memory = 1 << 3,
         /// IDK
-        Net = 0b10000,
+        Net = 1 << 4,
 
+        /// For service
+        LimitedPower = 1 << 31,
         /// All of them
         All = (ProcessPermission::Valid | ProcessPermission::Process | ProcessPermission::Service | ProcessPermission::Memory | ProcessPermission::Net).bits()
     }

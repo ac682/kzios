@@ -14,6 +14,10 @@ impl Thread {
     fn new(handle: Tid) -> Self {
         Self { handle }
     }
+
+    pub fn id(&self) -> Tid{
+        self.handle
+    }
 }
 
 fn thread_wrapper(){

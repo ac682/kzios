@@ -12,7 +12,9 @@ use crate::mm::{
     usage::MemoryUsage,
 };
 
-use super::ipc::signal::SignalControlBlock;
+use super::ipc::{signal::SignalControlBlock, tunnel::Endpoint};
+
+const TUNNEL_LIMIT: usize = 65536;
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -30,6 +32,11 @@ pub enum ProcessMemoryError {
     MisalignedAddress,
     OutOfMemory,
     InaccessibleRegion,
+}
+
+#[derive(Debug)]
+pub enum ProcessTunnelError {
+    ReachLimit,
 }
 
 impl From<MemoryUnitError> for ProcessMemoryError {
@@ -54,7 +61,9 @@ pub struct Process {
     entry_point: Address,
     break_point: Address,
     stack_point: Address,
+    tunnel_point: Address,
     permissions: FlagSet<ProcessPermission>,
+    tunnels: Vec<Endpoint>,
     pub health: ProcessHealth,
     pub signal: SignalControlBlock,
 }
@@ -65,10 +74,16 @@ impl Process {
             let mut process = Self {
                 permissions: ProcessPermission::All.into(),
                 entry_point: elf.entry_point() as Address,
+                // 分段点，以此向上为堆，向上增长
                 break_point: 0,
-                stack_point: PageEntryImpl::space_size(),
+                stack_point: PageEntryImpl::space_size() - (PAGE_SIZE * TUNNEL_LIMIT),
+                // 从 stack_point 到 space_size()，按页大小对齐，向上增长
+                tunnel_point: (PageEntryImpl::space_size() - (PAGE_SIZE * TUNNEL_LIMIT)
+                    + (PAGE_SIZE - 1))
+                    & !(PAGE_SIZE - 1),
                 memory: MemoryUnit::new(0).unwrap(),
                 usage: MemoryUsage::new(),
+                tunnels: Vec::new(),
                 health: ProcessHealth::Healthy,
                 signal: SignalControlBlock::new(),
             };
@@ -251,6 +266,31 @@ impl Process {
 
     pub fn entry_point(&self) -> Address {
         self.entry_point
+    }
+
+    pub fn tunnel_point(&self) -> Address {
+        self.tunnel_point
+    }
+
+    pub fn tunnel_insert(&mut self, key: usize) -> Result<usize, ProcessTunnelError> {
+        if self.tunnels.len() < TUNNEL_LIMIT {
+            let mut last = 0usize;
+            for t in &self.tunnels {
+                if t.index() == last {
+                    last += 1;
+                } else {
+                    break;
+                }
+            }
+            self.tunnels.insert(last, Endpoint::new(last, key));
+            Ok(last)
+        } else {
+            Err(ProcessTunnelError::ReachLimit)
+        }
+    }
+
+    pub fn tunnel_eject(&mut self, key: usize) {
+        todo!()
     }
 }
 

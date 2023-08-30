@@ -1,7 +1,4 @@
-use erhino_shared::{
-    mem::PageNumber,
-    proc::Pid,
-};
+use erhino_shared::{mem::PageNumber, proc::Pid};
 
 use crate::mm::frame::FrameTracker;
 
@@ -65,5 +62,24 @@ impl Tunnel {
                 None
             }
         }
+    }
+}
+
+pub struct Endpoint {
+    index: usize,
+    key: usize,
+}
+
+impl Endpoint {
+    pub const fn new(index: usize, key: usize) -> Self {
+        Self { index, key }
+    }
+
+    pub fn key(&self) -> usize {
+        self.key
+    }
+
+    pub fn index(&self) -> usize {
+        self.index
     }
 }

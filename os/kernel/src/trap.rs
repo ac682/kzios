@@ -141,6 +141,7 @@ fn kernel_dump() -> ! {
 #[no_mangle]
 unsafe fn handle_kernel_trap(cause: Scause, _val: usize) {
     match cause.cause() {
+        // 也有可能是进程剩余时间片太短，还没进入用户空间就触发异常，直接转发给 hart 会导致 hart 的串行特性失效，一种解决办法是 user_ trap 时关闭 stie 和 seie
         Trap::Interrupt(Interrupt::SupervisorTimer) => todo!("nested supervisor timer"),
         _ => kernel_dump(),
     }

@@ -21,6 +21,7 @@ use crate::{
         proc::{Process, ProcessHealth},
         thread::Thread,
     },
+    timer::Timer,
     trap::TrapFrame,
 };
 
@@ -30,8 +31,8 @@ use super::{ScheduleContext, Scheduler};
 type Locked<T> = DataLock<T, SpinLock>;
 type Shared<T> = UpSafeCell<T>;
 
-// timeslice in ticks
-const QUANTUM: usize = 2;
+// timeslice in ms
+const QUANTUM: usize = 20;
 
 static mut PROC_TABLE: ProcessTable = ProcessTable::new();
 
@@ -41,6 +42,7 @@ pub struct UnfairContext {
     hartid: usize,
     process: Arc<Shared<ProcessCell>>,
     thread: Arc<Shared<ThreadCell>>,
+    scheduled: bool,
 }
 
 impl ScheduleContext for UnfairContext {
@@ -60,7 +62,7 @@ impl ScheduleContext for UnfairContext {
         &mut self.thread.get_mut().inner
     }
 
-    fn trapframe(&self) -> &mut TrapFrame {
+    fn trapframe(&self) -> &'static mut TrapFrame {
         self.process.struct_at(self.thread.trapframe)
     }
 
@@ -71,6 +73,22 @@ impl ScheduleContext for UnfairContext {
 
     fn add_thread(&self, thread: Thread) -> Tid {
         self.process.get_mut().add(thread, self.hartid)
+    }
+
+    fn schedule(&mut self) {
+        self.scheduled = true;
+    }
+
+    fn find<F: FnMut(&mut Process)>(&self, pid: Pid, mut action: F) -> bool {
+        if let Some(p) = unsafe { &PROC_TABLE }.find_process(pid) {
+            p.state_lock.lock();
+            let mutable = p.get_mut();
+            action(&mut mutable.inner);
+            p.state_lock.unlock();
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -299,6 +317,8 @@ struct ThreadCell {
     inner: Thread,
     id: Tid,
     generation: usize,
+    last_tick_time: usize,
+    timeslice: usize,
     trapframe: Address,
     next: Option<Arc<Shared<ThreadCell>>>,
     run_lock: SpinLock,
@@ -311,6 +331,8 @@ impl ThreadCell {
             inner,
             id: tid,
             generation: initial_gen,
+            last_tick_time: 0,
+            timeslice: 0,
             trapframe,
             next: None,
             run_lock: SpinLock::new(),
@@ -319,16 +341,21 @@ impl ThreadCell {
     }
 
     pub fn check_grow(&mut self) -> bool {
-        let table = unsafe { &PROC_TABLE };
-        if table
-            .generation
-            .fetch_max(self.generation, Ordering::Relaxed)
-            == self.generation
-        {
-            self.generation += 1;
+        if self.timeslice < QUANTUM {
             true
         } else {
-            false
+            self.timeslice = 0;
+            let table = unsafe { &PROC_TABLE };
+            if table
+                .generation
+                .fetch_max(self.generation, Ordering::Relaxed)
+                == self.generation
+            {
+                self.generation += 1;
+                true
+            } else {
+                false
+            }
         }
     }
 
@@ -386,7 +413,7 @@ impl ProcessTable {
         pid
     }
 
-    pub fn add_cell(&mut self, mut cell: ProcessCell) {
+    fn add_cell(&mut self, mut cell: ProcessCell) {
         self.last_lock.lock();
         if let Some(last) = &self.last {
             let upgrade = last.upgrade().expect("last exists but pointers to null");
@@ -498,41 +525,32 @@ impl ProcessTable {
         }
         Some((one_proc, one_thread))
     }
+
+    pub fn find_process(&self, pid: Pid) -> Option<Arc<Shared<ProcessCell>>> {
+        let pred = |p: &Arc<Shared<ProcessCell>>| pid == p.id;
+        self.head_lock.lock();
+        if let Some(proc) = &self.head {
+            self.head_lock.unlock();
+            self.move_next_process_until(proc, pred, false)
+        } else {
+            self.head_lock.unlock();
+            None
+        }
+    }
 }
 
-pub struct UnfairScheduler {
+pub struct UnfairScheduler<T> {
     hartid: usize,
+    timer: T,
     current: Option<(Arc<Shared<ProcessCell>>, Arc<Shared<ThreadCell>>)>,
 }
 
-impl UnfairScheduler {
-    pub const fn new(hartid: usize) -> Self {
+impl<T: Timer> UnfairScheduler<T> {
+    pub const fn new(hartid: usize, timer: T) -> Self {
         Self {
             hartid,
+            timer,
             current: None,
-        }
-    }
-
-    fn find_proc(&self, pid: Pid) -> Option<Arc<Shared<ProcessCell>>> {
-        let table = unsafe { &PROC_TABLE };
-        let pred = |p: &Arc<Shared<ProcessCell>>| pid == p.id;
-        if let Some((proc, _)) = &self.current {
-            table.move_next_process_until(proc, pred, false)
-        } else {
-            table.head_lock.lock();
-            let mut next_proc_option = table.head.clone();
-            table.head_lock.unlock();
-            while let Some(next_proc) = next_proc_option {
-                next_proc.head_lock.lock();
-                if let Some(thread) = &next_proc.head {
-                    next_proc.head_lock.unlock();
-                    return table.move_next_process_until(&next_proc, pred, false);
-                } else {
-                    next_proc.head_lock.unlock();
-                    next_proc_option = table.move_next_process(&next_proc);
-                }
-            }
-            None
         }
     }
 
@@ -590,7 +608,7 @@ impl UnfairScheduler {
     }
 }
 
-impl Scheduler for UnfairScheduler {
+impl<T: Timer> Scheduler for UnfairScheduler<T> {
     type Context = UnfairContext;
     fn add(&mut self, proc: Process, parent: Option<Pid>) -> Pid {
         let table = unsafe { &mut PROC_TABLE };
@@ -600,7 +618,7 @@ impl Scheduler for UnfairScheduler {
     }
 
     fn find<F: FnMut(&mut Process)>(&self, pid: Pid, mut action: F) -> bool {
-        if let Some(p) = self.find_proc(pid) {
+        if let Some(p) = unsafe { &PROC_TABLE }.find_process(pid) {
             p.state_lock.lock();
             let mutable = p.get_mut();
             action(&mut mutable.inner);
@@ -625,17 +643,28 @@ impl Scheduler for UnfairScheduler {
     fn schedule(&mut self) {
         // 采用 smooth 的代数算法，由于该算法存在进程间公平问题，干脆取消进程级别的公平比较，直接去保证线程公平，彻底放弃进程公平。
         if let Some((_, t)) = &self.current {
+            let timeslice = if t.last_tick_time == 0 {
+                0
+            } else {
+                self.timer.uptime() - t.last_tick_time
+            };
+            let thread = t.get_mut();
+            thread.timeslice += timeslice;
             if t.inner.state == ExecutionState::Running {
-                t.get_mut().inner.state = ExecutionState::Ready;
+                thread.inner.state = ExecutionState::Ready;
             }
             t.run_lock.unlock();
         }
         let next = self.find_next();
+        if let Some((_, t)) = &next {
+            let remaining = QUANTUM - t.timeslice;
+            self.timer.schedule_next(remaining);
+        }
         self.current = next;
     }
 
-    fn next_timeslice(&self) -> usize {
-        QUANTUM
+    fn cancel(&mut self) {
+        self.timer.put_off();
     }
 
     fn context(&self) -> Option<(Address, usize, Address)> {
@@ -647,24 +676,30 @@ impl Scheduler for UnfairScheduler {
         }
     }
 
-    fn with_context<F: FnMut(&Self::Context)>(&self, mut func: F) {
+    fn with_context<F: FnMut(&mut Self::Context)>(&mut self, mut func: F) {
+        let schedule_request: bool;
         if let Some((p, t)) = &self.current {
             p.state_lock.lock();
-            let context = UnfairContext {
+            let mut context = UnfairContext {
                 hartid: self.hartid,
                 process: p.clone(),
                 thread: t.clone(),
+                scheduled: false,
             };
-            func(&context);
+            func(&mut context);
             if context.process.inner.signal.has_complete_uncleared() {
                 let mutable = context.process.get_mut();
                 let trapframe = mutable.struct_at::<TrapFrame>(t.trapframe);
                 mutable.inner.signal.restore(trapframe);
                 mutable.inner.signal.clear_complete();
             }
+            schedule_request = context.scheduled;
             p.state_lock.unlock();
         } else {
             unreachable!("it's only be called when a process requesting some system function")
+        }
+        if schedule_request {
+            self.schedule();
         }
     }
 }

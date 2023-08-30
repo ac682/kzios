@@ -14,9 +14,11 @@ pub trait ScheduleContext {
     fn tid(&self) -> Tid;
     fn process(&self) -> &mut Process;
     fn thread(&self) -> &mut Thread;
-    fn trapframe(&self) -> &mut TrapFrame;
+    fn trapframe(&self) -> &'static mut TrapFrame;
     fn add_proc(&self, proc: Process) -> Pid;
     fn add_thread(&self, thread: Thread) -> Tid;
+    fn schedule(&mut self);
+    fn find<F: FnMut(&mut Process)>(&self, pid: Pid, action: F) -> bool;
 }
 
 pub trait Scheduler {
@@ -25,7 +27,7 @@ pub trait Scheduler {
     fn find<F: FnMut(&mut Process)>(&self, pid: Pid, action: F) -> bool;
     fn is_address_in(&self, addr: Address) -> Option<ProcessAddressRegion>;
     fn schedule(&mut self);
-    fn next_timeslice(&self) -> usize;
+    fn cancel(&mut self);
     fn context(&self) -> Option<(Address, usize, Address)>;
-    fn with_context<F: FnMut(&Self::Context)>(&self, func: F);
+    fn with_context<F: FnMut(&mut Self::Context)>(&mut self, func: F);
 }

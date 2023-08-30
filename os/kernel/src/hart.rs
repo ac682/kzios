@@ -15,7 +15,7 @@ use self::app::ApplicationHart;
 pub mod app;
 
 type TimerImpl = HartTimer;
-type SchedulerImpl = UnfairScheduler;
+type SchedulerImpl = UnfairScheduler<TimerImpl>;
 type RandomImpl = LcGenerator;
 
 static mut HARTS: Vec<HartKind> = Vec::new();
@@ -29,7 +29,7 @@ pub enum HartStatus {
 
 pub enum HartKind {
     Disabled,
-    Application(ApplicationHart<TimerImpl, SchedulerImpl, RandomImpl>),
+    Application(ApplicationHart<SchedulerImpl, RandomImpl>),
 }
 
 pub fn register(hartid: usize, freq: usize) {
@@ -44,8 +44,7 @@ pub fn register(hartid: usize, freq: usize) {
     let seed = timer.uptime();
     let hart = ApplicationHart::new(
         hartid,
-        timer,
-        UnfairScheduler::new(hartid),
+        UnfairScheduler::new(hartid, timer),
         RandomImpl::new(seed),
     );
     harts.push(HartKind::Application(hart));

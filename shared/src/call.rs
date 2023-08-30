@@ -17,7 +17,7 @@ pub enum SystemCallError {
     FunctionNotAvailable = 0x04,
     // Role of process
     /// Process must need the permission to do the system call
-    PermissionRequired = 0x10,
+    PermissionDenied = 0x10,
     // Memory related
     /// System is out of memory or the process reached the allocation limit
     OutOfMemory = 0x20,
@@ -30,6 +30,8 @@ pub enum SystemCallError {
     ObjectNotFound = 0x30,
     /// Found but owned by others
     ObjectNotAccessible = 0x31,
+    /// Can not own more objects
+    ReachLimit = 0x32
 }
 
 /// Predefined system calls
@@ -37,11 +39,13 @@ pub enum SystemCallError {
 /// Only accessible in userspace
 /// ipc_call is sent through SystemCall::IPC
 #[repr(usize)]
-#[derive(Debug, FromPrimitive, ToPrimitive)]
+#[derive(Debug, FromPrimitive, ToPrimitive, Clone, Copy)]
 pub enum SystemCall {
     // System reserved
     /// Undefined behavior in release environment
     Debug = 0x00,
+    /// Only service(init) process have the permission to call
+    ClaimTheUnlimitedPower = 0x01,
     // Process control
     /// Finalized process notifies kernel to cleanup
     Exit = 0x10,
@@ -92,5 +96,5 @@ pub enum SystemCall {
     /// Link a allocated page with a key
     TunnelLink = 0x61,
     /// Dispose the tunnel and restore the slot
-    TunnelDispose = 0x62
+    TunnelDispose = 0x62,
 }
