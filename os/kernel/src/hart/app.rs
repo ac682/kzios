@@ -22,7 +22,7 @@ use crate::{
     println,
     rng::RandomGenerator,
     sbi,
-    sync::spin::SpinLock,
+    sync::spin::QueueLock,
     task::{
         ipc::tunnel::Tunnel,
         proc::{Process, ProcessHealth, ProcessMemoryError, ProcessTunnelError},
@@ -35,7 +35,7 @@ use crate::{
 use super::{enter_user, send_ipi, this_hart, HartKind, HartStatus};
 
 static IDLE_HARTS: AtomicUsize = AtomicUsize::new(0);
-static TUNNELS: DataLock<Vec<Tunnel>, SpinLock> = DataLock::new(Vec::new(), SpinLock::new());
+static TUNNELS: DataLock<Vec<Tunnel>, QueueLock> = DataLock::new(Vec::new(), QueueLock::new());
 
 pub struct ApplicationHart<S, R> {
     id: usize,
@@ -251,13 +251,13 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                     }
                 }
                 if let Some(tunnel) = found {
-                    if let Some((delete, _number)) = tunnel.unlink(context.pid()) {
+                    if let Some((delete, number)) = tunnel.unlink(context.pid()) {
                         if delete {
                             tunnels.swap_remove(delete_index);
                         }
-                        // TODO: ctx.process().free(n, 1)
-                        // 进程退出的时候检查所有 owner 为 pid 的对象，确定 second == None && first == None | pid 后删除（可省略 unlink）
+                        // TODO: 进程退出的时候检查所有 owner 为 pid 的对象，确定 second == None && first == None | pid 后删除（可省略 unlink）
                         // 进程退出的时候直接按照 tunnels 表删就可以，不需要逐个检查
+                        process.free(number, 1).expect("kill process if failed");
                         process.tunnel_eject(key);
                         Ok(0)
                     } else {

@@ -4,7 +4,7 @@ use erhino_shared::sync::DataLock;
 
 use crate::{
     sbi::{self},
-    sync::hart::HartLock,
+    sync::spin::HartLock,
 };
 
 static LOCKED_CONSOLE: DataLock<Console, HartLock> = DataLock::new(Console, HartLock::new());

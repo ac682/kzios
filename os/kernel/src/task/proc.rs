@@ -165,6 +165,16 @@ impl Process {
             .map_err(|e| ProcessMemoryError::from(e))
     }
 
+    pub fn free(&mut self, vpn: PageNumber, count: usize) -> Result<usize, ProcessMemoryError> {
+        self.memory
+            .free(vpn, count)
+            .map(|p| {
+                self.usage.page -= p;
+                p
+            })
+            .map_err(|e| ProcessMemoryError::from(e))
+    }
+
     pub fn extend(&mut self, size: usize) -> Result<usize, ProcessMemoryError> {
         if !size.is_power_of_two() {
             return Err(ProcessMemoryError::MisalignedAddress);

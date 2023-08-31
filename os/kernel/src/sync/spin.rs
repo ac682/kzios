@@ -1,33 +1,38 @@
 use core::{
     hint::spin_loop,
-    sync::atomic::{AtomicBool, AtomicIsize, Ordering},
+    sync::atomic::{AtomicUsize, Ordering, AtomicBool, AtomicPtr}, ptr::null_mut,
 };
 
-use erhino_shared::sync::{InteriorLock, InteriorLockMut};
+use alloc::boxed::Box;
+use erhino_shared::sync::InteriorLock;
 
-/// spin::Mutex dose not work well, so I made my own one
-pub struct SpinLock {
-    lock: AtomicBool,
+use crate::hart;
+
+pub struct HartLock {
+    lock: AtomicUsize,
 }
 
-impl SpinLock {
+impl HartLock {
     pub const fn new() -> Self {
         Self {
-            lock: AtomicBool::new(false),
+            lock: AtomicUsize::new(usize::MAX),
         }
     }
 }
 
-impl InteriorLock for SpinLock {
+impl InteriorLock for HartLock {
     fn is_locked(&self) -> bool {
-        self.lock.load(Ordering::Relaxed)
+        let hartid = hart::hartid();
+        let locked = self.lock.load(Ordering::Relaxed);
+        locked != usize::MAX && locked != hartid
     }
 
     fn lock(&self) {
+        let hartid = hart::hartid();
         while self
             .lock
-            .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
-            .is_err()
+            .compare_exchange_weak(usize::MAX, hartid, Ordering::Acquire, Ordering::Relaxed)
+            .is_err_and(|c| c != hartid)
         {
             while self.is_locked() {
                 spin_loop()
@@ -36,100 +41,106 @@ impl InteriorLock for SpinLock {
     }
 
     fn unlock(&self) {
-        self.lock.store(false, Ordering::Relaxed);
+        self.lock.store(usize::MAX, Ordering::Relaxed);
     }
 
     fn try_lock(&self) -> bool {
+        let hartid = hart::hartid();
         match self
             .lock
-            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .compare_exchange(usize::MAX, hartid, Ordering::Acquire, Ordering::Relaxed)
         {
             Ok(_) => true,
-            Err(_) => false,
+            Err(current) => current == hartid,
         }
     }
 }
 
-pub struct ReadWriteSpinLock {
-    lock: AtomicIsize,
-    wait: AtomicBool,
+pub struct Ticket {
+    locked: AtomicBool,
+    next: AtomicPtr<Ticket>,
 }
 
-impl ReadWriteSpinLock {
+impl Ticket {
     pub const fn new() -> Self {
         Self {
-            lock: AtomicIsize::new(0),
-            wait: AtomicBool::new(false),
+            locked: AtomicBool::new(true),
+            next: AtomicPtr::new(null_mut()),
         }
-    }
-
-    fn is_waiting(&self) -> bool {
-        self.wait.load(Ordering::Relaxed)
-    }
-
-    fn set_waiting(&self) {
-        self.wait.store(true, Ordering::Relaxed);
-    }
-
-    fn clear_waiting(&self) {
-        self.wait.store(false, Ordering::Relaxed);
     }
 }
 
-impl InteriorLock for ReadWriteSpinLock {
+pub struct QueueLock {
+    tail: AtomicPtr<Ticket>,
+    owned: AtomicPtr<Ticket>,
+}
+
+impl QueueLock {
+    pub const fn new() -> Self {
+        Self {
+            tail: AtomicPtr::new(null_mut()),
+            owned: AtomicPtr::new(null_mut()),
+        }
+    }
+}
+
+impl InteriorLock for QueueLock {
     fn is_locked(&self) -> bool {
-        self.lock.fetch_max(0, Ordering::Relaxed) == 0
+        todo!()
     }
 
     fn lock(&self) {
-        // 一旦有一把锁尝试 isize::MAX 次就会导致逻辑失效。但是放心 writer 会在 unlock_mut 时恢复状态到初始 isize::MIN 重置重试次数
-        while self.is_waiting() {
-            spin_loop();
-        }
-        while self.lock.fetch_add(1, Ordering::Relaxed) < 0 {
-            while self.is_locked() {
-                spin_loop()
+        // 泄露 Ticket 到堆，unlock 的时候回收
+        let node = Box::into_raw(Box::new(Ticket::new()));
+        let prev = self.tail.swap(node, Ordering::Acquire);
+        if !prev.is_null() {
+            unsafe {
+                (*prev).next.store(node, Ordering::Relaxed);
+                while (*node).locked.load(Ordering::Acquire) {
+                    spin_loop()
+                }
             }
         }
+        self.owned.store(node, Ordering::Relaxed);
     }
 
     fn try_lock(&self) -> bool {
-        !self.is_waiting() && self.lock.fetch_add(1, Ordering::Relaxed) >= 0
+        let node = Box::into_raw(Box::new(Ticket::new()));
+        let prev = self.tail.load(Ordering::Acquire);
+        if prev.is_null() {
+            if self
+                .tail
+                .compare_exchange(prev, node, Ordering::Acquire, Ordering::Relaxed)
+                .is_ok()
+            {
+                self.owned.store(node, Ordering::Relaxed);
+                return true;
+            }
+        }
+        unsafe { drop(Box::from_raw(node)) };
+        return false;
     }
 
     fn unlock(&self) {
-        // 当其他线程持有 writer 锁时调用会炸掉，但是放心，unlock 和 lock_mut 互斥，除非持有者自己调用 lock_mut 然后 unlock
-        self.lock.fetch_sub(1, Ordering::Relaxed);
-    }
-}
-
-impl InteriorLockMut for ReadWriteSpinLock {
-    fn lock_mut(&self) {
-        while self.is_waiting() {
-            spin_loop()
-        }
-        self.set_waiting();
-        while self
-            .lock
-            .compare_exchange_weak(0, isize::MIN, Ordering::Acquire, Ordering::Relaxed)
-            .is_err()
+        let self_ptr = self.owned.load(Ordering::Relaxed);
+        match self
+            .tail
+            .compare_exchange(self_ptr, null_mut(), Ordering::Release, Ordering::Relaxed)
         {
-            while self.is_locked() {
-                spin_loop()
-            }
+            Ok(owned) => unsafe {
+                drop(Box::from_raw(owned));
+            },
+            Err(_) => unsafe {
+                let owned = &mut (*self_ptr);
+                let mut next: *mut Ticket = null_mut();
+                while next.is_null() {
+                    next = owned.next.load(Ordering::Acquire);
+                    spin_loop()
+                }
+                let succ = &mut (*next);
+                drop(Box::from_raw(owned));
+                succ.locked.store(false, Ordering::Relaxed);
+            },
         }
-        self.clear_waiting();
-    }
-
-    fn try_lock_mut(&self) -> bool {
-        !self.is_waiting()
-            && self
-                .lock
-                .compare_exchange_weak(0, isize::MIN, Ordering::Acquire, Ordering::Relaxed)
-                .is_ok()
-    }
-
-    fn unlock_mut(&self) {
-        self.lock.store(0, Ordering::Relaxed);
     }
 }

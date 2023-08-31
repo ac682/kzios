@@ -1,6 +1,6 @@
 use core::fmt::Display;
 
-use erhino_shared::mem::{Address, PageNumber};
+use erhino_shared::mem::{Address, MemoryRegionAttribute, PageNumber};
 use flagset::FlagSet;
 
 use super::{
@@ -17,33 +17,10 @@ pub enum MemoryUnitError {
     EntryOverwrite,
 }
 
-pub struct PageAttributes {
-    readable: bool,
-    writeable: bool,
-    executable: bool,
-    cow: bool,
-}
-
 pub enum AddressSpace {
     User,
     Invalid,
     Kernel,
-}
-
-impl From<&FlagSet<PageEntryFlag>> for PageAttributes {
-    fn from(flagset: &FlagSet<PageEntryFlag>) -> Self {
-        let cow = flagset.contains(PageEntryFlag::Cow);
-        Self {
-            cow,
-            executable: flagset.contains(PageEntryFlag::Executable),
-            readable: flagset.contains(PageEntryFlag::Readable),
-            writeable: if cow {
-                flagset.contains(PageEntryFlag::CowWriteable)
-            } else {
-                flagset.contains(PageEntryFlag::Writeable)
-            },
-        }
-    }
 }
 
 pub struct MemoryUnit<E: PageTableEntry + Sized + 'static> {
@@ -112,7 +89,11 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         Self::map_internal(&mut self.root, vpn, Some(ppn), count, flags, E::DEPTH - 1)
     }
 
-    pub fn translate(&self, addr: Address) -> Option<(Address, PageAttributes)> {
+    pub fn free(&mut self, vpn: PageNumber, count: usize) -> Result<usize, MemoryUnitError> {
+        todo!()
+    }
+
+    pub fn translate(&self, addr: Address) -> Option<(Address, FlagSet<MemoryRegionAttribute>)> {
         let offset = addr & 0xFFF;
         if let Some((ppn, attributes)) = self.locate(addr >> PAGE_BITS) {
             Some(((ppn << PAGE_BITS) + offset, attributes))
@@ -342,7 +323,7 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         }
     }
 
-    fn locate(&self, vpn: PageNumber) -> Option<(PageNumber, PageAttributes)> {
+    fn locate(&self, vpn: PageNumber) -> Option<(PageNumber, FlagSet<MemoryRegionAttribute>)> {
         Self::locate_internal(&self.root, vpn, E::DEPTH - 1)
     }
 
@@ -350,14 +331,23 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         container: &PageTable<E>,
         vpn: PageNumber,
         level: usize,
-    ) -> Option<(PageNumber, PageAttributes)> {
+    ) -> Option<(PageNumber, FlagSet<MemoryRegionAttribute>)> {
         let index = Self::index_of_vpn(vpn, level);
         match container.get_entry_type(index) {
             PageEntryType::Invalid => None,
-            PageEntryType::Leaf(number, flags) => Some((
-                number + Self::offset_of_vpn(vpn, level),
-                PageAttributes::from(&flags),
-            )),
+            PageEntryType::Leaf(number, flags) => {
+                let mut attr: FlagSet<MemoryRegionAttribute> = MemoryRegionAttribute::None.into();
+                if flags.contains(PageEntryFlag::Executable) {
+                    attr |= MemoryRegionAttribute::Execute;
+                }
+                if flags.contains(PageEntryFlag::Writeable) {
+                    attr |= MemoryRegionAttribute::Write;
+                }
+                if flags.contains(PageEntryFlag::Readable) {
+                    attr |= MemoryRegionAttribute::Read;
+                }
+                Some((number + Self::offset_of_vpn(vpn, level), attr))
+            }
             PageEntryType::Branch(table) => Self::locate_internal(table, vpn, level - 1),
         }
     }

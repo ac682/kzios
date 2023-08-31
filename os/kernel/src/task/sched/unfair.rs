@@ -16,7 +16,7 @@ use crate::{
         unit::{AddressSpace, MemoryUnit},
         ProcessAddressRegion,
     },
-    sync::{spin::SpinLock, up::UpSafeCell},
+    sync::{up::UpSafeCell, spin::QueueLock},
     task::{
         proc::{Process, ProcessHealth},
         thread::Thread,
@@ -28,7 +28,7 @@ use crate::{
 use super::{ScheduleContext, Scheduler};
 
 // 日后替换成 InterruptSafeLock
-type _Locked<T> = DataLock<T, SpinLock>;
+type _Locked<T> = DataLock<T, QueueLock>;
 type Shared<T> = UpSafeCell<T>;
 
 // timeslice in ms
@@ -141,11 +141,11 @@ struct ProcessCell {
     _parent: Pid,
     layout: ProcessLayout,
     head: Option<Arc<Shared<ThreadCell>>>,
-    head_lock: SpinLock,
+    head_lock: QueueLock,
     next: Option<Arc<Shared<ProcessCell>>>,
     prev: Option<Weak<Shared<ProcessCell>>>,
-    ring_lock: SpinLock,
-    state_lock: SpinLock,
+    ring_lock: QueueLock,
+    state_lock: QueueLock,
 }
 
 const TRAPFRAME_SIZE: usize = 1024;
@@ -171,11 +171,11 @@ impl ProcessCell {
             _parent: parent,
             layout: layout,
             head: None,
-            head_lock: SpinLock::new(),
+            head_lock: QueueLock::new(),
             next: None,
             prev: None,
-            ring_lock: SpinLock::new(),
-            state_lock: SpinLock::new(),
+            ring_lock: QueueLock::new(),
+            state_lock: QueueLock::new(),
         }
     }
 
@@ -321,8 +321,8 @@ struct ThreadCell {
     timeslice: usize,
     trapframe: Address,
     next: Option<Arc<Shared<ThreadCell>>>,
-    run_lock: SpinLock,
-    ring_lock: SpinLock,
+    run_lock: QueueLock,
+    ring_lock: QueueLock,
 }
 
 impl ThreadCell {
@@ -335,8 +335,8 @@ impl ThreadCell {
             timeslice: 0,
             trapframe,
             next: None,
-            run_lock: SpinLock::new(),
-            ring_lock: SpinLock::new(),
+            run_lock: QueueLock::new(),
+            ring_lock: QueueLock::new(),
         }
     }
 
@@ -369,9 +369,9 @@ struct ProcessTable {
     generation: AtomicUsize,
     pid_generator: AtomicUsize,
     head: Option<Arc<Shared<ProcessCell>>>,
-    head_lock: SpinLock,
+    head_lock: QueueLock,
     last: Option<Weak<Shared<ProcessCell>>>,
-    last_lock: SpinLock,
+    last_lock: QueueLock,
 }
 
 impl ProcessTable {
@@ -380,9 +380,9 @@ impl ProcessTable {
             generation: AtomicUsize::new(0),
             pid_generator: AtomicUsize::new(1),
             head: None,
-            head_lock: SpinLock::new(),
+            head_lock: QueueLock::new(),
             last: None,
-            last_lock: SpinLock::new(),
+            last_lock: QueueLock::new(),
         }
     }
 

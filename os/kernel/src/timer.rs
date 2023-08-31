@@ -1,4 +1,4 @@
-pub mod hart;
+pub mod cpu;
 
 pub trait Timer {
     fn uptime(&self) -> usize;

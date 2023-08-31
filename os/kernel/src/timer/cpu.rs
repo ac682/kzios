@@ -9,12 +9,13 @@ fn time() -> usize {
     riscv::register::time::read()
 }
 
-pub struct HartTimer {
+// Cpu 上的时钟实现的定时器，仅为调度器服务，是调度器独占资源
+pub struct CpuClock {
     frequency: usize,
     uptime: usize,
 }
 
-impl HartTimer {
+impl CpuClock {
     pub const fn new(freq: usize) -> Self {
         Self {
             frequency: freq,
@@ -31,7 +32,7 @@ impl HartTimer {
     }
 }
 
-impl Timer for HartTimer {
+impl Timer for CpuClock {
     fn uptime(&self) -> usize {
         self.uptime
     }

@@ -7,14 +7,14 @@ use crate::{
     rng::lcg::LcGenerator,
     sbi,
     task::sched::unfair::UnfairScheduler,
-    timer::{hart::HartTimer, Timer},
+    timer::{cpu::CpuClock, Timer},
 };
 
 use self::app::ApplicationHart;
 
 pub mod app;
 
-type TimerImpl = HartTimer;
+type TimerImpl = CpuClock;
 type SchedulerImpl = UnfairScheduler<TimerImpl>;
 type RandomImpl = LcGenerator;
 
