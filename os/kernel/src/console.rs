@@ -4,10 +4,10 @@ use erhino_shared::sync::DataLock;
 
 use crate::{
     sbi::{self},
-    sync::spin::HartLock,
+    sync::spin::SpinLock,
 };
 
-static LOCKED_CONSOLE: DataLock<Console, HartLock> = DataLock::new(Console, HartLock::new());
+static LOCKED_CONSOLE: DataLock<Console, SpinLock> = DataLock::new(Console, SpinLock::new());
 
 #[macro_export]
 macro_rules! print

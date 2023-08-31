@@ -41,9 +41,6 @@ flags! {
         Memory = 1 << 3,
         /// IDK
         Net = 1 << 4,
-
-        /// For service
-        LimitedPower = 1 << 31,
         /// All of them
         All = (ProcessPermission::Valid | ProcessPermission::Process | ProcessPermission::Service | ProcessPermission::Memory | ProcessPermission::Net).bits()
     }

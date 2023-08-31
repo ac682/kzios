@@ -44,8 +44,6 @@ pub enum SystemCall {
     // System reserved
     /// Undefined behavior in release environment
     Debug = 0x00,
-    /// Only service(init) process have the permission to call
-    ClaimTheUnlimitedPower = 0x01,
     // Process control
     /// Finalized process notifies kernel to cleanup
     Exit = 0x10,

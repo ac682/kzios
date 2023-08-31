@@ -88,8 +88,13 @@ impl<E: PageTableEntry + 'static> PageTable<E> {
         &mut self.entries[index]
     }
 
-    pub fn is_entry_created(&self, index: usize) -> bool {
-        self.entry(index).is_valid()
+    pub fn is_entry_created(&self, index: usize) -> Option<(PageNumber, FlagSet<PageEntryFlag>)> {
+        let entry = self.entry(index);
+        if entry.is_valid() {
+            Some((entry.physical_page_number(), entry.flags()))
+        } else {
+            None
+        }
     }
 
     pub fn free_entry(&mut self, index: usize) -> Option<PageNumber> {

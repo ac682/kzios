@@ -90,7 +90,7 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
     }
 
     pub fn free(&mut self, vpn: PageNumber, count: usize) -> Result<usize, MemoryUnitError> {
-        todo!()
+        Self::free_internal(&mut self.root, vpn, count, E::DEPTH - 1)
     }
 
     pub fn translate(&self, addr: Address) -> Option<(Address, FlagSet<MemoryRegionAttribute>)> {
@@ -99,6 +99,114 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
             Some(((ppn << PAGE_BITS) + offset, attributes))
         } else {
             None
+        }
+    }
+
+    fn free_internal(
+        container: &mut PageTable<E>,
+        vpn: PageNumber,
+        count: usize,
+        level: usize,
+    ) -> Result<usize, MemoryUnitError> {
+        let start = Self::index_of_vpn(vpn, level);
+        if level == 0 {
+            let mut freed = 0usize;
+            for i in 0..count {
+                if container.free_entry(start + i).is_some() {
+                    freed += 1;
+                }
+            }
+            Ok(freed)
+        } else {
+            let fake_end = Self::index_of_vpn(vpn + count, level);
+            let end = if fake_end == 0 {
+                let size = PageTable::<E>::entry_count();
+                if start == 0 {
+                    if count >= size.pow(level as u32) {
+                        size
+                    } else {
+                        0
+                    }
+                } else {
+                    size
+                }
+            } else {
+                fake_end
+            };
+            if end > start {
+                if Self::is_page_number_aligned_to(Some(vpn), level) {
+                    let size = PageTable::<E>::entry_count().pow(level as u32);
+                    let mut remaining = count;
+                    let mut round = 0usize;
+                    let round_space = PageTable::<E>::entry_count() - start;
+                    let mut freed = 0usize;
+                    while remaining >= size && round < round_space {
+                        if container.is_table_created(start + round) {
+                            let table = container
+                                .get_table_mut(start + round)
+                                .expect("there must be a table");
+                            let offset = round * size;
+                            Self::free_internal(table, vpn + offset, size, level - 1)
+                                .map(|f| freed += f)?;
+                        } else if container.free_entry(start + round).is_some() {
+                            freed += 1;
+                        }
+                        remaining -= size;
+                        round += 1;
+                    }
+                    if remaining > 0 {
+                        Self::free_internal(container, vpn + (size * round), remaining, level)
+                            .map(|f| freed + f)
+                    } else {
+                        Ok(freed)
+                    }
+                } else {
+                    let size = PageTable::<E>::entry_count();
+                    let max_remaining =
+                        (size - Self::index_of_vpn(vpn, level - 1)) * size.pow(level as u32 - 1);
+                    let remaining = if count > max_remaining {
+                        max_remaining
+                    } else {
+                        count
+                    };
+                    let mut freed = 0usize;
+                    if let Some(table) = container.get_table_mut(start) {
+                        Self::free_internal(table, vpn, remaining, level - 1)
+                            .map(|f| freed += f)?;
+                        if count > max_remaining {
+                            Self::free_internal(
+                                table,
+                                vpn + max_remaining,
+                                count - max_remaining,
+                                level,
+                            )
+                            .map(|f| freed + f)
+                        } else {
+                            Ok(freed)
+                        }
+                    } else if container.is_entry_created(start).is_some() {
+                        // 是大页，不处理
+                        // 这里可以返回错误
+                        Ok(0)
+                    } else {
+                        // 没有大页也没有表，美哉
+                        Ok(0)
+                    }
+                }
+            } else {
+                // _:[1]:123:../_:[1]:223:..
+                // 对于不跨越的情况直接转发给 container[1].table() 处理
+                if let Some(table) = container.get_table_mut(start) {
+                    Self::free_internal(table, vpn, count, level - 1)
+                } else if container.is_entry_created(start).is_some() {
+                    // 是大页，不处理
+                    // 这里可以返回错误
+                    Ok(0)
+                } else {
+                    // 没有表也没有大页，美哉
+                    Ok(0)
+                }
+            }
         }
     }
 
@@ -115,21 +223,6 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         // [N] 当前处理级别
         // .. 省略但存在可能多个级别
         let start = Self::index_of_vpn(vpn, level);
-        let fake_end = Self::index_of_vpn(vpn + count, level);
-        let end = if fake_end == 0 {
-            let size = PageTable::<E>::entry_count();
-            if start == 0 {
-                if count >= size.pow(level as u32) {
-                    size
-                } else {
-                    0
-                }
-            } else {
-                size
-            }
-        } else {
-            fake_end
-        };
         if level == 0 {
             // ..:_:[123]/..:_:[223]
             // 不需要关心 count 是否存在溢出当前级别的问题。上级会处理好（且对 count 不溢出做检查和保证）。
@@ -152,6 +245,21 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
             }
             Ok(mapped)
         } else {
+            let fake_end = Self::index_of_vpn(vpn + count, level);
+            let end = if fake_end == 0 {
+                let size = PageTable::<E>::entry_count();
+                if start == 0 {
+                    if count >= size.pow(level as u32) {
+                        size
+                    } else {
+                        0
+                    }
+                } else {
+                    size
+                }
+            } else {
+                fake_end
+            };
             // ..:start:.. 到 ..:end:.. 可能跨越节也可能不跨越
             if end > start {
                 // _:[2]:A:../_:[4]:B:..
@@ -294,8 +402,14 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
                         if Self::is_flags_extended(&p, &set) {
                             if let Some(number) = ppn {
                                 if number == o {
-                                    let (table, created) =
-                                        Self::split_page_into_table(container, vpn, ppn, level, p)?;
+                                    let (table, created) = Self::split_page_into_table(
+                                        container,
+                                        vpn,
+                                        ppn,
+                                        PageTable::<E>::entry_count(),
+                                        level,
+                                        p,
+                                    )?;
                                     mapped += created;
                                     Self::map_internal(table, vpn, ppn, count, flags, level - 1)
                                         .map(|f| mapped + f)
@@ -304,8 +418,14 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
                                     Err(MemoryUnitError::EntryOverwrite)
                                 }
                             } else {
-                                let (table, created) =
-                                    Self::split_page_into_table(container, vpn, ppn, level, p)?;
+                                let (table, created) = Self::split_page_into_table(
+                                    container,
+                                    vpn,
+                                    ppn,
+                                    PageTable::<E>::entry_count(),
+                                    level,
+                                    p,
+                                )?;
                                 mapped += created;
                                 Self::map_internal(table, vpn, ppn, count, flags, level - 1)
                                     .map(|f| mapped + f)
@@ -356,6 +476,7 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         container: &mut PageTable<E>,
         vpn: PageNumber,
         ppn: Option<PageNumber>,
+        count: usize,
         level: usize,
         original: F,
     ) -> Result<(&mut PageTable<E>, usize), MemoryUnitError> {
@@ -368,7 +489,7 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
         }) {
             let small_size = PageTable::<E>::entry_count().pow((level - 1) as u32);
             if let Some(number) = ppn {
-                for i in 0..512 {
+                for i in 0..count {
                     Self::into_result(
                         table
                             .create_leaf(i, number + small_size * i, original)
@@ -376,7 +497,7 @@ impl<E: PageTableEntry + Sized + 'static> MemoryUnit<E> {
                     )?;
                 }
             } else {
-                for i in 0..512 {
+                for i in 0..count {
                     Self::into_result(table.ensure_managed_leaf_created(
                         i,
                         || {

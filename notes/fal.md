@@ -53,8 +53,8 @@
 
 - Integer，实际是 64位 整数
 - Integers，64位整数的数组形式
-- Double，实际是双精度浮点数
-- Doubles，双精度浮点数的数组形式
+- Decimal，实际是双精度浮点数
+- Decimals，双精度浮点数的数组形式
 - String，实际是 1 字节整数的数组形式
 - Blob，8 位整数的数组形式，或者，字节集
 

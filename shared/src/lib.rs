@@ -19,3 +19,5 @@ pub mod service;
 pub mod sync;
 /// Filesystem abstract layer
 pub mod fal;
+/// eRhino path string utilities
+pub mod path;

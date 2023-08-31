@@ -22,7 +22,7 @@ use crate::{
     println,
     rng::RandomGenerator,
     sbi,
-    sync::spin::QueueLock,
+    sync::spin::SpinLock,
     task::{
         ipc::tunnel::Tunnel,
         proc::{Process, ProcessHealth, ProcessMemoryError, ProcessTunnelError},
@@ -35,7 +35,7 @@ use crate::{
 use super::{enter_user, send_ipi, this_hart, HartKind, HartStatus};
 
 static IDLE_HARTS: AtomicUsize = AtomicUsize::new(0);
-static TUNNELS: DataLock<Vec<Tunnel>, QueueLock> = DataLock::new(Vec::new(), QueueLock::new());
+static TUNNELS: DataLock<Vec<Tunnel>, SpinLock> = DataLock::new(Vec::new(), SpinLock::new());
 
 pub struct ApplicationHart<S, R> {
     id: usize,
@@ -152,13 +152,6 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                         }
                         _ => SystemCallError::Unknown,
                     }),
-                }
-            }
-            SystemCall::ClaimTheUnlimitedPower => {
-                if process.has_permission(ProcessPermission::LimitedPower) {
-                    todo!("map the pages and write address & length to response")
-                } else {
-                    Err(SystemCallError::PermissionDenied)
                 }
             }
             SystemCall::Exit => {
