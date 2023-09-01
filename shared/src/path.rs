@@ -1,6 +1,10 @@
-use core::fmt::Display;
+use core::{fmt::Display, str::Split};
 
-use alloc::{borrow::ToOwned, string::String};
+use alloc::{
+    borrow::ToOwned,
+    string::{String, ToString},
+    vec::Vec,
+};
 
 /// The separator of path for nodes
 pub const PATH_SEPARATOR: char = '/';
@@ -8,7 +12,7 @@ pub const PATH_SEPARATOR: char = '/';
 pub const INVALID_CHARACTERS: [char; 1] = ['\0'];
 
 /// Parts of path
-pub enum Component {
+pub enum Component<'a> {
     /// /
     Root,
     /// .
@@ -16,13 +20,18 @@ pub enum Component {
     /// ..
     Parent,
     /// Valid filename
-    Normal,
+    Normal(&'a str),
 }
 
 /// Path parsing error
+#[derive(Debug)]
 pub enum PathError {
     /// Containing zero byte
     InvalidCharacters,
+    /// Making absolute path requires root node
+    MissingRoot,
+    /// Reaching the end of root node
+    OverflowRoot,
 }
 
 /// Representing a file or directory
@@ -32,13 +41,13 @@ pub struct Path {
 
 impl Path {
     /// Construct a path from string
-    pub fn new(s: &str) -> Result<Self, PathError> {
-        if INVALID_CHARACTERS.iter().any(|c| s.contains(*c)) {
-            Err(PathError::InvalidCharacters)
-        } else {
+    pub fn from(s: &str) -> Result<Self, PathError> {
+        if Self::is_valid(s) {
             Ok(Self {
                 inner: s.to_owned(),
             })
+        } else {
+            Err(PathError::InvalidCharacters)
         }
     }
 
@@ -47,9 +56,39 @@ impl Path {
         !s.contains(PATH_SEPARATOR)
     }
 
+    /// Is string a valid path(containing no zero-byte)
+    pub fn is_valid(s: &str) -> bool {
+        !INVALID_CHARACTERS.iter().any(|c| s.contains(*c))
+    }
+
     /// Is path starting from root
     pub fn is_absolute(&self) -> bool {
         self.inner.starts_with(PATH_SEPARATOR)
+    }
+
+    /// Construct an absolute path with no . or ..
+    pub fn qualify(&self) -> Result<Path, PathError> {
+        if self.is_absolute() {
+            let mut buffer = Vec::<&str>::new();
+            for c in self.iter() {
+                match c {
+                    Component::Current => {}
+                    Component::Root => buffer.push(""),
+                    Component::Parent => {
+                        if buffer.len() > 1 {
+                            buffer.pop();
+                        } else {
+                            return Err(PathError::OverflowRoot);
+                        }
+                    }
+                    Component::Normal(normal) => buffer.push(normal),
+                }
+            }
+            let path = buffer.join(&PATH_SEPARATOR.to_string());
+            Path::from(&path)
+        } else {
+            Err(PathError::MissingRoot)
+        }
     }
 
     /// Get its filename with no SEPARATOR char and parent
@@ -72,9 +111,35 @@ impl Path {
         }
     }
 
-    /// Into component iter
-    pub fn components(&self) {
-        // TODO: 待会写
+    /// Append sub path into it
+    pub fn append(&mut self, s: &str) -> Result<&str, PathError> {
+        if Self::is_valid(s) {
+            if self.inner.ends_with(PATH_SEPARATOR) {
+                if s.starts_with(PATH_SEPARATOR) {
+                    self.inner.pop();
+                }
+                self.inner.push_str(s);
+                Ok(&self.inner)
+            } else {
+                if !s.starts_with(PATH_SEPARATOR) {
+                    self.inner.push(PATH_SEPARATOR);
+                }
+                self.inner.push_str(s);
+                Ok(&self.inner)
+            }
+        } else {
+            Err(PathError::InvalidCharacters)
+        }
+    }
+
+    /// Get a iterator to iterate over path components
+    pub fn iter(&self) -> PathIterator {
+        PathIterator::from_path(self)
+    }
+
+    /// Get its str reference
+    pub fn as_str(&self) -> &str {
+        &self.inner
     }
 
     fn get_non_separated_terminated(&self) -> &str {
@@ -104,5 +169,44 @@ impl Path {
 impl Display for Path {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", self.inner)
+    }
+}
+
+/// Iterates over components
+pub struct PathIterator<'a> {
+    split: Split<'a, char>,
+    has_root: bool,
+}
+
+impl<'a> PathIterator<'a> {
+    fn from_path(path: &'a Path) -> Self {
+        Self {
+            split: path.get_non_separated_terminated().split(PATH_SEPARATOR),
+            has_root: path.is_absolute(),
+        }
+    }
+}
+
+impl<'a> Iterator for PathIterator<'a> {
+    type Item = Component<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(next) = self.split.next() {
+            Some(match next {
+                "" => {
+                    if self.has_root {
+                        self.has_root = false;
+                        Component::Root
+                    } else {
+                        Component::Normal("")
+                    }
+                }
+                "." => Component::Current,
+                ".." => Component::Parent,
+                _ => Component::Normal(next),
+            })
+        } else {
+            None
+        }
     }
 }

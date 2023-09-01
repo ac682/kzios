@@ -12,7 +12,7 @@ use crate::{
         frame::{self, alloc},
         page::PAGE_SIZE,
     },
-    println, sbi,
+    println, sbi, fs,
 };
 
 const HEAP_ORDER: usize = 64;
@@ -92,6 +92,7 @@ fn early_init(dtb_addr: usize) {
 
 fn kernel_init() {
     mm::init();
+    fs::init();
 }
 
 #[panic_handler]

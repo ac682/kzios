@@ -1,5 +1,4 @@
 #![no_std]
-#![warn(missing_docs)]
 
 //! # eRhino shared lib
 //!
