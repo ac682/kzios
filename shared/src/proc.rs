@@ -1,14 +1,15 @@
-use alloc::string::String;
-use flagset::{flags, FlagSet};
+use flagset::flags;
 use num_derive::{FromPrimitive, ToPrimitive};
 
 /// ExitCode(i64) type for process
-pub type ExitCode = isize;
+pub type ExitCode = i64;
 /// Pid(u32) type for process
 pub type Pid = u32;
 /// Tid(u32) type for thread
-/// If uniform thread-id required, It is uni_tid = ((pid << 32) + tid)
+/// If uniform thread-id required, It is uni_tid = ((pid << 32) | tid)
 pub type Tid = u32;
+/// Rid(u64) type for kernel request(Pending)/response(Fed)
+pub type Rid = u64;
 /// SignalMap(u64) for process
 pub type SignalMap = u64;
 
@@ -53,21 +54,11 @@ pub enum ExecutionState {
     Ready,
     /// Code is being executed
     Running,
-    /// Waiting for some signal and need to be waked up
-    Waiting(WaitingReason),
+    /// Waiting for a kernel request
+    Pending(Rid),
+    Fed(Rid),
     /// Finished, thread would be cleaned up
     Dead,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-/// Waiting reasons
-pub enum WaitingReason {
-    /// Waken up when time up
-    Timer,
-    /// Sending message blocks itself
-    SendBusy,
-    /// Receiving message blocks itself
-    ReceiveBusy,
 }
 
 /// Process's main function product
@@ -103,18 +94,4 @@ impl Termination for ProgramResult {
             0
         }
     }
-}
-
-/// Process struct for inspect
-pub struct ProcessInfo {
-    /// Name registered or command line
-    pub name: String,
-    /// Pid is pid
-    pub pid: Pid,
-    /// Pid of the parent process of the process
-    pub parent: Pid,
-    /// State of the process
-    pub state: ExecutionState,
-    /// Permission of the process
-    pub permissions: FlagSet<ProcessPermission>,
 }

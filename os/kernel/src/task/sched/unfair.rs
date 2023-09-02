@@ -16,7 +16,7 @@ use crate::{
         unit::{AddressSpace, MemoryUnit},
         ProcessAddressRegion,
     },
-    sync::{up::UpSafeCell, spin::SpinLock},
+    sync::{spin::SpinLock, up::UpSafeCell},
     task::{
         proc::{Process, ProcessHealth},
         thread::Thread,
@@ -138,7 +138,7 @@ impl ProcessLayout {
 struct ProcessCell {
     inner: Process,
     id: Pid,
-    _parent: Pid,
+    parent: Pid,
     layout: ProcessLayout,
     head: Option<Arc<Shared<ThreadCell>>>,
     head_lock: SpinLock,
@@ -168,7 +168,7 @@ impl ProcessCell {
         Self {
             inner: mutable,
             id: pid,
-            _parent: parent,
+            parent,
             layout: layout,
             head: None,
             head_lock: SpinLock::new(),
@@ -274,8 +274,13 @@ impl ProcessCell {
             MemoryRegionAttribute::Write | MemoryRegionAttribute::Read,
             true,
         );
-        self.struct_at::<TrapFrame>(trapframe)
-            .init(hartid, entry, stack, self.layout.trampoline);
+        self.struct_at::<TrapFrame>(trapframe).init(
+            hartid,
+            entry,
+            stack,
+            self.layout.trampoline,
+            [tid as u64, self.id as u64, self.parent as u64],
+        );
         if let Some(gap) = &option {
             gap.ring_lock.lock();
             let last = gap.get_mut();

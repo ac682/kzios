@@ -17,17 +17,19 @@
 
 ## 接口
 
-文件系统提供 `Inspect` 和 `Modify` 系统调用用于检查修改一个文件的元数据。
+文件系统提供 `Access`，`Inspect` 和 `Modify` 系统调用用于检查修改一个文件的元数据。
 针对不同文件有各对应的系统调用。
 
-- 流(Stream)：`Open`，`Close`
+- 流(Stream)：`Open`，`Close`(直接 `sys_tunnel_dispose` 就行不需要额外加个系统调用来关)
 - 属性(Property)：`Read`, `Write`
   
 链接则会讲操作转发到目标文件。
 针对目录同样有一套系统调用。
 
 - 创建文件或目录: `Create`
-- 删除文件或目录: `Remove`
+- 删除文件或目录: `Delete`
+- 移动文件或目录: `Move`
+- 赋值文件或目录: `Copy`
 
 使用文件绝对路径来查找目录或者文件。根目录的索引名为 ""(空字符)，理论上应该可以用空字符或 "/" 来代表根目录，但空字符不合法，所以只能用后者。
 
@@ -65,3 +67,22 @@
 ## 文件系统行为
 
 通过抽象接口实现的文件系统 `FileSystem` 都必须假设自己为根文件系统，且只接受绝对路径的查询。内核有义务保证发送到文件系统实现的路径为绝对路径。
+
+## 系统调用
+
+获取节点是否存在 `Access`，提供路径所指向的节点是否存在和用于存放元数据交换结构的序列化大小。
+
+```rust
+struct DentryMeta{
+    kind: DentryType,
+    attr: FlagSet<DentryAttribute>,
+    created_at: Timestamp,
+    modified_at: Timestamp,
+    size: usize,
+    in_use: bool,
+    name_length: usize,
+    has_next: bool,
+}
+```
+
+`name` 位于结构体后续 `name_length` 个字节，第二个结构体(只有为目录时存在后续结构体)位于名字后。

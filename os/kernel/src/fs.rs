@@ -1,12 +1,12 @@
 use erhino_shared::{
-    fal::{DentryAttribute, FileSystem},
+    fal::{Dentry, DentryAttribute, FileSystem},
     path::Path,
 };
 use spin::Once;
 
 use crate::println;
 
-use self::rootfs::Rootfs;
+use self::rootfs::{LocalDentry, Registry, Rootfs};
 
 pub mod procfs;
 pub mod rootfs;
@@ -26,13 +26,18 @@ pub fn init() {
         )
         .expect("msg");
     rootfs
-    .make_dir(
-        Path::from("/sys/./../dev").unwrap(),
-        DentryAttribute::Writeable | DentryAttribute::Readable,
-    )
-    .expect("msg");
+        .make_dir(
+            Path::from("/sys/./../dev").unwrap(),
+            DentryAttribute::Writeable | DentryAttribute::Readable,
+        )
+        .expect("msg");
     println!("{}", rootfs);
     unsafe {
         ROOT.call_once(|| rootfs);
     }
+}
+
+pub fn find(path: Path, local: fn(&LocalDentry), remote: fn(&Registry, Path)) -> bool{
+    let root = unsafe { ROOT.get().unwrap() };
+    todo!()
 }

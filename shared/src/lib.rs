@@ -20,3 +20,5 @@ pub mod sync;
 pub mod fal;
 /// eRhino path string utilities
 pub mod path;
+/// Time-related functions
+pub mod time;

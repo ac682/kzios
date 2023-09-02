@@ -7,6 +7,7 @@ use alloc::{string::String, vec::Vec};
 use erhino_shared::{
     call::{SystemCall, SystemCallError},
     mem::{Address, MemoryRegionAttribute},
+    path::Path,
     proc::{ExitCode, Pid, ProcessPermission, SignalMap},
     sync::DataLock,
 };
@@ -14,6 +15,7 @@ use erhino_shared::{
 use crate::{
     debug,
     external::{_awaken, _park, _switch},
+    fs,
     mm::{
         frame,
         page::{PAGE_BITS, PAGE_SIZE},
@@ -128,8 +130,8 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
         arg0: usize,
         arg1: usize,
         _arg2: usize,
-        random: &mut R
-    ) -> Result<usize, SystemCallError> {
+        random: &mut R,
+    ) -> Result<Option<usize>, SystemCallError> {
         let process = context.process();
         match call {
             SystemCall::Debug => {
@@ -144,35 +146,37 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                             context.tid(),
                             str
                         );
-                        Ok(length)
+                        Ok(Some(length))
                     }
                     Err(e) => Err(match e {
                         ProcessMemoryError::InaccessibleRegion => {
                             SystemCallError::MemoryNotAccessible
                         }
-                        _ => SystemCallError::Unknown,
+                        _ => SystemCallError::InvalidAddress,
                     }),
                 }
             }
             SystemCall::Exit => {
                 let code = arg0 as ExitCode;
                 process.health = ProcessHealth::Dead(code);
-                context.schedule();
-                Ok(0)
+                Ok(None)
             }
             SystemCall::Extend => {
                 let bytes = arg0;
-                process.extend(bytes).map_err(|err| match err {
-                    ProcessMemoryError::OutOfMemory => SystemCallError::OutOfMemory,
-                    ProcessMemoryError::MisalignedAddress => SystemCallError::MisalignedAddress,
-                    _ => SystemCallError::Unknown,
-                })
+                process
+                    .extend(bytes)
+                    .map_err(|err| match err {
+                        ProcessMemoryError::OutOfMemory => SystemCallError::OutOfMemory,
+                        ProcessMemoryError::MisalignedAddress => SystemCallError::InvalidAddress,
+                        _ => SystemCallError::Unknown,
+                    })
+                    .map(|r| Some(r))
             }
             SystemCall::ThreadSpawn => {
                 let func_pointer = arg0 as Address;
                 let thread = Thread::new(func_pointer);
                 let tid = context.add_thread(thread);
-                Ok(tid as usize)
+                Ok(Some(tid as usize))
             }
             SystemCall::TunnelBuild => {
                 if let Some(frame) = frame::borrow(1) {
@@ -183,7 +187,7 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                     }
                     let tunnel = Tunnel::new(rng, context.pid(), frame);
                     tunnels.push(tunnel);
-                    Ok(rng)
+                    Ok(Some(rng))
                 } else {
                     Err(SystemCallError::OutOfMemory)
                 }
@@ -214,7 +218,7 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                                     )
                                     .is_ok()
                                 {
-                                    Ok(addr)
+                                    Ok(Some(addr))
                                 } else {
                                     tunnel.unlink(context.pid());
                                     Err(SystemCallError::MemoryNotAccessible)
@@ -252,7 +256,7 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                         // 进程退出的时候直接按照 tunnels 表删就可以，不需要逐个检查
                         process.free(number, 1).expect("kill process if failed");
                         process.tunnel_eject(key);
-                        Ok(0)
+                        Ok(Some(0))
                     } else {
                         Err(SystemCallError::ObjectNotAccessible)
                     }
@@ -264,7 +268,7 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                 let mask = arg0;
                 let handler = arg1;
                 process.signal.set_handler(mask as SignalMap, handler);
-                Ok(0)
+                Ok(Some(0))
             }
             SystemCall::SignalSend => {
                 let pid = arg0 as Pid;
@@ -276,7 +280,7 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                         accepted = true;
                     }
                 }) {
-                    Ok(if accepted { 1 } else { 0 })
+                    Ok(Some(if accepted { 1 } else { 0 }))
                 } else {
                     Err(SystemCallError::ObjectNotFound)
                 }
@@ -284,9 +288,38 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
             SystemCall::SignalReturn => {
                 if process.signal.is_handling() {
                     process.signal.complete();
-                    Ok(0)
+                    Ok(Some(0))
                 } else {
                     Err(SystemCallError::FunctionNotAvailable)
+                }
+            }
+            SystemCall::Access => {
+                let address: Address = arg0;
+                let length: usize = arg1;
+                match process.read(address, length) {
+                    Ok(buffer) => {
+                        let str = unsafe { String::from_utf8_unchecked(buffer) };
+                        if let Ok(path) = Path::from(&str) {
+                            let is_remote = false;
+                            if fs::find(path, |local| {}, |registry, relative| {}) {
+                                // TODO: 对于远程的，封装消息发送到对应 pid ，在等待列表添加 request ，等待对方 send 到内核，同时将线程状态设置为 Waiting
+                                // 当 request 被满足后会标记 request 等待的 process 的状态为 fed，再次加入调度，并触发 ecall 重新以相同的参数回到这里
+                                // 此时等待列表的对应 request 就应该有文件元数据了
+                                Ok(if is_remote { None } else { Some(todo!()) })
+                            } else {
+                                Err(SystemCallError::ObjectNotFound)
+                            }
+                        } else {
+                            Err(SystemCallError::ObjectNotFound)
+                        }
+                    }
+                    Err(err) => Err(match err {
+                        ProcessMemoryError::InaccessibleRegion => {
+                            SystemCallError::MemoryNotAccessible
+                        }
+
+                        _ => SystemCallError::InvalidAddress,
+                    }),
                 }
             }
             _ => unimplemented!("unimplemented syscall: {:?}", call),
@@ -350,7 +383,6 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                 let trapframe = ctx.trapframe();
                 // 只有同步调用才会前进下一个指令
                 // `handle_system_call` 返回 Ok(SystemCallProcedureResult)，包含 Finished(usize) 和 Pending()，后者会切换到其他进程
-                trapframe.move_next_instruction();
                 let mut syscall = trapframe
                     .extract_syscall()
                     .expect("invalid sys call triggered");
@@ -360,10 +392,19 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                     syscall.arg0,
                     syscall.arg1,
                     syscall.arg2,
-                    &mut self.random
+                    &mut self.random,
                 ) {
-                    Ok(res) => syscall.write_response(res),
-                    Err(err) => syscall.write_error(err),
+                    // Some 为同步调用，立即返回结果
+                    Ok(Some(res)) => {
+                        syscall.write_response(res);
+                        trapframe.move_next_instruction()
+                    }
+                    // None 为异步调用，触发调度
+                    Ok(None) => ctx.schedule(),
+                    Err(err) => {
+                        syscall.write_error(err);
+                        trapframe.move_next_instruction();
+                    }
                 }
             }),
             _ => {

@@ -4,7 +4,7 @@ use alloc::string::String;
 use flagset::{flags, FlagSet};
 use path::Path;
 
-use crate::path;
+use crate::{path, time::Timestamp};
 
 flags! {
     pub enum DentryAttribute: u8{
@@ -25,7 +25,28 @@ pub enum DentryKind {
     Directory,
     Link,
     File(File),
-    MountPoint(),
+    MountPoint,
+}
+
+#[repr(u8)]
+pub enum DentryType{
+    Directory = 0,
+    Link,
+    Stream,
+    Property,
+    MountPoint
+}
+
+/// Structure for serialization
+pub struct DentryMeta{
+    kind: DentryType,
+    attr: FlagSet<DentryAttribute>,
+    created_at: Timestamp,
+    modified_at: Timestamp,
+    size: usize,
+    in_use: bool,
+    name_length: usize,
+    has_next: bool,
 }
 
 pub enum File {

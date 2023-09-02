@@ -1,4 +1,4 @@
-use erhino_shared::{mem::Address, proc::Tid};
+use erhino_shared::{mem::Address, proc::{Tid, Pid}};
 
 use crate::call::sys_thread_spawn;
 
@@ -20,7 +20,7 @@ impl Thread {
     }
 }
 
-fn thread_wrapper(){
+fn thread_wrapper(tid: Tid, pid: Pid, parent: Pid){
 
 }
 

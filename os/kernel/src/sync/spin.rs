@@ -1,21 +1,21 @@
 use core::{
     hint::spin_loop,
-    sync::atomic::{Ordering, AtomicBool, AtomicPtr}, ptr::null_mut,
+    sync::atomic::{Ordering, AtomicBool, AtomicPtr}, ptr::{null_mut, null},
 };
 
 use alloc::boxed::Box;
 use erhino_shared::sync::InteriorLock;
 
 pub struct Ticket {
-    locked: AtomicBool,
-    next: AtomicPtr<Ticket>,
+    locked: bool,
+    next: *mut Ticket,
 }
 
 impl Ticket {
     pub const fn new() -> Self {
         Self {
-            locked: AtomicBool::new(true),
-            next: AtomicPtr::new(null_mut()),
+            locked: true,
+            next: null_mut(),
         }
     }
 }
@@ -45,8 +45,8 @@ impl InteriorLock for SpinLock {
         let prev = self.tail.swap(node, Ordering::Acquire);
         if !prev.is_null() {
             unsafe {
-                (*prev).next.store(node, Ordering::Relaxed);
-                while (*node).locked.load(Ordering::Acquire) {
+                (*prev).next = node;
+                while (*node).locked {
                     spin_loop()
                 }
             }
@@ -82,14 +82,12 @@ impl InteriorLock for SpinLock {
             },
             Err(_) => unsafe {
                 let owned = &mut (*self_ptr);
-                let mut next: *mut Ticket = null_mut();
-                while next.is_null() {
-                    next = owned.next.load(Ordering::Acquire);
+                while owned.next.is_null() {
                     spin_loop()
                 }
-                let succ = &mut (*next);
+                let succ = &mut (*owned.next);
                 drop(Box::from_raw(owned));
-                succ.locked.store(false, Ordering::Relaxed);
+                succ.locked = false;
             },
         }
     }

@@ -78,8 +78,12 @@ impl TrapFrame {
         entry_point: Address,
         stack_address: Address,
         user_trap: Address,
+        registers: [u64; 3],
     ) {
         self.x = [0; 32];
+        self.x[10] = registers[0];
+        self.x[11] = registers[1];
+        self.x[11] = registers[2];
         self.f = [0; 32];
         self.x[2] = stack_address as u64;
         self.pc = entry_point as u64;

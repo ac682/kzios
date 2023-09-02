@@ -135,6 +135,8 @@ impl Rootfs {
         }
     }
 
+    pub fn mount(&mut self) {}
+
     fn find_entry<'a>(
         container: &'a LocalDentry,
         mut path: PathIterator,
