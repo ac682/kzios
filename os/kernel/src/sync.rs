@@ -1,3 +1,3 @@
 pub mod up;
 pub mod semaphore;
-pub mod spin;
+pub mod mutex;

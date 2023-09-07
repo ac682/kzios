@@ -23,6 +23,17 @@ pub enum Component<'a> {
     Normal(&'a str),
 }
 
+impl<'a> Component<'a> {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Component::Root => "",
+            Component::Current => ".",
+            Component::Parent => "..",
+            Component::Normal(it) => it,
+        }
+    }
+}
+
 /// Path parsing error
 #[derive(Debug)]
 pub enum PathError {
@@ -35,6 +46,7 @@ pub enum PathError {
 }
 
 /// Representing a file or directory
+#[derive(Debug, Clone)]
 pub struct Path {
     inner: String,
 }
@@ -43,9 +55,7 @@ impl Path {
     /// Construct a path from string
     pub fn from(s: &str) -> Result<Self, PathError> {
         if Self::is_valid(s) {
-            Ok(Self {
-                inner: s.to_owned(),
-            })
+            Ok(Self::from_string_unchecked(s.to_owned()))
         } else {
             Err(PathError::InvalidCharacters)
         }
@@ -164,6 +174,10 @@ impl Path {
         }
         None
     }
+
+    fn from_string_unchecked(string: String) -> Self {
+        Self { inner: string }
+    }
 }
 
 impl Display for Path {
@@ -184,6 +198,23 @@ impl<'a> PathIterator<'a> {
             split: path.get_non_separated_terminated().split(PATH_SEPARATOR),
             has_root: path.is_absolute(),
         }
+    }
+
+    pub fn collect_remaining(mut self) -> Path {
+        let mut buffer = Vec::<String>::new();
+        if let Some(first) = self.next() {
+            match first {
+                Component::Root => buffer.push("".to_owned()),
+                _ => {
+                    buffer.push("".to_owned());
+                    buffer.push(first.as_str().to_owned())
+                }
+            }
+        }
+        while let Some(next) = self.next() {
+            buffer.push(next.as_str().to_owned());
+        }
+        Path::from_string_unchecked(buffer.join("/"))
     }
 }
 

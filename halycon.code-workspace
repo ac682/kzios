@@ -53,6 +53,8 @@
 			"misa",
 			"mmap",
 			"mmio",
+			"mountpoint",
+			"mountpoints",
 			"mscratch",
 			"msip",
 			"Mstatus",

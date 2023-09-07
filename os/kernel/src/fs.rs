@@ -1,43 +1,57 @@
+use alloc::vec::Vec;
 use erhino_shared::{
-    fal::{Dentry, DentryAttribute, FileSystem},
+    fal::{Dentry, DentryAttribute, FileSystem, FileAbstractLayerError, Mid},
     path::Path,
+    proc::Pid,
 };
+use flagset::FlagSet;
 use spin::Once;
 
 use crate::println;
 
-use self::rootfs::{LocalDentry, Registry, Rootfs};
+use self::{procfs::Procfs, rootfs::Rootfs};
 
 pub mod procfs;
 pub mod rootfs;
 pub mod sysfs;
 
 static mut ROOT: Once<Rootfs> = Once::new();
+// 只会在 fs::init 中写，此后只读，就不上锁了
+// Mid 为 (index + 1) << 32
+static mut MOUNTPOINTS: Vec<LocalMountpoint> = Vec::new();
+
+enum LocalMountpoint {
+    Proc(Procfs),
+}
 
 pub fn init() {
-    let mut rootfs = Rootfs::new();
+    let rootfs = Rootfs::new();
     rootfs
-        .make_dir(Path::from("/proc/srv/").unwrap(), DentryAttribute::Readable)
-        .expect("msg");
-    rootfs
-        .make_dir(
-            Path::from("/sys/devices/block").unwrap(),
-            DentryAttribute::Writeable | DentryAttribute::Readable,
-        )
-        .expect("msg");
-    rootfs
-        .make_dir(
-            Path::from("/sys/./../dev").unwrap(),
-            DentryAttribute::Writeable | DentryAttribute::Readable,
-        )
-        .expect("msg");
-    println!("{}", rootfs);
+        .mount(&Path::from("/proc").unwrap(), (0 + 1) << 32)
+        .expect("mount /proc");
     unsafe {
+        // slot id = 0, mid = 1 << 32
+        MOUNTPOINTS.push(LocalMountpoint::Proc(Procfs::new()));
         ROOT.call_once(|| rootfs);
     }
 }
 
-pub fn find(path: Path, local: fn(&LocalDentry), remote: fn(&Registry, Path)) -> bool{
-    let root = unsafe { ROOT.get().unwrap() };
+pub fn make_dir<A: Into<FlagSet<DentryAttribute>>>(path: Path, recursive: bool, attr: A) {
     todo!()
+}
+
+pub fn mount_local(path: Path, slot: usize) -> Result<(), FileAbstractLayerError> {
+    unsafe { ROOT.get_mut_unchecked() }.mount(&path, ((slot + 1) << 32) as Mid)
+}
+
+pub fn mount_remote(path: Path, service: Pid) -> Result<(), FileAbstractLayerError> {
+    unsafe { ROOT.get_mut_unchecked() }.mount(&path, service as Mid)
+}
+
+pub fn access(path: Path) -> Result<usize, FileAbstractLayerError> {
+    unsafe { ROOT.get_mut_unchecked() }
+        .lookup(path)
+        .map(|d| match d.kind() {
+            _ => todo!(),
+        })
 }

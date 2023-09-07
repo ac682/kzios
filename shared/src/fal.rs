@@ -1,10 +1,12 @@
 // 定义一套接口和元数据，不包含实际数据
 
-use alloc::string::String;
 use flagset::{flags, FlagSet};
 use path::Path;
 
-use crate::{path, time::Timestamp};
+use crate::{path, proc::Pid, time::Timestamp};
+
+/// Mountpoint id, may be pid or internal id
+pub type Mid = u64;
 
 flags! {
     pub enum DentryAttribute: u8{
@@ -25,20 +27,20 @@ pub enum DentryKind {
     Directory,
     Link,
     File(File),
-    MountPoint,
+    MountPoint(Path, Mid),
 }
 
 #[repr(u8)]
-pub enum DentryType{
+pub enum DentryType {
     Directory = 0,
     Link,
     Stream,
     Property,
-    MountPoint
+    MountPoint,
 }
 
 /// Structure for serialization
-pub struct DentryMeta{
+pub struct DentryMeta {
     kind: DentryType,
     attr: FlagSet<DentryAttribute>,
     created_at: Timestamp,
@@ -64,18 +66,18 @@ pub enum PropertyKind {
 }
 
 #[derive(Debug)]
-pub enum FileSystemError {
+pub enum FileAbstractLayerError {
     InvalidPath,
     NotFound,
+    NotAccessible,
+    Mistyped,
+    Conflict,
+    ForeignLink(Path, Path),
+    ForeignMountPoint(Path, Mid),
 }
 
 pub trait FileSystem {
     fn is_property_supported(&self) -> bool;
     fn is_stream_supported(&self) -> bool;
-    fn lookup(&self, path: Path) -> Result<&dyn Dentry, FileSystemError>;
-    fn make_dir<A: Into<FlagSet<DentryAttribute>> + Copy>(
-        &mut self,
-        path: Path,
-        attr: A,
-    ) -> Result<&dyn Dentry, FileSystemError>;
+    fn lookup(&self, path: Path) -> Result<&dyn Dentry, FileAbstractLayerError>;
 }

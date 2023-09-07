@@ -8,6 +8,7 @@ use crate::{mm::ProcessAddressRegion, trap::TrapFrame};
 use super::{proc::Process, thread::Thread};
 
 pub mod unfair;
+pub mod enough;
 
 pub trait ScheduleContext {
     fn pid(&self) -> Pid;

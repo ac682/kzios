@@ -78,7 +78,7 @@ make_initfs: build_user
 
 build_opensbi options:
     @echo -e "\033[0;36mBuild OpenSBI: {{options}}\033[0m"
-    @cd submodules/opensbi && make CROSS_COMPILE=riscv64-linux-gnu- {{options}}
+    @cd submodules/opensbi && make -j4 CROSS_COMPILE=riscv64-linux-gnu- {{options}}
     @cp {{OPENSBI_BUILD_DIR}}/platform/generic/firmware/fw_*.bin '{{TARGET_DIR}}'
     @cp {{OPENSBI_BUILD_DIR}}/platform/generic/firmware/fw_*.elf '{{TARGET_DIR}}'
     @echo -e "\033[0;32mOpenSBI build successfully!\033[0m"

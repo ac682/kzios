@@ -16,7 +16,7 @@ use crate::{
         unit::{AddressSpace, MemoryUnit},
         ProcessAddressRegion,
     },
-    sync::{spin::SpinLock, up::UpSafeCell},
+    sync::{mutex::SpinLock, up::UpSafeCell},
     task::{
         proc::{Process, ProcessHealth},
         thread::Thread,
@@ -27,8 +27,6 @@ use crate::{
 
 use super::{ScheduleContext, Scheduler};
 
-// 日后替换成 InterruptSafeLock
-type _Locked<T> = DataLock<T, SpinLock>;
 type Shared<T> = UpSafeCell<T>;
 
 // timeslice in ms

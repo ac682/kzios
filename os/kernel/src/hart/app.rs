@@ -6,6 +6,7 @@ use core::{
 use alloc::{string::String, vec::Vec};
 use erhino_shared::{
     call::{SystemCall, SystemCallError},
+    fal::FileAbstractLayerError,
     mem::{Address, MemoryRegionAttribute},
     path::Path,
     proc::{ExitCode, Pid, ProcessPermission, SignalMap},
@@ -24,7 +25,7 @@ use crate::{
     println,
     rng::RandomGenerator,
     sbi,
-    sync::spin::SpinLock,
+    sync::mutex::SpinLock,
     task::{
         ipc::tunnel::Tunnel,
         proc::{Process, ProcessHealth, ProcessMemoryError, ProcessTunnelError},
@@ -300,14 +301,28 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                     Ok(buffer) => {
                         let str = unsafe { String::from_utf8_unchecked(buffer) };
                         if let Ok(path) = Path::from(&str) {
-                            let is_remote = false;
-                            if fs::find(path, |local| {}, |registry, relative| {}) {
-                                // TODO: 对于远程的，封装消息发送到对应 pid ，在等待列表添加 request ，等待对方 send 到内核，同时将线程状态设置为 Waiting
-                                // 当 request 被满足后会标记 request 等待的 process 的状态为 fed，再次加入调度，并触发 ecall 重新以相同的参数回到这里
-                                // 此时等待列表的对应 request 就应该有文件元数据了
-                                Ok(if is_remote { None } else { Some(todo!()) })
-                            } else {
-                                Err(SystemCallError::ObjectNotFound)
+                            match fs::access(path) {
+                                Ok(size) => Ok(Some(size)),
+                                Err(err) => match err {
+                                    FileAbstractLayerError::NotAccessible => {
+                                        Err(SystemCallError::ObjectNotAccessible)
+                                    }
+                                    FileAbstractLayerError::InvalidPath => {
+                                        Err(SystemCallError::IllegalArgument)
+                                    }
+                                    FileAbstractLayerError::NotFound => {
+                                        Err(SystemCallError::ObjectNotFound)
+                                    }
+                                    FileAbstractLayerError::ForeignLink(rem, target) => {
+                                        todo!();
+                                        Ok(None)
+                                    }
+                                    FileAbstractLayerError::ForeignMountPoint(rem, mid) => {
+                                        todo!();
+                                        Ok(None)
+                                    }
+                                    _ => Err(SystemCallError::InternalError),
+                                },
                             }
                         } else {
                             Err(SystemCallError::ObjectNotFound)

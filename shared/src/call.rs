@@ -97,6 +97,10 @@ pub enum SystemCall {
     TunnelLink = 0x61,
     /// Dispose the tunnel and restore the slot
     TunnelDispose = 0x62,
+    /// Interrupt for receiving
+    TunnelRequest = 0x6a,
+    /// Interrupt for transmitting
+    TunnelResponse = 0x6b,
 
     // -----Filesystem abstract layer-----
     /// Check if dentry exist
@@ -115,5 +119,8 @@ pub enum SystemCall {
     Copy = 0x76,
     /// Works like renaming
     Move = 0x77,
-
+    /// Mount a filesystem service as a mount point at rootfs
+    Mount = 0x7a,
+    /// Unmount a mount point from rootfs
+    Unmount = 0x7b,
 }

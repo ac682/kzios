@@ -1,6 +1,6 @@
 use erhino_shared::path::Path;
 
-use erhino_shared::fal::{Dentry, FileSystem, FileSystemError, DentryAttribute};
+use erhino_shared::fal::{Dentry, DentryAttribute, FileSystem, FileAbstractLayerError};
 
 // 结构
 // 挂载到 rootfs 的 /proc
@@ -9,7 +9,13 @@ use erhino_shared::fal::{Dentry, FileSystem, FileSystemError, DentryAttribute};
 
 pub struct Procfs {}
 
-impl FileSystem for Procfs{
+impl Procfs {
+    pub fn new() -> Self {
+        Self{}
+    }
+}
+
+impl FileSystem for Procfs {
     fn is_property_supported(&self) -> bool {
         true
     }
@@ -18,15 +24,7 @@ impl FileSystem for Procfs{
         false
     }
 
-    fn lookup(&self, path: Path) -> Result<&dyn Dentry, FileSystemError> {
-        todo!()
-    }
-
-    fn make_dir<A: Into<flagset::FlagSet<DentryAttribute>> + Copy>(
-        &mut self,
-        path: Path,
-        attr: A,
-    ) -> Result<&dyn Dentry, FileSystemError> {
+    fn lookup(&self, path: Path) -> Result<&dyn Dentry, FileAbstractLayerError> {
         todo!()
     }
 }

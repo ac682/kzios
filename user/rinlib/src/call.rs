@@ -80,3 +80,7 @@ pub unsafe fn sys_signal_send(pid: Pid, signal: SignalMap) -> SystemCallResult<b
 pub unsafe fn sys_signal_return() -> SystemCallResult<()> {
     sys_call(SystemCall::SignalReturn, 0, 0, 0).map(|_| ())
 }
+
+pub unsafe fn sys_access(path: &str) -> SystemCallResult<usize>{
+    sys_call(SystemCall::Access, path.as_ptr() as usize, path.len(), 0)
+}
