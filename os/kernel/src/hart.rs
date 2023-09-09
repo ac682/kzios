@@ -14,9 +14,9 @@ use self::app::ApplicationHart;
 
 pub mod app;
 
-type TimerImpl = CpuClock;
-type SchedulerImpl = UnfairScheduler<TimerImpl>;
-type RandomImpl = LcGenerator;
+pub type TimerImpl = CpuClock;
+pub type SchedulerImpl = UnfairScheduler<TimerImpl>;
+pub type RandomImpl = LcGenerator;
 
 static mut HARTS: Vec<HartKind> = Vec::new();
 

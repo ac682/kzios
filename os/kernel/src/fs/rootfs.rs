@@ -1,6 +1,8 @@
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use erhino_shared::{
-    fal::{Dentry, DentryAttribute, DentryKind, FileSystem, FileAbstractLayerError, Mid},
+    fal::{
+        Dentry, DentryAttribute, DentryMeta, File, FileSystem, FilesystemAbstractLayerError, Mid,
+    },
     mem::Address,
     path::{Component, Path, PathIterator},
     proc::Pid,
@@ -8,7 +10,10 @@ use erhino_shared::{
 };
 use flagset::FlagSet;
 
-use crate::sync::{mutex::SpinLock, up::UpSafeCell};
+use crate::{
+    println,
+    sync::{mutex::SpinLock, up::UpSafeCell},
+};
 
 use super::procfs::Procfs;
 
@@ -38,22 +43,35 @@ impl LocalDentry {
         }
     }
 
-    pub fn real(&self) -> &LocalDentryKind {
-        &self.kind
-    }
-}
-
-impl Dentry for LocalDentry {
-    fn name(&self) -> &str {
+    pub fn name(&self) -> &str {
         &self.name
     }
 
-    fn attributes(&self) -> &FlagSet<DentryAttribute> {
-        &self.attr
+    pub fn kind(&self) -> &LocalDentryKind {
+        &self.kind
     }
 
-    fn kind(&self) -> &DentryKind {
-        todo!()
+    pub fn meta(&self, collect: bool) -> Dentry {
+        Dentry::new(
+            self.name.clone(),
+            self.attr.clone(),
+            match self.kind() {
+                LocalDentryKind::Directory(subs, lock) => {
+                    if collect {
+                        lock.lock();
+                        let meta = DentryMeta::Directory(
+                            subs.iter().map(|d| d.meta(false)).collect::<Vec<Dentry>>(),
+                        );
+                        lock.unlock();
+                        meta
+                    } else {
+                        DentryMeta::Directory(Vec::new())
+                    }
+                }
+                LocalDentryKind::MountPoint(mid) => DentryMeta::MountPoint(*mid),
+                _ => todo!(),
+            },
+        )
     }
 }
 
@@ -83,7 +101,7 @@ impl Rootfs {
         }
     }
 
-    pub fn mount(&self, path: &Path, mountpoint: Mid) -> Result<(), FileAbstractLayerError> {
+    pub fn mount(&self, path: &Path, mountpoint: Mid) -> Result<(), FilesystemAbstractLayerError> {
         // mount 的参数是 pid as service，但提供一种用户友好的方式，
         // 例如 mount_table 中 /mnt,/srv/fs/i_made_my_own_fat32，后者需要有对应进程自己 link 到自己的 /proc/{pid}
         // 然后由 /proc/{pid}/traits/fs/* 得到其支持的文件系统信息
@@ -94,105 +112,109 @@ impl Rootfs {
                 LocalDentry::new_mountpoint(path.filename(), mountpoint),
             )
         } else {
-            Err(FileAbstractLayerError::InvalidPath)
+            Err(FilesystemAbstractLayerError::InvalidPath)
         }
     }
 
-    fn get_parent(&self, path: &Path) -> Result<&Node, FileAbstractLayerError> {
+    fn get_parent(&self, path: &Path) -> Result<&Node, FilesystemAbstractLayerError> {
         if path.is_absolute() {
             if let Ok(qualified) = path.qualify() {
                 if let Some(parent) = qualified.parent() {
                     if let Ok(p) = Path::from(parent) {
                         let mut iter = p.iter();
                         iter.next();
-                        let node = Self::find_node(&self.root, iter)?;
-                        if let LocalDentryKind::Directory(_, _) = node.real() {
+                        let node = Self::find_node_internal(&self.root, iter)?;
+                        if let LocalDentryKind::Directory(_, _) = node.kind() {
                             Ok(node)
                         } else {
-                            Err(FileAbstractLayerError::Mistyped)
+                            Err(FilesystemAbstractLayerError::Mistyped)
                         }
                     } else {
-                        Err(FileAbstractLayerError::InvalidPath)
+                        Err(FilesystemAbstractLayerError::InvalidPath)
                     }
                 } else {
-                    Err(FileAbstractLayerError::InvalidPath)
+                    Err(FilesystemAbstractLayerError::InvalidPath)
                 }
             } else {
-                Err(FileAbstractLayerError::InvalidPath)
+                Err(FilesystemAbstractLayerError::InvalidPath)
             }
         } else {
-            Err(FileAbstractLayerError::InvalidPath)
+            Err(FilesystemAbstractLayerError::InvalidPath)
         }
     }
 
-    fn create_node(&self, parent: &Path, dentry: LocalDentry) -> Result<(), FileAbstractLayerError> {
-        if parent.is_absolute() {
-            if let Ok(qualified) = parent.qualify() {
-                let mut iter = qualified.iter();
-                iter.next();
-                match Self::find_node(&self.root, parent.iter()) {
-                    Ok(directory) => {
-                        if let LocalDentryKind::Directory(subs, lock) = directory.real() {
-                            // subs 可以用 hashmap 或者以 filename 为 key 的 btree 优化一下
-                            lock.lock();
-                            let mut found = false;
-                            for i in subs.iter() {
-                                if i.name() == dentry.name() {
-                                    found = true;
-                                    break;
-                                }
-                            }
-                            if found {
-                                subs.get_mut().push(UpSafeCell::new(dentry));
-                                lock.unlock();
-                                Ok(())
-                            } else {
-                                lock.unlock();
-                                Err(FileAbstractLayerError::Conflict)
-                            }
-                        } else {
-                            Err(FileAbstractLayerError::Mistyped)
+    fn create_node(
+        &self,
+        parent: &Path,
+        dentry: LocalDentry,
+    ) -> Result<(), FilesystemAbstractLayerError> {
+        match self.find_node(parent) {
+            Ok(directory) => {
+                if let LocalDentryKind::Directory(subs, lock) = directory.kind() {
+                    // subs 可以用 hashmap 或者以 filename 为 key 的 btree 优化一下
+                    lock.lock();
+                    let mut found = false;
+                    for i in subs.iter() {
+                        if i.name() == dentry.name() {
+                            found = true;
+                            break;
                         }
                     }
-                    Err(e) => Err(e),
+                    if !found {
+                        subs.get_mut().push(UpSafeCell::new(dentry));
+                        lock.unlock();
+                        Ok(())
+                    } else {
+                        lock.unlock();
+                        Err(FilesystemAbstractLayerError::Conflict)
+                    }
+                } else {
+                    Err(FilesystemAbstractLayerError::Mistyped)
                 }
-            } else {
-                Err(FileAbstractLayerError::InvalidPath)
             }
-        } else {
-            Err(FileAbstractLayerError::InvalidPath)
+            Err(e) => Err(e),
         }
     }
 
-    fn find_node<'a>(
+    fn find_node(&self, path: &Path) -> Result<&Node, FilesystemAbstractLayerError> {
+        if path.is_absolute() {
+            if let Ok(qualified) = path.qualify() {
+                let mut iter = qualified.iter();
+                iter.next();
+                Self::find_node_internal(&self.root, iter)
+            } else {
+                Err(FilesystemAbstractLayerError::InvalidPath)
+            }
+        } else {
+            Err(FilesystemAbstractLayerError::InvalidPath)
+        }
+    }
+
+    fn find_node_internal<'a>(
         container: &'a Node,
         mut path: PathIterator,
-    ) -> Result<&'a Node, FileAbstractLayerError> {
+    ) -> Result<&'a Node, FilesystemAbstractLayerError> {
         if let Some(next) = path.next() {
             match next {
-                Component::Normal(name) => match container.real() {
+                Component::Normal(name) => match container.kind() {
                     LocalDentryKind::Directory(subs, lock) => {
                         lock.lock();
                         for s in subs.iter() {
                             if s.name() == name {
                                 lock.unlock();
-                                return Self::find_node(s, path);
+                                return Self::find_node_internal(s, path);
                             }
                         }
                         lock.unlock();
-                        Err(FileAbstractLayerError::NotFound)
+                        Err(FilesystemAbstractLayerError::NotFound)
                     }
-                    LocalDentryKind::Link(target) => Err(FileAbstractLayerError::ForeignLink(
-                        path.collect_remaining(),
-                        target.to_owned(),
-                    )),
-                    LocalDentryKind::File(_) => Err(FileAbstractLayerError::Mistyped),
                     LocalDentryKind::MountPoint(mountpoint) => {
-                        Err(FileAbstractLayerError::ForeignMountPoint(
+                        Err(FilesystemAbstractLayerError::ForeignMountPoint(
                             path.collect_remaining(),
                             mountpoint.to_owned(),
                         ))
                     }
+                    _ => Err(FilesystemAbstractLayerError::Mistyped),
                 },
                 _ => unreachable!(),
             }
@@ -212,7 +234,7 @@ impl FileSystem for Rootfs {
         false
     }
 
-    fn lookup(&self, path: Path) -> Result<&dyn Dentry, FileAbstractLayerError> {
-        todo!()
+    fn lookup(&self, path: Path) -> Result<Dentry, FilesystemAbstractLayerError> {
+        self.find_node(&path).map(|d| d.meta(true))
     }
 }

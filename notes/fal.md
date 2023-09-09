@@ -73,10 +73,10 @@
 获取节点是否存在 `Access`，提供路径所指向的节点是否存在和用于存放元数据交换结构的序列化大小。
 
 使用 `Inspect` 提供路径和一个大小为任意(但最好是 `Access` 中得到的大小)的 byte buffer，和 buffer 的大小(当无法提供足够大的 buffer 时可以用于截断)。
-Buffer 中将填充以下数据结构。
+Buffer 中将填充以下数据结构。通过其返回值表示写入的对象数量，来遍历列表。
 
 ```rust
-struct DentryMeta{
+struct DentryObject{
     kind: DentryType,
     attr: FlagSet<DentryAttribute>,
     created_at: Timestamp,
@@ -84,7 +84,6 @@ struct DentryMeta{
     size: usize,
     in_use: bool,
     name_length: usize,
-    has_next: bool,
 }
 ```
 

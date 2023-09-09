@@ -66,11 +66,11 @@ impl ScheduleContext for UnfairContext {
 
     fn add_proc(&self, proc: Process) -> Pid {
         let table = unsafe { &mut PROC_TABLE };
-        table.add(proc, Some(self.process.id), self.hartid)
+        table.add(proc, Some(self.process.id))
     }
 
     fn add_thread(&self, thread: Thread) -> Tid {
-        self.process.get_mut().add(thread, self.hartid)
+        self.process.get_mut().add(thread)
     }
 
     fn schedule(&mut self) {
@@ -255,7 +255,7 @@ impl ProcessCell {
         }
     }
 
-    pub fn add(&mut self, thread: Thread, hartid: usize) -> Tid {
+    pub fn add(&mut self, thread: Thread) -> Tid {
         let option = self.find_gap();
         let tid = if let Some(gap) = &option {
             gap.id + 1
@@ -273,7 +273,6 @@ impl ProcessCell {
             true,
         );
         self.struct_at::<TrapFrame>(trapframe).init(
-            hartid,
             entry,
             stack,
             self.layout.trampoline,
@@ -397,7 +396,7 @@ impl ProcessTable {
         self.pid_generator.fetch_add(1, Ordering::Relaxed) as Pid
     }
 
-    pub fn add(&mut self, proc: Process, parent: Option<Pid>, hartid: usize) -> Pid {
+    pub fn add(&mut self, proc: Process, parent: Option<Pid>) -> Pid {
         let pid = self.new_pid();
         let parent_id = if let Some(parent) = parent {
             parent
@@ -411,7 +410,7 @@ impl ProcessTable {
         );
         let main = Thread::new(proc.entry_point());
         let mut cell = ProcessCell::new(proc, pid, parent_id, layout);
-        cell.add(main, hartid);
+        cell.add(main);
         self.add_cell(cell);
         pid
     }
@@ -613,14 +612,14 @@ impl<T: Timer> UnfairScheduler<T> {
 
 impl<T: Timer> Scheduler for UnfairScheduler<T> {
     type Context = UnfairContext;
-    fn add(&mut self, proc: Process, parent: Option<Pid>) -> Pid {
+    fn add(proc: Process, parent: Option<Pid>) -> Pid {
         let table = unsafe { &mut PROC_TABLE };
-        let pid = table.add(proc, parent, self.hartid);
+        let pid = table.add(proc, parent);
         hart::app::awake_idle();
         pid
     }
 
-    fn find<F: FnMut(&mut Process)>(&self, pid: Pid, mut action: F) -> bool {
+    fn find<F: FnMut(&mut Process)>(pid: Pid, mut action: F) -> bool {
         if let Some(p) = unsafe { &PROC_TABLE }.find_process(pid) {
             p.state_lock.lock();
             let mutable = p.get_mut();

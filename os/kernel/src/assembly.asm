@@ -95,7 +95,7 @@ _kernel_trap:
     sd      x31, 248(sp)
     # check if need to save floating registers
     csrr    t0, sstatus
-    srli   t0, t0, 13
+    srli    t0, t0, 13
     andi    t0, t0, 0b11
     li      t1, 3
     bne     t0, t1, 1f
@@ -319,21 +319,25 @@ _user_trap:
     # save pc
     csrr    t6, sepc
     sd      t6, 512(a0)
-    # load tp and sp
+    # load tp and locate sp
     ld      tp, 520(a0)
-    ld      sp, 528(a0)
+    mv      t0, tp
+    ld      sp, _stack_size_abs
+    mul     t0, t0, sp
+    ld      sp, _kernel_end_abs
+    sub     sp, sp, t0
     # traps here redirect to kernel trap
-    ld      t6, 544(a0)
+    ld      t6, 536(a0)
     csrw    stvec, t6
     # install kernel page table
-    ld      t6, 536(a0)
+    ld      t6, 528(a0)
     sfence.vma
     csrw    satp, t6
     sfence.vma
     # prepare arguments
     csrr    a0, scause
     csrr    a1, stval
-    ld      t0, _handle_user_trap
+    ld      t0, _handle_user_trap_abs
     jalr    t0
     # a0 -> satp
     # a1 -> &trapframe(inaccessible before satp install)
@@ -346,13 +350,12 @@ _restore:
     # traps here redirect to user trap
     # restore special registers
     csrw    sscratch, a1
-    ld      t6, 552(a1)
+    ld      t6, 544(a1)
     csrw    stvec, t6
     ld      t6, 512(a1)
     csrw    sepc, t6
-    # save tp and sp
+    # save tp
     sd      tp, 520(a1)
-    sd      sp, 528(a1)
     # restore floating registers
     csrr    t0, sstatus
     srli    t0, t0, 13
@@ -435,7 +438,9 @@ _restore:
     ld      x30, 240(t6)
 _enter_user_breakpoint:
     sret
-_handle_user_trap: .dword handle_user_trap
+_handle_user_trap_abs: .dword handle_user_trap
+_stack_size_abs: .dword _stack_size
+_kernel_end_abs: .dword _kernel_end
 
 .section .text
 .global _switch

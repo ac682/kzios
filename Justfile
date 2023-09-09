@@ -33,6 +33,7 @@ QEMU_LAUNCH := "qemu-system-riscv64 -M "+MODEL+" -m 128M -nographic -kernel '"+K
 
 # gdb
 GDB_BINARY := "gdb-multiarch"
+GDB_TARGET := KERNEL_ELF
 # GDB_BINARY := "riscv64-elf-gdb"
 
 alias b := build_kernel
@@ -126,4 +127,4 @@ flash:
     @just PLATFORM={{PLATFORM}} MODEL={{MODEL}} MODE={{MODE}} flash_{{PLATFORM}}
 
 debug: make_dtb build_kernel
-    @tmux new-session -d "{{QEMU_LAUNCH}} -s -S" && tmux split-window -h "{{GDB_BINARY}} -ex 'set arch riscv:rv64' -ex 'target extended-remote localhost:1234' {{DEBUGGER_OPTIONS}} -ex 'set confirm no' -ex 'file {{KERNEL_ELF}}' -ex 'set confirm yes'" && tmux -2 attach-session -d
+    @tmux new-session -d "{{QEMU_LAUNCH}} -s -S" && tmux split-window -h "{{GDB_BINARY}} -ex 'set arch riscv:rv64' -ex 'target extended-remote localhost:1234' {{DEBUGGER_OPTIONS}} -ex 'set confirm no' -ex 'file {{GDB_TARGET}}' -ex 'set confirm yes'" && tmux -2 attach-session -d

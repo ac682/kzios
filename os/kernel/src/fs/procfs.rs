@@ -1,6 +1,14 @@
+use alloc::borrow::ToOwned;
+use alloc::string::{String, ToString};
 use erhino_shared::path::Path;
 
-use erhino_shared::fal::{Dentry, DentryAttribute, FileSystem, FileAbstractLayerError};
+use erhino_shared::fal::{
+    Dentry, DentryAttribute, DentryMeta, FileSystem, FilesystemAbstractLayerError,
+};
+use erhino_shared::proc::Pid;
+use flagset::FlagSet;
+
+use crate::task::proc::Process;
 
 // 结构
 // 挂载到 rootfs 的 /proc
@@ -11,7 +19,7 @@ pub struct Procfs {}
 
 impl Procfs {
     pub fn new() -> Self {
-        Self{}
+        Self {}
     }
 }
 
@@ -24,7 +32,23 @@ impl FileSystem for Procfs {
         false
     }
 
-    fn lookup(&self, path: Path) -> Result<&dyn Dentry, FileAbstractLayerError> {
-        todo!()
+    fn lookup(&self, path: Path) -> Result<Dentry, FilesystemAbstractLayerError> {
+        if path.is_absolute() {
+            if let Ok(qualified) = path.qualify() {
+                if qualified.as_str() == "/" {
+                    Ok(Dentry::new(
+                        "".to_owned(),
+                        DentryAttribute::Executable | DentryAttribute::Readable,
+                        DentryMeta::Link,
+                    ))
+                } else {
+                    todo!()
+                }
+            } else {
+                Err(FilesystemAbstractLayerError::InvalidPath)
+            }
+        } else {
+            Err(FilesystemAbstractLayerError::InvalidPath)
+        }
     }
 }

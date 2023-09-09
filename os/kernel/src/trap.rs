@@ -23,6 +23,7 @@ pub struct SystemCallRequest<'context> {
     pub arg0: usize,
     pub arg1: usize,
     pub arg2: usize,
+    pub arg3: usize,
 }
 
 impl<'context> SystemCallRequest<'context> {
@@ -50,7 +51,6 @@ pub enum TrapCause {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
 pub struct TrapFrame {
     // 0-255
     pub x: [u64; 32],
@@ -62,19 +62,16 @@ pub struct TrapFrame {
     // 520 Currently the hart it running in. Guaranteed by trap_vector in assembly.asm
     kernel_tp: u64,
     // 528
-    kernel_sp: u64,
-    // 536
     kernel_satp: u64,
-    // 544
+    // 536
     kernel_trap: u64,
-    // 552
+    // 544
     user_trap: u64,
 }
 
 impl TrapFrame {
     pub fn init(
         &mut self,
-        hartid: usize,
         entry_point: Address,
         stack_address: Address,
         user_trap: Address,
@@ -87,8 +84,7 @@ impl TrapFrame {
         self.f = [0; 32];
         self.x[2] = stack_address as u64;
         self.pc = entry_point as u64;
-        self.kernel_tp = hartid as u64;
-        self.kernel_sp = _kernel_end as u64 - (_stack_size as u64 * hartid as u64);
+        self.kernel_tp = 0u64;
         self.kernel_satp = unsafe { KERNEL_SATP } as u64;
         self.kernel_trap = _kernel_trap as u64;
         self.user_trap = user_trap as u64;
@@ -100,12 +96,14 @@ impl TrapFrame {
             let arg0 = self.x[10] as usize;
             let arg1 = self.x[11] as usize;
             let arg2 = self.x[12] as usize;
+            let arg3 = self.x[13] as usize;
             Some(SystemCallRequest {
                 trapframe: self,
                 call: call,
                 arg0,
                 arg1,
                 arg2,
+                arg3,
             })
         } else {
             None

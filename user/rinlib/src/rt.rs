@@ -1,17 +1,16 @@
 use core::{alloc::Layout, panic::PanicInfo};
 
-use buddy_system_allocator::{Heap, LockedHeapWithRescue};
+use buddy_system_allocator::{Heap, LockedHeap, LockedHeapWithRescue};
 use erhino_shared::proc::{SystemSignal, Termination};
 
 use crate::call::sys_extend;
 use crate::{call::sys_exit, debug, ipc::signal};
 
-const INITIAL_HEAP_SIZE: usize = 1 * 0x1000;
+const INITIAL_HEAP_SIZE: usize = 8 * 0x1000;
 const HEAP_ORDER: usize = 32;
 
 #[global_allocator]
-static mut HEAP_ALLOCATOR: LockedHeapWithRescue<HEAP_ORDER> =
-    LockedHeapWithRescue::new(heap_rescue);
+static mut HEAP_ALLOCATOR: LockedHeap<HEAP_ORDER> = LockedHeap::empty();
 
 #[lang = "start"]
 fn lang_start<T: Termination + 'static>(
@@ -55,7 +54,6 @@ fn handle_panic(info: &PanicInfo) -> ! {
 }
 
 fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
-    debug!("rescue: ");
     let owned = heap.stats_total_bytes();
     let mut size = owned;
     while layout.size() > size {
@@ -65,10 +63,8 @@ fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
         let call = sys_extend(size);
         match call {
             Ok(position) => heap.add_to_heap(position - size, position),
-            Err(err) => panic!(
-                "cannot request more memory region by extend sys call{:?}",
-                err
-            ),
+            // TODO: 该函数不能有 alloc 相关操作，改成 exit
+            Err(_) => sys_exit(-2).expect("this can't be wrong"),
         }
     }
 }

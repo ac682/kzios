@@ -1,12 +1,14 @@
 use core::{
     arch::asm,
+    mem::size_of,
+    slice::from_raw_parts,
     sync::atomic::{AtomicUsize, Ordering},
 };
 
 use alloc::{string::String, vec::Vec};
 use erhino_shared::{
     call::{SystemCall, SystemCallError},
-    fal::FileAbstractLayerError,
+    fal::{DentryMeta, DentryObject, DentryType, FilesystemAbstractLayerError},
     mem::{Address, MemoryRegionAttribute},
     path::Path,
     proc::{ExitCode, Pid, ProcessPermission, SignalMap},
@@ -16,7 +18,7 @@ use erhino_shared::{
 use crate::{
     debug,
     external::{_awaken, _park, _switch},
-    fs,
+    fs::{self, LocalMountpoint},
     mm::{
         frame,
         page::{PAGE_BITS, PAGE_SIZE},
@@ -130,7 +132,8 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
         call: SystemCall,
         arg0: usize,
         arg1: usize,
-        _arg2: usize,
+        arg2: usize,
+        arg3: usize,
         random: &mut R,
     ) -> Result<Option<usize>, SystemCallError> {
         let process = context.process();
@@ -301,23 +304,88 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                     Ok(buffer) => {
                         let str = unsafe { String::from_utf8_unchecked(buffer) };
                         if let Ok(path) = Path::from(&str) {
-                            match fs::access(path) {
-                                Ok(size) => Ok(Some(size)),
+                            match fs::lookup(path) {
+                                Ok(dentry) => Ok(Some(fs::measure(&dentry))),
                                 Err(err) => match err {
-                                    FileAbstractLayerError::NotAccessible => {
+                                    FilesystemAbstractLayerError::NotAccessible => {
                                         Err(SystemCallError::ObjectNotAccessible)
                                     }
-                                    FileAbstractLayerError::InvalidPath => {
+                                    FilesystemAbstractLayerError::InvalidPath => {
                                         Err(SystemCallError::IllegalArgument)
                                     }
-                                    FileAbstractLayerError::NotFound => {
+                                    FilesystemAbstractLayerError::NotFound => {
                                         Err(SystemCallError::ObjectNotFound)
                                     }
-                                    FileAbstractLayerError::ForeignLink(rem, target) => {
+                                    FilesystemAbstractLayerError::ForeignMountPoint(rem, mid) => {
                                         todo!();
                                         Ok(None)
                                     }
-                                    FileAbstractLayerError::ForeignMountPoint(rem, mid) => {
+                                    _ => Err(SystemCallError::InternalError),
+                                },
+                            }
+                        } else {
+                            Err(SystemCallError::ObjectNotFound)
+                        }
+                    }
+                    Err(err) => Err(match err {
+                        ProcessMemoryError::InaccessibleRegion => {
+                            SystemCallError::MemoryNotAccessible
+                        }
+
+                        _ => SystemCallError::InvalidAddress,
+                    }),
+                }
+            }
+            SystemCall::Inspect => {
+                let path_address = arg0;
+                let path_length = arg1;
+                let buffer_address = arg2;
+                let buffer_length = arg3;
+                match process.read(path_address, path_length) {
+                    Ok(buffer) => {
+                        let str = unsafe { String::from_utf8_unchecked(buffer) };
+                        if let Ok(path) = Path::from(&str) {
+                            match fs::lookup(path) {
+                                Ok(dentry) => {
+                                    let mut obj = Vec::<(DentryObject, String)>::new();
+                                    fs::make_objects(&dentry, &mut obj);
+                                    let mut copied = 0usize;
+                                    let mut count = 0usize;
+                                    for (d, s) in &obj {
+                                        let size = size_of::<DentryObject>();
+                                        // 写入对象必须按 8 对齐， DentryObject 已经保证 8 byte 对齐了，就差 name 了。
+                                        let name_length = (s.len() + 8 - 1) & !(8 - 1);
+                                        if copied + size + name_length <= buffer_length {
+                                            process.write(buffer_address + copied, unsafe{
+                                                from_raw_parts(d as *const DentryObject as *const u8, size)
+                                            }, size).expect("return user an error if failed or kill process");
+                                            process
+                                                .write(
+                                                    buffer_address + copied + size,
+                                                    s.as_bytes(),
+                                                    s.len(),
+                                                )
+                                                .expect("error!");
+                                            copied += size + name_length;
+                                            count += 1;
+                                        } else {
+                                            // 空间不够就不继续了
+                                            break;
+                                        }
+                                    }
+                                    Ok(Some(count))
+                                }
+                                Err(err) => match err {
+                                    FilesystemAbstractLayerError::NotAccessible => {
+                                        Err(SystemCallError::ObjectNotAccessible)
+                                    }
+                                    FilesystemAbstractLayerError::InvalidPath => {
+                                        Err(SystemCallError::IllegalArgument)
+                                    }
+                                    FilesystemAbstractLayerError::NotFound => {
+                                        Err(SystemCallError::ObjectNotFound)
+                                    }
+                                    FilesystemAbstractLayerError::ForeignMountPoint(rem, mid) => {
                                         todo!();
                                         Ok(None)
                                     }
@@ -359,7 +427,7 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                     );
                 });
             }
-            TrapCause::PageFault(address, _) => {
+            TrapCause::PageFault(address, op) => {
                 if let Some(region) = self.scheduler.is_address_in(address) {
                     match region {
                         ProcessAddressRegion::Stack(_) => {
@@ -386,7 +454,14 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                                     .expect("fill trapframe failed, to be killed");
                             });
                         }
-                        _ => todo!("unexpected memory page fault at: {:#x}", address),
+                        _ => self.scheduler.with_context(|ctx| {
+                            todo!(
+                                "unexpected {:?} memory page fault at: {:#x}, dump: \n{}",
+                                op,
+                                address,
+                                ctx.trapframe()
+                            )
+                        }),
                     }
                 } else {
                     unreachable!(
@@ -407,6 +482,7 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                     syscall.arg0,
                     syscall.arg1,
                     syscall.arg2,
+                    syscall.arg3,
                     &mut self.random,
                 ) {
                     // Some 为同步调用，立即返回结果
@@ -432,10 +508,4 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
 pub fn awake_idle() -> bool {
     let map = IDLE_HARTS.load(Ordering::Relaxed);
     send_ipi(map)
-}
-
-pub fn add_process(proc: Process) {
-    if let HartKind::Application(hart) = this_hart() {
-        hart.scheduler.add(proc, None);
-    }
 }

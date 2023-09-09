@@ -8,14 +8,15 @@ use tar_no_std::TarArchiveRef;
 
 use crate::{
     external::{_ramfs_end, _ramfs_start},
-    hart::app::add_process,
-    task::proc::Process,
+    hart::SchedulerImpl,
+    task::{proc::Process, sched::Scheduler},
 };
 
 extern crate alloc;
 
 mod console;
 mod external;
+mod fal;
 mod fs;
 mod hart;
 mod mm;
@@ -26,7 +27,6 @@ mod sync;
 mod task;
 mod timer;
 mod trap;
-mod fal;
 
 const BANNER: &str = include_str!("../banner.txt");
 
@@ -45,7 +45,7 @@ pub fn main() {
     let systems = archive.entries();
     for system in systems {
         let process = Process::from_elf(system.data()).unwrap();
-        add_process(process);
+        SchedulerImpl::add(process, None);
     }
     // frame::add_frame(
     //     _ramfs_start as usize >> PAGE_BITS,

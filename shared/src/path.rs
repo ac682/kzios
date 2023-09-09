@@ -1,4 +1,4 @@
-use core::{fmt::Display, str::Split};
+use core::{fmt::Display, ops::Div, str::Split};
 
 use alloc::{
     borrow::ToOwned,
@@ -12,6 +12,7 @@ pub const PATH_SEPARATOR: char = '/';
 pub const INVALID_CHARACTERS: [char; 1] = ['\0'];
 
 /// Parts of path
+#[derive(Debug)]
 pub enum Component<'a> {
     /// /
     Root,
@@ -79,6 +80,7 @@ impl Path {
     /// Construct an absolute path with no . or ..
     pub fn qualify(&self) -> Result<Path, PathError> {
         if self.is_absolute() {
+            let is_dir = self.inner.ends_with(PATH_SEPARATOR);
             let mut buffer = Vec::<&str>::new();
             for c in self.iter() {
                 match c {
@@ -93,6 +95,9 @@ impl Path {
                     }
                     Component::Normal(normal) => buffer.push(normal),
                 }
+            }
+            if is_dir {
+                buffer.push("");
             }
             let path = buffer.join(&PATH_SEPARATOR.to_string());
             Path::from(&path)
@@ -115,7 +120,8 @@ impl Path {
     pub fn parent(&self) -> Option<&str> {
         let non_separator_terminated = self.get_non_separated_terminated();
         if let Some(p) = Self::get_break_position(non_separator_terminated) {
-            Some(&non_separator_terminated[..p])
+            // its a dir so must be containing / at the end
+            Some(&non_separator_terminated[..(p + 1)])
         } else {
             None
         }
@@ -183,6 +189,25 @@ impl Path {
 impl Display for Path {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", self.inner)
+    }
+}
+
+impl Div<&str> for &Path {
+    type Output = Path;
+
+    fn div(self, rhs: &str) -> Self::Output {
+        if Path::is_valid(rhs) {
+            let mut string = String::from(self.get_non_separated_terminated());
+            if rhs.starts_with(PATH_SEPARATOR) {
+                string.push_str(rhs);
+            } else {
+                string.push(PATH_SEPARATOR);
+                string.push_str(rhs);
+            }
+            Path::from_string_unchecked(string)
+        } else {
+            panic!("string is not valid path");
+        }
     }
 }
 
