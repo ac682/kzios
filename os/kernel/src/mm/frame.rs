@@ -1,14 +1,13 @@
-use core::mem::size_of;
+use core::{cell::OnceCell, mem::size_of};
 
 use buddy_system_allocator::LockedFrameAllocator;
 use erhino_shared::mem::PageNumber;
-use spin::Once;
 
-use crate::external::{_memory_end, _frame_start};
+use crate::external::{_frame_start, _memory_end};
 
 use super::page::{PAGE_BITS, PAGE_SIZE};
 
-static mut FRAME_ALLOCATOR: Once<LockedFrameAllocator<32>> = Once::new();
+static mut FRAME_ALLOCATOR: OnceCell<LockedFrameAllocator<32>> = OnceCell::new();
 
 pub struct FrameTracker {
     number: PageNumber,
@@ -44,7 +43,7 @@ pub fn init() {
     unsafe {
         let allocator = LockedFrameAllocator::new();
         allocator.lock().add_frame(free_start, free_end);
-        FRAME_ALLOCATOR.call_once(|| allocator);
+        FRAME_ALLOCATOR.set(allocator);
     }
 }
 
@@ -61,10 +60,10 @@ pub fn add_frame(start: usize, end: usize) {
 pub fn alloc(count: usize) -> Option<PageNumber> {
     unsafe {
         let ret = FRAME_ALLOCATOR.get_mut().unwrap().lock().alloc(count);
-        if let Some(result) = ret{
+        if let Some(result) = ret {
             let size = count * (PAGE_SIZE / size_of::<u64>());
             let ptr = (result << PAGE_BITS) as *mut u64;
-            for i in 0..size{
+            for i in 0..size {
                 ptr.add(i).write(0);
             }
         }

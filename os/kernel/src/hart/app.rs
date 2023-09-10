@@ -8,17 +8,18 @@ use core::{
 use alloc::{string::String, vec::Vec};
 use erhino_shared::{
     call::{SystemCall, SystemCallError},
-    fal::{DentryMeta, DentryObject, DentryType, FilesystemAbstractLayerError},
+    fal::{DentryObject, FilesystemAbstractLayerError},
     mem::{Address, MemoryRegionAttribute},
     path::Path,
-    proc::{ExitCode, Pid, ProcessPermission, SignalMap},
-    sync::DataLock,
+    proc::{ExitCode, Pid, SignalMap},
+    sync::spin::QueueLock,
 };
+use lock_api::Mutex;
 
 use crate::{
     debug,
     external::{_awaken, _park, _switch},
-    fs::{self, LocalMountpoint},
+    fs::{self},
     mm::{
         frame,
         page::{PAGE_BITS, PAGE_SIZE},
@@ -27,20 +28,19 @@ use crate::{
     println,
     rng::RandomGenerator,
     sbi,
-    sync::mutex::SpinLock,
     task::{
         ipc::tunnel::Tunnel,
-        proc::{Process, ProcessHealth, ProcessMemoryError, ProcessTunnelError},
+        proc::{ProcessHealth, ProcessMemoryError, ProcessTunnelError},
         sched::{ScheduleContext, Scheduler},
         thread::Thread,
     },
     trap::TrapCause,
 };
 
-use super::{enter_user, send_ipi, this_hart, HartKind, HartStatus};
+use super::{enter_user, send_ipi, HartStatus};
 
 static IDLE_HARTS: AtomicUsize = AtomicUsize::new(0);
-static TUNNELS: DataLock<Vec<Tunnel>, SpinLock> = DataLock::new(Vec::new(), SpinLock::new());
+static TUNNELS: Mutex<QueueLock, Vec<Tunnel>> = Mutex::new(Vec::new());
 
 pub struct ApplicationHart<S, R> {
     id: usize,
@@ -61,9 +61,9 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
         self.id
     }
 
-    pub fn arranged_context(&mut self) -> (usize, Address) {
-        if let Some((_, satp, trapframe)) = self.scheduler.context() {
-            (satp, trapframe)
+    pub fn arranged_context(&mut self) -> (Pid, usize, Address) {
+        if let Some((pid, _, satp, trapframe)) = self.scheduler.context() {
+            (pid, satp, trapframe)
         } else {
             self.go_idle()
         }
@@ -118,7 +118,7 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
     pub fn go_awaken(&mut self) -> ! {
         debug!("#{} awaken", self.id());
         self.scheduler.schedule();
-        if let Some((trampoline, satp, trapframe)) = self.scheduler.context() {
+        if let Some((_, trampoline, satp, trapframe)) = self.scheduler.context() {
             unsafe { _switch(KERNEL_SATP, trampoline, satp, trapframe) }
         } else {
             self.go_idle()
@@ -167,6 +167,11 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
             }
             SystemCall::Extend => {
                 let bytes = arg0;
+                debug!(
+                    "app.extend Pid={} request {:#x} bytes",
+                    context.pid(),
+                    bytes
+                );
                 process
                     .extend(bytes)
                     .map_err(|err| match err {
@@ -305,7 +310,11 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                         let str = unsafe { String::from_utf8_unchecked(buffer) };
                         if let Ok(path) = Path::from(&str) {
                             match fs::lookup(path) {
-                                Ok(dentry) => Ok(Some(fs::measure(&dentry))),
+                                Ok(dentry) => Ok(Some({
+                                    let size = fs::measure(&dentry);
+                                    debug!("app.access {} {}", str, size);
+                                    size
+                                })),
                                 Err(err) => match err {
                                     FilesystemAbstractLayerError::NotAccessible => {
                                         Err(SystemCallError::ObjectNotAccessible)
@@ -373,6 +382,10 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                                             break;
                                         }
                                     }
+                                    debug!(
+                                        "app.inspect {} count: {}, size: {}/{}",
+                                        str, count, copied, buffer_length
+                                    );
                                     Ok(Some(count))
                                 }
                                 Err(err) => match err {
@@ -418,7 +431,7 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
             }
             TrapCause::Breakpoint => {
                 self.scheduler.with_context(|ctx| {
-                    ctx.trapframe().move_next_instruction();
+                    ctx.process().health = ProcessHealth::Dead(-0x114514);
                     println!(
                         "#{} Pid={} Tid={} requested a breakpoint",
                         self.id,
@@ -426,6 +439,7 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                         ctx.tid()
                     );
                 });
+                self.scheduler.schedule();
             }
             TrapCause::PageFault(address, op) => {
                 if let Some(region) = self.scheduler.is_address_in(address) {

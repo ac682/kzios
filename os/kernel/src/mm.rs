@@ -1,5 +1,6 @@
+use core::cell::OnceCell;
+
 use erhino_shared::proc::Tid;
-use spin::Once;
 
 use crate::{
     external::{_memory_end, _memory_start, _user_trap},
@@ -15,7 +16,7 @@ pub mod usage;
 
 type KernelUnit = MemoryUnit<PageEntryImpl>;
 
-pub static mut KERNEL_UNIT: Once<KernelUnit> = Once::new();
+pub static mut KERNEL_UNIT: OnceCell<KernelUnit> = OnceCell::new();
 #[export_name = "_kernel_satp"]
 pub static mut KERNEL_SATP: usize = 0;
 
@@ -56,7 +57,7 @@ pub fn init() {
     // kernel has no trap frame so it has no trap frame mapped
     let satp = unit.satp();
     unsafe {
-        KERNEL_UNIT.call_once(|| unit);
+        KERNEL_UNIT.set(unit);
         KERNEL_SATP = satp;
     }
 }

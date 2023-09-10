@@ -12,6 +12,7 @@ use crate::{
         unit::{MemoryUnit, MemoryUnitError},
         usage::MemoryUsage,
     },
+    println,
     sbi::legacy_console_putchar,
 };
 
@@ -123,7 +124,7 @@ impl Process {
                     }
                 }
             }
-            let brk = (max_addr as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+            let brk = ((max_addr as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)).next_power_of_two();
             process.usage.program = byte_used as usize;
             process.usage.page = page_used;
             process.break_point = brk;

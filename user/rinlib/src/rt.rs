@@ -1,16 +1,54 @@
+use core::arch::asm;
 use core::{alloc::Layout, panic::PanicInfo};
-
-use buddy_system_allocator::{Heap, LockedHeap, LockedHeapWithRescue};
 use erhino_shared::proc::{SystemSignal, Termination};
+use erhino_shared::sync::spin::SimpleLock;
+use talc::{OomHandler, Span, Talc, Talck};
 
 use crate::call::sys_extend;
 use crate::{call::sys_exit, debug, ipc::signal};
 
-const INITIAL_HEAP_SIZE: usize = 8 * 0x1000;
-const HEAP_ORDER: usize = 32;
+const INITIAL_HEAP_SIZE: usize = 1 * 0x1000;
+
+struct HeapRecuse {
+    heap: Span,
+}
+
+impl HeapRecuse {
+    const fn new() -> Self {
+        Self {
+            heap: Span::empty(),
+        }
+    }
+}
+
+impl OomHandler for HeapRecuse {
+    fn handle_oom(talc: &mut Talc<Self>, layout: Layout) -> Result<(), ()> {
+        unsafe { asm!("ebreak") }
+        let mut count = 1;
+        let single = 4096;
+        while count * single < layout.size() {
+            count *= 2;
+        }
+        let old = talc.oom_handler.heap;
+        if let Ok(offset) = unsafe { sys_extend(count) } {
+            let size = count * single;
+            let new = if old.is_empty() {
+                Span::new((offset - size) as *mut u8, offset as *mut u8)
+            } else {
+                old.extend(0, size)
+            };
+            unsafe {
+                talc.oom_handler.heap = talc.extend(old, new);
+            }
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
 
 #[global_allocator]
-static mut HEAP_ALLOCATOR: LockedHeap<HEAP_ORDER> = LockedHeap::empty();
+static mut HEAP_ALLOCATOR: Talck<SimpleLock, HeapRecuse> = Talc::new(HeapRecuse::new()).lock();
 
 #[lang = "start"]
 fn lang_start<T: Termination + 'static>(
@@ -20,10 +58,18 @@ fn lang_start<T: Termination + 'static>(
     _: u8,
 ) -> isize {
     unsafe {
-        let offset = sys_extend(INITIAL_HEAP_SIZE).expect("the first extend call failed");
-        HEAP_ALLOCATOR
-            .lock()
-            .init(offset - INITIAL_HEAP_SIZE, INITIAL_HEAP_SIZE);
+        let mut talc = HEAP_ALLOCATOR.talc();
+        if let Ok(offset) = sys_extend(INITIAL_HEAP_SIZE) {
+            let start = offset - INITIAL_HEAP_SIZE;
+            if let Ok(heap) = talc.claim(Span::from_base_size(start as *mut u8, INITIAL_HEAP_SIZE))
+            {
+                talc.oom_handler.heap = heap;
+            } else {
+                panic!();
+            }
+        } else {
+            panic!();
+        }
     }
     signal::set_handler(SystemSignal::Terminate, default_signal_handler);
     let code = main().to_exit_code();
@@ -49,22 +95,6 @@ fn handle_panic(info: &PanicInfo) -> ! {
     unsafe {
         loop {
             sys_exit(-1).expect("this can't be wrong");
-        }
-    }
-}
-
-fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
-    let owned = heap.stats_total_bytes();
-    let mut size = owned;
-    while layout.size() > size {
-        size *= 2;
-    }
-    unsafe {
-        let call = sys_extend(size);
-        match call {
-            Ok(position) => heap.add_to_heap(position - size, position),
-            // TODO: 该函数不能有 alloc 相关操作，改成 exit
-            Err(_) => sys_exit(-2).expect("this can't be wrong"),
         }
     }
 }

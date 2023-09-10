@@ -175,7 +175,8 @@ unsafe fn handle_user_trap(cause: Scause, val: usize) -> (usize, Address) {
                 unimplemented!("unknown trap from user: {}:{:#x}", cause.bits(), val)
             }
         }
-        hart.arranged_context()
+        let (_, satp, trampoline) = hart.arranged_context();
+        (satp, trampoline)
     } else {
         unimplemented!("only application hart would trigger user trap, how this hart get here?")
     }

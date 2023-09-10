@@ -1,21 +1,15 @@
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use erhino_shared::{
-    fal::{
-        Dentry, DentryAttribute, DentryMeta, File, FileSystem, FilesystemAbstractLayerError, Mid,
-    },
+    fal::{Dentry, DentryAttribute, DentryMeta, FileSystem, FilesystemAbstractLayerError, Mid},
     mem::Address,
     path::{Component, Path, PathIterator},
-    proc::Pid,
-    sync::InteriorLock,
+    sync::spin::QueueLock,
 };
+
 use flagset::FlagSet;
+use lock_api::RawMutex;
 
-use crate::{
-    println,
-    sync::{mutex::SpinLock, up::UpSafeCell},
-};
-
-use super::procfs::Procfs;
+use crate::sync::up::UpSafeCell;
 
 type Node = UpSafeCell<LocalDentry>;
 
@@ -31,7 +25,7 @@ impl LocalDentry {
         Self {
             name: name.to_owned(),
             attr: attr.into(),
-            kind: LocalDentryKind::Directory(UpSafeCell::new(Vec::new()), SpinLock::new()),
+            kind: LocalDentryKind::Directory(UpSafeCell::new(Vec::new()), QueueLock::new()),
         }
     }
 
@@ -62,7 +56,7 @@ impl LocalDentry {
                         let meta = DentryMeta::Directory(
                             subs.iter().map(|d| d.meta(false)).collect::<Vec<Dentry>>(),
                         );
-                        lock.unlock();
+                        unsafe { lock.unlock() };
                         meta
                     } else {
                         DentryMeta::Directory(Vec::new())
@@ -76,7 +70,7 @@ impl LocalDentry {
 }
 
 pub enum LocalDentryKind {
-    Directory(UpSafeCell<Vec<Node>>, SpinLock),
+    Directory(UpSafeCell<Vec<Node>>, QueueLock),
     Link(Path),
     File(LocalFile),
     MountPoint(Mid),
@@ -162,10 +156,10 @@ impl Rootfs {
                     }
                     if !found {
                         subs.get_mut().push(UpSafeCell::new(dentry));
-                        lock.unlock();
+                        unsafe { lock.unlock() };
                         Ok(())
                     } else {
-                        lock.unlock();
+                        unsafe { lock.unlock() };
                         Err(FilesystemAbstractLayerError::Conflict)
                     }
                 } else {
@@ -201,18 +195,24 @@ impl Rootfs {
                         lock.lock();
                         for s in subs.iter() {
                             if s.name() == name {
-                                lock.unlock();
+                                unsafe { lock.unlock() };
                                 return Self::find_node_internal(s, path);
                             }
                         }
-                        lock.unlock();
+                        unsafe { lock.unlock() };
                         Err(FilesystemAbstractLayerError::NotFound)
                     }
                     LocalDentryKind::MountPoint(mountpoint) => {
-                        Err(FilesystemAbstractLayerError::ForeignMountPoint(
-                            path.collect_remaining(),
-                            mountpoint.to_owned(),
-                        ))
+                        let mut rem = path.collect_remaining();
+                        if rem.prepend(name).is_ok() {
+                            rem.make_root();
+                            Err(FilesystemAbstractLayerError::ForeignMountPoint(
+                                rem,
+                                mountpoint.to_owned(),
+                            ))
+                        } else {
+                            Err(FilesystemAbstractLayerError::InvalidPath)
+                        }
                     }
                     _ => Err(FilesystemAbstractLayerError::Mistyped),
                 },

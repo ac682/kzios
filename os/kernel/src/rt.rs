@@ -15,7 +15,7 @@ use crate::{
     println, sbi, fs,
 };
 
-const HEAP_ORDER: usize = 64;
+const HEAP_ORDER: usize = 32;
 
 #[global_allocator]
 static mut HEAP_ALLOCATOR: LockedHeapWithRescue<HEAP_ORDER> =
@@ -122,8 +122,9 @@ pub fn handle_alloc_error(layout: Layout) -> ! {
 fn heap_rescue(heap: &mut Heap<HEAP_ORDER>, layout: &Layout) {
     let single = 1 * PAGE_SIZE;
     let mut size = 1;
+    let required = layout.size();
     unsafe {
-        while layout.size() > size * single {
+        while required > size * single {
             size *= 2;
         }
         if let Some(frame_start) = alloc(size) {

@@ -1,10 +1,11 @@
 use core::{
     hint::spin_loop,
-    sync::atomic::{Ordering, AtomicBool, AtomicPtr}, ptr::{null_mut, null},
+    ptr::null_mut,
+    sync::atomic::{AtomicBool, AtomicPtr, Ordering},
 };
 
 use alloc::boxed::Box;
-use erhino_shared::sync::InteriorLock;
+use lock_api::{GuardSend, RawMutex};
 
 pub struct Ticket {
     locked: bool,
@@ -20,12 +21,12 @@ impl Ticket {
     }
 }
 
-pub struct SpinLock {
+pub struct QueueLock {
     tail: AtomicPtr<Ticket>,
     owned: AtomicPtr<Ticket>,
 }
 
-impl SpinLock {
+impl QueueLock {
     pub const fn new() -> Self {
         Self {
             tail: AtomicPtr::new(null_mut()),
@@ -34,10 +35,10 @@ impl SpinLock {
     }
 }
 
-impl InteriorLock for SpinLock {
-    fn is_locked(&self) -> bool {
-        self.tail.load(Ordering::Acquire) != self.owned.load(Ordering::Acquire)
-    }
+unsafe impl RawMutex for QueueLock {
+    const INIT: Self = QueueLock::new();
+
+    type GuardMarker = GuardSend;
 
     fn lock(&self) {
         // 泄露 Ticket 到堆，unlock 的时候回收
@@ -71,7 +72,7 @@ impl InteriorLock for SpinLock {
         return false;
     }
 
-    fn unlock(&self) {
+    unsafe fn unlock(&self) {
         let self_ptr = self.owned.load(Ordering::Relaxed);
         match self
             .tail
@@ -89,6 +90,49 @@ impl InteriorLock for SpinLock {
                 drop(Box::from_raw(owned));
                 succ.locked = false;
             },
+        }
+    }
+}
+
+pub struct SimpleLock {
+    lock: AtomicBool,
+}
+
+impl SimpleLock {
+    pub const fn new() -> Self {
+        Self {
+            lock: AtomicBool::new(false),
+        }
+    }
+}
+
+unsafe impl RawMutex for SimpleLock {
+    const INIT: Self = SimpleLock::new();
+
+    type GuardMarker = GuardSend;
+    fn lock(&self) {
+        while self
+            .lock
+            .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_err()
+        {
+            while self.is_locked() {
+                spin_loop()
+            }
+        }
+    }
+
+    unsafe fn unlock(&self) {
+        self.lock.store(false, Ordering::Relaxed);
+    }
+
+    fn try_lock(&self) -> bool {
+        match self
+            .lock
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+        {
+            Ok(_) => true,
+            Err(_) => false,
         }
     }
 }

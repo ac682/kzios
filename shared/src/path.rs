@@ -130,18 +130,52 @@ impl Path {
     /// Append sub path into it
     pub fn append(&mut self, s: &str) -> Result<&str, PathError> {
         if Self::is_valid(s) {
-            if self.inner.ends_with(PATH_SEPARATOR) {
-                if s.starts_with(PATH_SEPARATOR) {
-                    self.inner.pop();
-                }
+            if self.inner == "" {
                 self.inner.push_str(s);
                 Ok(&self.inner)
             } else {
-                if !s.starts_with(PATH_SEPARATOR) {
-                    self.inner.push(PATH_SEPARATOR);
+                if self.inner.ends_with(PATH_SEPARATOR) {
+                    if s.starts_with(PATH_SEPARATOR) {
+                        self.inner.pop();
+                    }
+                    self.inner.push_str(s);
+                    Ok(&self.inner)
+                } else {
+                    if !s.starts_with(PATH_SEPARATOR) {
+                        self.inner.push(PATH_SEPARATOR);
+                    }
+                    self.inner.push_str(s);
+                    Ok(&self.inner)
                 }
-                self.inner.push_str(s);
+            }
+        } else {
+            Err(PathError::InvalidCharacters)
+        }
+    }
+
+    /// Prepend sub path into it
+    pub fn prepend(&mut self, s: &str) -> Result<&str, PathError> {
+        if Self::is_valid(s) {
+            let mut buffer = String::from(s);
+            if self.inner == "" {
+                self.inner = buffer;
                 Ok(&self.inner)
+            } else {
+                if buffer.ends_with(PATH_SEPARATOR) {
+                    if self.inner.starts_with(PATH_SEPARATOR) {
+                        buffer.pop();
+                    }
+                    buffer.push_str(&self.inner);
+                    self.inner = buffer;
+                    Ok(&self.inner)
+                } else {
+                    if !self.inner.starts_with(PATH_SEPARATOR) {
+                        buffer.push(PATH_SEPARATOR);
+                    }
+                    buffer.push_str(&self.inner);
+                    self.inner = buffer;
+                    Ok(&self.inner)
+                }
             }
         } else {
             Err(PathError::InvalidCharacters)
@@ -156,6 +190,15 @@ impl Path {
     /// Get its str reference
     pub fn as_str(&self) -> &str {
         &self.inner
+    }
+
+    pub fn make_root(&mut self) {
+        if !self.is_absolute() {
+            let mut buffer = String::new();
+            buffer.push(PATH_SEPARATOR);
+            buffer.push_str(&self.inner);
+            self.inner = buffer
+        }
     }
 
     fn get_non_separated_terminated(&self) -> &str {
@@ -227,19 +270,10 @@ impl<'a> PathIterator<'a> {
 
     pub fn collect_remaining(mut self) -> Path {
         let mut buffer = Vec::<String>::new();
-        if let Some(first) = self.next() {
-            match first {
-                Component::Root => buffer.push("".to_owned()),
-                _ => {
-                    buffer.push("".to_owned());
-                    buffer.push(first.as_str().to_owned())
-                }
-            }
-        }
         while let Some(next) = self.next() {
             buffer.push(next.as_str().to_owned());
         }
-        Path::from_string_unchecked(buffer.join("/"))
+        Path::from_string_unchecked(buffer.join(&PATH_SEPARATOR.to_string()))
     }
 }
 

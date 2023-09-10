@@ -1,22 +1,26 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use alloc::sync::{Arc, Weak};
+use alloc::{
+    sync::{Arc, Weak},
+    vec::Vec,
+};
 use erhino_shared::{
     mem::{Address, MemoryRegionAttribute, PageNumber},
     proc::{ExecutionState, Pid, Tid},
-    sync::{DataLock, InteriorLock},
+    sync::spin::QueueLock,
 };
 use flagset::FlagSet;
+use lock_api::RawMutex;
 
 use crate::{
     external::_user_trap,
-    hart,
+    hart::{self, HartKind},
     mm::{
         page::{PageEntryImpl, PageTableEntry, PAGE_BITS, PAGE_SIZE},
         unit::{AddressSpace, MemoryUnit},
         ProcessAddressRegion,
     },
-    sync::{mutex::SpinLock, up::UpSafeCell},
+    sync::up::UpSafeCell,
     task::{
         proc::{Process, ProcessHealth},
         thread::Thread,
@@ -82,7 +86,7 @@ impl ScheduleContext for UnfairContext {
             p.state_lock.lock();
             let mutable = p.get_mut();
             action(&mut mutable.inner);
-            p.state_lock.unlock();
+            unsafe { p.state_lock.unlock() };
             true
         } else {
             false
@@ -139,11 +143,11 @@ struct ProcessCell {
     parent: Pid,
     layout: ProcessLayout,
     head: Option<Arc<Shared<ThreadCell>>>,
-    head_lock: SpinLock,
+    head_lock: QueueLock,
     next: Option<Arc<Shared<ProcessCell>>>,
     prev: Option<Weak<Shared<ProcessCell>>>,
-    ring_lock: SpinLock,
-    state_lock: SpinLock,
+    ring_lock: QueueLock,
+    state_lock: QueueLock,
 }
 
 const TRAPFRAME_SIZE: usize = 1024;
@@ -169,11 +173,11 @@ impl ProcessCell {
             parent,
             layout: layout,
             head: None,
-            head_lock: SpinLock::new(),
+            head_lock: QueueLock::new(),
             next: None,
             prev: None,
-            ring_lock: SpinLock::new(),
-            state_lock: SpinLock::new(),
+            ring_lock: QueueLock::new(),
+            state_lock: QueueLock::new(),
         }
     }
 
@@ -192,10 +196,10 @@ impl ProcessCell {
     pub fn move_next(&self, current: &Arc<Shared<ThreadCell>>) -> Option<Arc<Shared<ThreadCell>>> {
         current.ring_lock.lock();
         if let Some(next) = &current.next {
-            current.ring_lock.unlock();
+            unsafe { current.ring_lock.unlock() };
             Some(next.clone())
         } else {
-            current.ring_lock.unlock();
+            unsafe { current.ring_lock.unlock() };
             None
         }
     }
@@ -220,7 +224,7 @@ impl ProcessCell {
         self.head_lock.lock();
         let mut count = 0usize;
         if let Some(head) = &self.head {
-            self.head_lock.unlock();
+            unsafe { self.head_lock.unlock() };
             let mut one = head.clone();
             while pred(&one) {
                 count += 1;
@@ -231,7 +235,7 @@ impl ProcessCell {
                 }
             }
         } else {
-            self.head_lock.unlock();
+            unsafe { self.head_lock.unlock() };
         }
         count
     }
@@ -239,7 +243,7 @@ impl ProcessCell {
     fn find_gap(&self) -> Option<Arc<Shared<ThreadCell>>> {
         self.head_lock.lock();
         if let Some(head) = &self.head {
-            self.head_lock.unlock();
+            unsafe { self.head_lock.unlock() };
             let mut current = head.clone();
             while let Some(next) = self.move_next(&current) {
                 if current.id + 1 == next.id {
@@ -250,7 +254,7 @@ impl ProcessCell {
             }
             Some(current)
         } else {
-            self.head_lock.unlock();
+            unsafe { self.head_lock.unlock() };
             None
         }
     }
@@ -284,11 +288,11 @@ impl ProcessCell {
             let next = last.next.take();
             cell.next = next;
             last.next = Some(Arc::new(Shared::new(cell)));
-            gap.ring_lock.unlock();
+            unsafe { gap.ring_lock.unlock() };
         } else {
             self.head_lock.lock();
             self.head = Some(Arc::new(Shared::new(cell)));
-            self.head_lock.unlock();
+            unsafe { self.head_lock.unlock() };
         }
         tid
     }
@@ -303,7 +307,7 @@ impl ProcessCell {
         self.inner
             .fill(number, 1, attributes, reserved)
             .expect("process memory for scheduling create failed");
-        self.state_lock.unlock();
+        unsafe { self.state_lock.unlock() };
     }
 
     pub fn struct_at<'context, T: Sized>(&self, addr: Address) -> &'context mut T {
@@ -323,8 +327,8 @@ struct ThreadCell {
     timeslice: usize,
     trapframe: Address,
     next: Option<Arc<Shared<ThreadCell>>>,
-    run_lock: SpinLock,
-    ring_lock: SpinLock,
+    run_lock: QueueLock,
+    ring_lock: QueueLock,
 }
 
 impl ThreadCell {
@@ -337,8 +341,8 @@ impl ThreadCell {
             timeslice: 0,
             trapframe,
             next: None,
-            run_lock: SpinLock::new(),
-            ring_lock: SpinLock::new(),
+            run_lock: QueueLock::new(),
+            ring_lock: QueueLock::new(),
         }
     }
 
@@ -371,9 +375,9 @@ struct ProcessTable {
     generation: AtomicUsize,
     pid_generator: AtomicUsize,
     head: Option<Arc<Shared<ProcessCell>>>,
-    head_lock: SpinLock,
+    head_lock: QueueLock,
     last: Option<Weak<Shared<ProcessCell>>>,
-    last_lock: SpinLock,
+    last_lock: QueueLock,
 }
 
 impl ProcessTable {
@@ -382,9 +386,9 @@ impl ProcessTable {
             generation: AtomicUsize::new(0),
             pid_generator: AtomicUsize::new(1),
             head: None,
-            head_lock: SpinLock::new(),
+            head_lock: QueueLock::new(),
             last: None,
-            last_lock: SpinLock::new(),
+            last_lock: QueueLock::new(),
         }
     }
 
@@ -424,51 +428,57 @@ impl ProcessTable {
             cell.prev = Some(last.clone());
             let sealed = Arc::new(Shared::new(cell));
             self.last = Some(Arc::downgrade(&sealed));
-            self.last_lock.unlock();
+            unsafe { self.last_lock.unlock() };
             mutable.next = Some(sealed);
-            upgrade.ring_lock.unlock();
+            unsafe { upgrade.ring_lock.unlock() };
         } else {
             // head & last both None
             self.head_lock.lock();
             let sealed = Arc::new(Shared::new(cell));
             self.last = Some(Arc::downgrade(&sealed));
             self.head = Some(sealed);
-            self.last_lock.unlock();
-            self.head_lock.unlock();
+            unsafe {
+                self.last_lock.unlock();
+                self.head_lock.unlock();
+            }
         }
     }
 
     pub fn move_next_process(
         &self,
         current: &Arc<Shared<ProcessCell>>,
+        repeat: bool,
     ) -> Option<Arc<Shared<ProcessCell>>> {
         current.ring_lock.lock();
         if let Some(next) = &current.next {
-            current.ring_lock.unlock();
+            unsafe { current.ring_lock.unlock() };
             Some(next.clone())
-        } else {
-            current.ring_lock.unlock();
+        } else if repeat {
+            unsafe { current.ring_lock.unlock() };
             self.head_lock.lock();
             if let Some(head) = &self.head {
-                self.head_lock.unlock();
+                unsafe { self.head_lock.unlock() };
                 Some(head.clone())
             } else {
-                self.head_lock.unlock();
+                unsafe { self.head_lock.unlock() };
                 None
             }
+        } else {
+            unsafe { current.ring_lock.unlock() };
+            None
         }
     }
 
     pub fn move_next_process_until<F: Fn(&Arc<Shared<ProcessCell>>) -> bool>(
         &self,
-        proc: &Arc<Shared<ProcessCell>>,
+        current: &Arc<Shared<ProcessCell>>,
         pred: F,
         repeat: bool,
     ) -> Option<Arc<Shared<ProcessCell>>> {
-        let mut one_proc = proc.clone();
-        let start_proc = proc.id;
+        let mut one_proc = current.clone();
+        let start_proc = current.id;
         while !pred(&one_proc) {
-            if let Some(next_proc) = self.move_next_process(&one_proc) {
+            if let Some(next_proc) = self.move_next_process(&one_proc, true) {
                 if !repeat && next_proc.id == start_proc {
                     return None;
                 }
@@ -488,15 +498,15 @@ impl ProcessTable {
         if let Some(next) = proc.move_next(thread) {
             Some((proc.clone(), next))
         } else {
-            let mut next_proc_option = self.move_next_process(proc);
+            let mut next_proc_option = self.move_next_process(proc, true);
             while let Some(next_proc) = &next_proc_option {
                 next_proc.head_lock.lock();
                 if let Some(next_thread) = &next_proc.head {
-                    next_proc.head_lock.unlock();
+                    unsafe { next_proc.head_lock.unlock() };
                     return Some((next_proc.clone(), next_thread.clone()));
                 } else {
-                    next_proc.head_lock.unlock();
-                    next_proc_option = self.move_next_process(proc);
+                    unsafe { next_proc.head_lock.unlock() };
+                    next_proc_option = self.move_next_process(proc, true);
                 }
             }
             None
@@ -532,10 +542,10 @@ impl ProcessTable {
         let pred = |p: &Arc<Shared<ProcessCell>>| pid == p.id;
         self.head_lock.lock();
         if let Some(proc) = &self.head {
-            self.head_lock.unlock();
+            unsafe { self.head_lock.unlock() };
             self.move_next_process_until(proc, pred, false)
         } else {
-            self.head_lock.unlock();
+            unsafe { self.head_lock.unlock() };
             None
         }
     }
@@ -582,11 +592,11 @@ impl<T: Timer> UnfairScheduler<T> {
                         thread.inner.state = ExecutionState::Running;
                         pass = true;
                     } else {
-                        t.run_lock.unlock();
+                        unsafe { t.run_lock.unlock() };
                     }
                 }
             }
-            p.state_lock.unlock();
+            unsafe { p.state_lock.unlock() };
             pass
         };
         if let Some((p, t)) = &self.current {
@@ -594,15 +604,15 @@ impl<T: Timer> UnfairScheduler<T> {
         } else {
             table.head_lock.lock();
             let mut next_proc_option = table.head.clone();
-            table.head_lock.unlock();
+            unsafe { table.head_lock.unlock() };
             while let Some(next_proc) = next_proc_option {
                 next_proc.head_lock.lock();
                 if let Some(thread) = &next_proc.head {
-                    next_proc.head_lock.unlock();
+                    unsafe { next_proc.head_lock.unlock() };
                     return table.move_next_thread_until(&next_proc, thread, pred, false);
                 } else {
-                    next_proc.head_lock.unlock();
-                    next_proc_option = table.move_next_process(&next_proc);
+                    unsafe { next_proc.head_lock.unlock() };
+                    next_proc_option = table.move_next_process(&next_proc, true);
                 }
             }
             None
@@ -621,21 +631,49 @@ impl<T: Timer> Scheduler for UnfairScheduler<T> {
 
     fn find<F: FnMut(&mut Process)>(pid: Pid, mut action: F) -> bool {
         if let Some(p) = unsafe { &PROC_TABLE }.find_process(pid) {
-            p.state_lock.lock();
+            let owned = {
+                if let HartKind::Application(hart) = hart::this_hart() {
+                    hart.arranged_context().0 == pid
+                } else {
+                    false
+                }
+            };
+            if !owned {
+                p.state_lock.lock();
+            }
             let mutable = p.get_mut();
             action(&mut mutable.inner);
-            p.state_lock.unlock();
+            if !owned {
+                unsafe { p.state_lock.unlock() };
+            }
             true
         } else {
             false
         }
     }
 
+    fn snapshot() -> Vec<Pid> {
+        let table = unsafe { &PROC_TABLE };
+        let mut ids = Vec::<Pid>::new();
+        table.head_lock.lock();
+        if let Some(head) = &table.head {
+            unsafe { table.head_lock.unlock() };
+            let mut current = Some(head.clone());
+            while let Some(p) = current {
+                ids.push(p.id);
+                current = table.move_next_process(&p, false)
+            }
+        } else {
+            unsafe { table.head_lock.unlock() };
+        }
+        ids
+    }
+
     fn is_address_in(&self, addr: Address) -> Option<ProcessAddressRegion> {
         if let Some((p, _)) = &self.current {
             p.state_lock.lock();
             let result = p.layout.is_address_in(addr);
-            p.state_lock.unlock();
+            unsafe { p.state_lock.unlock() };
             Some(result)
         } else {
             None
@@ -655,7 +693,7 @@ impl<T: Timer> Scheduler for UnfairScheduler<T> {
             if t.inner.state == ExecutionState::Running {
                 thread.inner.state = ExecutionState::Ready;
             }
-            t.run_lock.unlock();
+            unsafe { t.run_lock.unlock() };
         }
         let next = self.find_next();
         if let Some((_, t)) = &next {
@@ -669,10 +707,10 @@ impl<T: Timer> Scheduler for UnfairScheduler<T> {
         self.timer.put_off();
     }
 
-    fn context(&self) -> Option<(Address, usize, Address)> {
+    fn context(&self) -> Option<(Pid, Address, usize, Address)> {
         if let Some((p, t)) = &self.current {
             let satp = p.inner.page_table_token();
-            Some((p.layout.trampoline, satp, t.trapframe))
+            Some((p.id, p.layout.trampoline, satp, t.trapframe))
         } else {
             None
         }
@@ -696,7 +734,7 @@ impl<T: Timer> Scheduler for UnfairScheduler<T> {
                 mutable.inner.signal.clear_complete();
             }
             schedule_request = context.scheduled;
-            p.state_lock.unlock();
+            unsafe { p.state_lock.unlock() };
         } else {
             unreachable!("it's called only when a process requesting some system function")
         }

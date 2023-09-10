@@ -1,5 +1,7 @@
 #![no_std]
 
+use core::arch::asm;
+
 use alloc::{fmt::Write, string::String};
 use rinlib::{
     fs::{check, Dentry},
@@ -9,7 +11,7 @@ use rinlib::{
 
 fn main() {
     debug!("Hello, fs!");
-    let mut buffer = String::from("\n");
+    let mut buffer = String::from("All entries under root shown below\n");
     print_dir(Path::from("/").unwrap(), &mut buffer);
     debug!("{}", buffer);
 }
@@ -52,6 +54,9 @@ fn print_dentry(dentry: &Dentry, path: &Path, buffer: &mut String) {
         }
         DentryType::Link => {
             writeln!(buffer, "{} -> ", dentry.name());
+        }
+        DentryType::Property => {
+            writeln!(buffer, "#{}", dentry.name());
         }
         _ => todo!(),
     }

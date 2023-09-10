@@ -73,6 +73,7 @@ impl Dentry {
 }
 
 pub fn check(path: &str) -> Result<Dentry, FileSystemError> {
+    debug!("check {}", path);
     unsafe {
         match sys_access(path) {
             Ok(size) => {
@@ -94,10 +95,8 @@ unsafe fn read_dentry_from_object_bytes(
     if count > 0 {
         let size = size_of::<DentryObject>();
         let first = &*(bytes.as_ptr() as *const DentryObject);
-        let mut dentry = Dentry::from_object(
-            first,
-            core::str::from_utf8_unchecked(&bytes[size..(size + first.name_length)]),
-        );
+        let first_name = core::str::from_utf8_unchecked(&bytes[size..(size + first.name_length)]);
+        let mut dentry = Dentry::from_object(first, first_name);
         match first.kind {
             DentryType::Directory => {
                 if count > 1 {

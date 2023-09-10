@@ -1,13 +1,11 @@
 use core::fmt::{Arguments, Write};
 
-use erhino_shared::sync::DataLock;
+use erhino_shared::sync::spin::QueueLock;
+use lock_api::Mutex;
 
-use crate::{
-    sbi::{self},
-    sync::mutex::SpinLock,
-};
+use crate::sbi::{self};
 
-static LOCKED_CONSOLE: DataLock<Console, SpinLock> = DataLock::new(Console, SpinLock::new());
+static LOCKED_CONSOLE: Mutex<QueueLock, Console> = Mutex::new(Console);
 
 #[macro_export]
 macro_rules! print

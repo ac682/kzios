@@ -1,4 +1,4 @@
-use core::mem::size_of;
+use core::{cell::OnceCell, mem::size_of};
 
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use erhino_shared::{
@@ -10,9 +10,8 @@ use erhino_shared::{
     proc::Pid,
 };
 use flagset::FlagSet;
-use spin::Once;
 
-use crate::println;
+use crate::debug;
 
 use self::{procfs::Procfs, rootfs::Rootfs};
 
@@ -20,7 +19,7 @@ pub mod procfs;
 pub mod rootfs;
 pub mod sysfs;
 
-static mut ROOT: Once<Rootfs> = Once::new();
+static mut ROOT: OnceCell<Rootfs> = OnceCell::new();
 // 只会在 fs::init 中写，此后只读，就不上锁了
 // Mid 为 (index + 1) << 32
 static mut MOUNTPOINTS: Vec<LocalMountpoint> = Vec::new();
@@ -37,7 +36,7 @@ pub fn init() {
     unsafe {
         // slot id = 0, mid = 1 << 32
         MOUNTPOINTS.push(LocalMountpoint::Proc(Procfs::new()));
-        ROOT.call_once(|| rootfs);
+        ROOT.set(rootfs);
     }
 }
 
@@ -46,15 +45,15 @@ pub fn make_dir<A: Into<FlagSet<DentryAttribute>>>(path: Path, recursive: bool, 
 }
 
 pub fn mount_local(path: Path, slot: usize) -> Result<(), FilesystemAbstractLayerError> {
-    unsafe { ROOT.get_mut_unchecked() }.mount(&path, ((slot + 1) << 32) as Mid)
+    unsafe { ROOT.get_mut().unwrap() }.mount(&path, ((slot + 1) << 32) as Mid)
 }
 
 pub fn mount_remote(path: Path, service: Pid) -> Result<(), FilesystemAbstractLayerError> {
-    unsafe { ROOT.get_mut_unchecked() }.mount(&path, service as Mid)
+    unsafe { ROOT.get_mut().unwrap() }.mount(&path, service as Mid)
 }
 
 pub fn lookup<'a>(path: Path) -> Result<Dentry, FilesystemAbstractLayerError> {
-    lookup_internal(unsafe { ROOT.get_mut_unchecked() }, path)
+    lookup_internal(unsafe { ROOT.get_mut().unwrap() }, path)
 }
 
 pub fn lookup_internal(
@@ -65,6 +64,7 @@ pub fn lookup_internal(
         Ok(dentry) => Ok(dentry),
         Err(err) => match err {
             FilesystemAbstractLayerError::ForeignMountPoint(rem, mid) => {
+                debug!("fs.lookup_internal redirected to {:#x} with {}", mid, rem);
                 if let Some(fs) = get_local_fs(mid) {
                     match fs {
                         LocalMountpoint::Proc(proc) => lookup_internal(proc, rem),
