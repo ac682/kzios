@@ -31,7 +31,9 @@ pub enum SystemCallError {
     /// Found but owned by others
     ObjectNotAccessible = 0x31,
     /// Can not own more objects
-    ReachLimit = 0x32
+    ReachLimit = 0x32,
+    /// Cannot perform operation on this type of objects
+    NotSupported = 0x33,
 }
 
 /// Predefined system calls
@@ -109,16 +111,20 @@ pub enum SystemCall {
     Inspect = 0x71,
     /// Change dentry's metadata without touching its content
     Modify = 0x72,
-    /// Create a tunnel referring to the file if is stream
-    Open = 0x73,
     /// Create a dentry with specific type with no content appended
-    Create = 0x74,
+    Create = 0x73,
     /// Delete a dentry
-    Delete = 0x75,
+    Delete = 0x74,
     /// Create another copy of file or directory with the same content(metadata may diffs)
-    Copy = 0x76,
+    Copy = 0x75,
     /// Works like renaming
-    Move = 0x77,
+    Move = 0x76,
+    /// Create a tunnel referring to the file if is stream
+    Open = 0x77,
+    /// Read underlying bytes into buffer if is property
+    Read= 0x78,
+    /// Write underlying bytes from buffer if is property with the same type
+    Write = 0x79,
     /// Mount a filesystem service as a mount point at rootfs
     Mount = 0x7a,
     /// Unmount a mount point from rootfs

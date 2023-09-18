@@ -101,3 +101,13 @@ pub unsafe fn sys_inspect(path: &str, buffer: &[u8]) -> SystemCallResult<usize> 
         buffer.len(),
     )
 }
+
+pub unsafe fn sys_read(path: &str, buffer: &[u8]) -> SystemCallResult<usize> {
+    sys_call(
+        SystemCall::Read,
+        path.as_ptr() as usize,
+        path.len(),
+        buffer.as_ptr() as usize,
+        buffer.len(),
+    )
+}

@@ -8,13 +8,15 @@ use core::{
 use alloc::{string::String, vec::Vec};
 use erhino_shared::{
     call::{SystemCall, SystemCallError},
-    fal::{DentryObject, FilesystemAbstractLayerError},
+    fal::{DentryAttribute, DentryObject, DentryType, FilesystemAbstractLayerError},
     mem::{Address, MemoryRegionAttribute},
     path::Path,
     proc::{ExitCode, Pid, SignalMap},
     sync::spin::QueueLock,
 };
+use flagset::FlagSet;
 use lock_api::Mutex;
+use num_traits::FromPrimitive;
 
 use crate::{
     debug,
@@ -387,6 +389,68 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                                         str, count, copied, buffer_length
                                     );
                                     Ok(Some(count))
+                                }
+                                Err(err) => match err {
+                                    FilesystemAbstractLayerError::NotAccessible => {
+                                        Err(SystemCallError::ObjectNotAccessible)
+                                    }
+                                    FilesystemAbstractLayerError::InvalidPath => {
+                                        Err(SystemCallError::IllegalArgument)
+                                    }
+                                    FilesystemAbstractLayerError::NotFound => {
+                                        Err(SystemCallError::ObjectNotFound)
+                                    }
+                                    FilesystemAbstractLayerError::ForeignMountPoint(rem, mid) => {
+                                        todo!();
+                                        Ok(None)
+                                    }
+                                    _ => Err(SystemCallError::InternalError),
+                                },
+                            }
+                        } else {
+                            Err(SystemCallError::ObjectNotFound)
+                        }
+                    }
+                    Err(err) => Err(match err {
+                        ProcessMemoryError::InaccessibleRegion => {
+                            SystemCallError::MemoryNotAccessible
+                        }
+
+                        _ => SystemCallError::InvalidAddress,
+                    }),
+                }
+            }
+            SystemCall::Create => {
+                let path_address = arg0;
+                let path_length = arg1;
+                let attr = arg3;
+                if let Some(kind) = DentryType::from_u8(arg2 as u8) {
+                    if let Ok(attr) = FlagSet::<DentryAttribute>::new(arg3 as u8) {
+                        todo!()
+                    } else {
+                        Err(SystemCallError::IllegalArgument)
+                    }
+                } else {
+                    Err(SystemCallError::IllegalArgument)
+                }
+            }
+            SystemCall::Read => {
+                let path_address = arg0;
+                let path_length = arg1;
+                let buffer_address = arg2;
+                let buffer_length = arg3;
+                match process.read(path_address, path_length) {
+                    Ok(buffer) => {
+                        let str = unsafe { String::from_utf8_unchecked(buffer) };
+                        if let Ok(path) = Path::from(&str) {
+                            let mut buffer = Vec::<u8>::with_capacity(buffer_length);
+                            match fs::read(path, &mut buffer) {
+                                Ok(written) => {
+                                    if process.write(buffer_address, &buffer, written).is_ok() {
+                                        Ok(Some(written))
+                                    } else {
+                                        Err(SystemCallError::MemoryNotAccessible)
+                                    }
                                 }
                                 Err(err) => match err {
                                     FilesystemAbstractLayerError::NotAccessible => {

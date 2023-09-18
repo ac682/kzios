@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use erhino_shared::path::{Component, Path};
 
 use erhino_shared::fal::{
-    Dentry, DentryAttribute, DentryMeta, File, FileSystem, FilesystemAbstractLayerError,
+    Dentry, DentryAttribute, DentryMeta, FileKind, FileSystem, FilesystemAbstractLayerError,
     PropertyKind,
 };
 use erhino_shared::proc::Pid;
@@ -31,12 +31,18 @@ impl Procfs {
         for i in SchedulerImpl::snapshot() {
             proc.push(Dentry::new(
                 i.to_string(),
+                0,
+                0,
+                0,
                 DentryAttribute::Executable | DentryAttribute::Readable,
                 DentryMeta::Directory(Vec::with_capacity(0)),
             ));
         }
         Dentry::new(
             "".to_owned(),
+            0,
+            0,
+            0,
             DentryAttribute::Executable | DentryAttribute::Readable,
             DentryMeta::Directory(proc),
         )
@@ -45,11 +51,17 @@ impl Procfs {
     fn spawn_proc(pid: Pid) -> Option<Dentry> {
         let props = vec![Dentry::new(
             "memory".to_owned(),
+            0,
+            0,
+            0,
             DentryAttribute::Executable | DentryAttribute::Readable,
             DentryMeta::Directory(Vec::new()),
         )];
         Some(Dentry::new(
             pid.to_string(),
+            0,
+            0,
+            0,
             DentryAttribute::Readable | DentryAttribute::Executable,
             DentryMeta::Directory(props),
         ))
@@ -59,27 +71,42 @@ impl Procfs {
         let props = vec![
             Dentry::new(
                 "page".to_owned(),
+                0,
+                0,
+                0,
                 DentryAttribute::Readable.into(),
-                DentryMeta::File(File::Property(PropertyKind::Integer)),
+                DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
             ),
             Dentry::new(
                 "program".to_owned(),
+                0,
+                0,
+                0,
                 DentryAttribute::Readable.into(),
-                DentryMeta::File(File::Property(PropertyKind::Integer)),
+                DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
             ),
             Dentry::new(
                 "heap".to_owned(),
+                0,
+                0,
+                0,
                 DentryAttribute::Readable.into(),
-                DentryMeta::File(File::Property(PropertyKind::Integer)),
+                DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
             ),
             Dentry::new(
                 "stack".to_owned(),
+                0,
+                0,
+                0,
                 DentryAttribute::Readable.into(),
-                DentryMeta::File(File::Property(PropertyKind::Integer)),
+                DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
             ),
         ];
         Dentry::new(
             "memory".to_owned(),
+            0,
+            0,
+            0,
             DentryAttribute::Executable | DentryAttribute::Readable,
             DentryMeta::Directory(props),
         )
@@ -89,23 +116,35 @@ impl Procfs {
         match field {
             "page" => Dentry::new(
                 "page".to_owned(),
+                0,
+                0,
+                0,
                 DentryAttribute::Readable.into(),
-                DentryMeta::File(File::Property(PropertyKind::Integer)),
+                DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
             ),
             "program" => Dentry::new(
                 "program".to_owned(),
+                0,
+                0,
+                0,
                 DentryAttribute::Readable.into(),
-                DentryMeta::File(File::Property(PropertyKind::Integer)),
+                DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
             ),
             "heap" => Dentry::new(
                 "heap".to_owned(),
+                0,
+                0,
+                0,
                 DentryAttribute::Readable.into(),
-                DentryMeta::File(File::Property(PropertyKind::Integer)),
+                DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
             ),
             "stack" => Dentry::new(
                 "stack".to_owned(),
+                0,
+                0,
+                0,
                 DentryAttribute::Readable.into(),
-                DentryMeta::File(File::Property(PropertyKind::Integer)),
+                DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
             ),
             _ => unimplemented!(),
         }
@@ -162,5 +201,10 @@ impl FileSystem for Procfs {
         } else {
             Err(FilesystemAbstractLayerError::InvalidPath)
         }
+    }
+
+    fn read(&self, path: Path, buffer: &[u8]) -> Result<usize, FilesystemAbstractLayerError> {
+        debug!("procfs.read {}", path);
+        todo!()
     }
 }

@@ -1,10 +1,11 @@
 use core::arch::asm;
 use core::{alloc::Layout, panic::PanicInfo};
-use erhino_shared::proc::{SystemSignal, Termination};
+use erhino_shared::proc::{SystemSignal, Termination, Tid, Pid};
 use erhino_shared::sync::spin::SimpleLock;
 use talc::{OomHandler, Span, Talc, Talck};
 
 use crate::call::sys_extend;
+use crate::env;
 use crate::{call::sys_exit, debug, ipc::signal};
 
 const INITIAL_HEAP_SIZE: usize = 1 * 0x1000;
@@ -53,11 +54,15 @@ static mut HEAP_ALLOCATOR: Talck<SimpleLock, HeapRecuse> = Talc::new(HeapRecuse:
 #[lang = "start"]
 fn lang_start<T: Termination + 'static>(
     main: fn() -> T,
-    _: isize,
-    _: *const *const u8,
-    _: u8,
+    argc: isize,
+    argv: *const *const u8,
+    sigpipe: u8,
 ) -> isize {
+    let _tid = argc as usize as Tid;
+    let pid = argv as usize as Pid;
+    let _parent = sigpipe as usize as Pid;
     unsafe {
+        env::PID.set(pid).unwrap();
         let mut talc = HEAP_ALLOCATOR.talc();
         if let Ok(offset) = sys_extend(INITIAL_HEAP_SIZE) {
             let start = offset - INITIAL_HEAP_SIZE;

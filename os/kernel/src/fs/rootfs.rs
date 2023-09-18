@@ -1,9 +1,15 @@
+use core::mem::{size_of, size_of_val};
+
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use erhino_shared::{
-    fal::{Dentry, DentryAttribute, DentryMeta, FileSystem, FilesystemAbstractLayerError, Mid},
+    fal::{
+        Dentry, DentryAttribute, DentryMeta, FileKind, FileSystem, FilesystemAbstractLayerError,
+        Mid, PropertyKind,
+    },
     mem::Address,
     path::{Component, Path, PathIterator},
     sync::spin::QueueLock,
+    time::Timestamp,
 };
 
 use flagset::FlagSet;
@@ -16,22 +22,38 @@ type Node = UpSafeCell<LocalDentry>;
 // 除了 directory 其他都是只读的，文件也是，因为只是元数据，只有目录是结构数据，需要结构锁
 pub struct LocalDentry {
     name: String,
+    created: Timestamp,
+    modified: Timestamp,
     kind: LocalDentryKind,
     attr: FlagSet<DentryAttribute>,
 }
 
 impl LocalDentry {
-    pub fn new_directory<A: Into<FlagSet<DentryAttribute>>>(name: &str, attr: A) -> Self {
+    pub fn new_directory<A: Into<FlagSet<DentryAttribute>>>(
+        name: &str,
+        created: Timestamp,
+        modified: Timestamp,
+        attr: A,
+    ) -> Self {
         Self {
             name: name.to_owned(),
+            created,
+            modified,
             attr: attr.into(),
             kind: LocalDentryKind::Directory(UpSafeCell::new(Vec::new()), QueueLock::new()),
         }
     }
 
-    pub fn new_mountpoint(name: &str, reference: Mid) -> Self {
+    pub fn new_mountpoint(
+        name: &str,
+        created: Timestamp,
+        modified: Timestamp,
+        reference: Mid,
+    ) -> Self {
         Self {
             name: name.to_owned(),
+            created,
+            modified,
             kind: LocalDentryKind::MountPoint(reference),
             attr: DentryAttribute::None.into(),
         }
@@ -46,26 +68,101 @@ impl LocalDentry {
     }
 
     pub fn meta(&self, collect: bool) -> Dentry {
-        Dentry::new(
-            self.name.clone(),
-            self.attr.clone(),
-            match self.kind() {
-                LocalDentryKind::Directory(subs, lock) => {
-                    if collect {
-                        lock.lock();
-                        let meta = DentryMeta::Directory(
-                            subs.iter().map(|d| d.meta(false)).collect::<Vec<Dentry>>(),
-                        );
-                        unsafe { lock.unlock() };
-                        meta
-                    } else {
-                        DentryMeta::Directory(Vec::new())
-                    }
+        match self.kind() {
+            LocalDentryKind::Directory(subs, lock) => {
+                if collect {
+                    lock.lock();
+                    let meta = DentryMeta::Directory(
+                        subs.iter().map(|d| d.meta(false)).collect::<Vec<Dentry>>(),
+                    );
+                    unsafe { lock.unlock() };
+                    Dentry::new(
+                        self.name.clone(),
+                        self.created,
+                        self.modified,
+                        0,
+                        self.attr.clone(),
+                        meta,
+                    )
+                } else {
+                    Dentry::new(
+                        self.name.clone(),
+                        self.created,
+                        self.modified,
+                        0,
+                        self.attr.clone(),
+                        DentryMeta::Directory(Vec::new()),
+                    )
                 }
-                LocalDentryKind::MountPoint(mid) => DentryMeta::MountPoint(*mid),
-                _ => todo!(),
+            }
+            LocalDentryKind::MountPoint(mid) => Dentry::new(
+                self.name.clone(),
+                self.created,
+                self.modified,
+                0,
+                self.attr.clone(),
+                DentryMeta::MountPoint(*mid),
+            ),
+            LocalDentryKind::File(file) => match file {
+                LocalFile::Stream(_, size) => Dentry::new(
+                    self.name.to_owned(),
+                    self.created,
+                    self.modified,
+                    *size,
+                    self.attr.clone(),
+                    DentryMeta::File(FileKind::Stream),
+                ),
+                LocalFile::Property(LocalProperty::Integer(_)) => Dentry::new(
+                    self.name.to_owned(),
+                    self.created,
+                    self.modified,
+                    size_of::<i64>(),
+                    self.attr.clone(),
+                    DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
+                ),
+                LocalFile::Property(LocalProperty::Integers(it)) => Dentry::new(
+                    self.name.to_owned(),
+                    self.created,
+                    self.modified,
+                    size_of::<i64>() * it.len(),
+                    self.attr.clone(),
+                    DentryMeta::File(FileKind::Property(PropertyKind::Integers)),
+                ),
+                LocalFile::Property(LocalProperty::Decimal(_)) => Dentry::new(
+                    self.name.to_owned(),
+                    self.created,
+                    self.modified,
+                    size_of::<f64>(),
+                    self.attr.clone(),
+                    DentryMeta::File(FileKind::Property(PropertyKind::Decimal)),
+                ),
+                LocalFile::Property(LocalProperty::Decimals(it)) => Dentry::new(
+                    self.name.to_owned(),
+                    self.created,
+                    self.modified,
+                    size_of::<f64>() * it.len(),
+                    self.attr.clone(),
+                    DentryMeta::File(FileKind::Property(PropertyKind::Decimals)),
+                ),
+                LocalFile::Property(LocalProperty::String(it)) => Dentry::new(
+                    self.name.to_owned(),
+                    self.created,
+                    self.modified,
+                    it.len(),
+                    self.attr.clone(),
+                    DentryMeta::File(FileKind::Property(PropertyKind::String)),
+                ),
+                LocalFile::Property(LocalProperty::Blob(it)) => Dentry::new(
+                    self.name.to_owned(),
+                    self.created,
+                    self.modified,
+                    size_of::<u8>() * it.len(),
+                    self.attr.clone(),
+                    DentryMeta::File(FileKind::Property(PropertyKind::Blob)),
+                ),
             },
-        )
+            LocalDentryKind::Link(_) => Dentry::new(self.name.to_owned(), self.created, self.modified, 0, self.attr.clone(), DentryMeta::Link),
+        }
     }
 }
 
@@ -78,7 +175,16 @@ pub enum LocalDentryKind {
 
 pub enum LocalFile {
     Stream(Address, usize),
-    Property(),
+    Property(LocalProperty),
+}
+
+pub enum LocalProperty {
+    Integer(i64),
+    Integers(Vec<i64>),
+    Decimal(f64),
+    Decimals(Vec<f64>),
+    String(String),
+    Blob(Vec<u8>),
 }
 
 pub struct Rootfs {
@@ -90,6 +196,8 @@ impl Rootfs {
         Self {
             root: UpSafeCell::new(LocalDentry::new_directory(
                 "",
+                0,
+                0,
                 DentryAttribute::Readable | DentryAttribute::Executable,
             )),
         }
@@ -103,7 +211,7 @@ impl Rootfs {
         if let Some(parent) = path.parent() {
             self.create_node(
                 &Path::from(parent).unwrap(),
-                LocalDentry::new_mountpoint(path.filename(), mountpoint),
+                LocalDentry::new_mountpoint(path.filename(), 0, 0, mountpoint),
             )
         } else {
             Err(FilesystemAbstractLayerError::InvalidPath)
@@ -236,5 +344,9 @@ impl FileSystem for Rootfs {
 
     fn lookup(&self, path: Path) -> Result<Dentry, FilesystemAbstractLayerError> {
         self.find_node(&path).map(|d| d.meta(true))
+    }
+
+    fn read(&self, path: Path, buffer: &[u8]) -> Result<usize, FilesystemAbstractLayerError>{
+        todo!()
     }
 }

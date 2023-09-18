@@ -1,10 +1,8 @@
 #![no_std]
 
-use core::arch::asm;
-
 use alloc::{fmt::Write, string::String};
 use rinlib::{
-    fs::{check, Dentry},
+    fs::{check, Dentry, DentryValue},
     preclude::*,
     shared::{fal::DentryType, path::Path},
 };
@@ -13,6 +11,11 @@ fn main() {
     debug!("Hello, fs!");
     let mut buffer = String::from("All entries under root shown below\n");
     print_dir(Path::from("/").unwrap(), &mut buffer);
+    if let Ok(prop) = check("/proc/3/memory/page"){
+        if let Ok(DentryValue::Integer(value)) = prop.read(1){
+            debug!("proc 3, pages: {}", value);
+        }
+    }
     debug!("{}", buffer);
 }
 
@@ -55,8 +58,23 @@ fn print_dentry(dentry: &Dentry, path: &Path, buffer: &mut String) {
         DentryType::Link => {
             writeln!(buffer, "{} -> ", dentry.name());
         }
-        DentryType::Property => {
-            writeln!(buffer, "#{}", dentry.name());
+        DentryType::Integer => {
+            writeln!(buffer, "#{}: i64", dentry.name());
+        }
+        DentryType::Integers => {
+            writeln!(buffer, "#{}: [i64]", dentry.name());
+        }
+        DentryType::Decimal => {
+            writeln!(buffer, "#{}: f64", dentry.name());
+        }
+        DentryType::Decimals => {
+            writeln!(buffer, "#{}: [f64]", dentry.name());
+        }
+        DentryType::Stream => {
+            writeln!(buffer, "#{}: string", dentry.name());
+        }
+        DentryType::Blob => {
+            writeln!(buffer, "#{}: blob", dentry.name());
         }
         _ => todo!(),
     }

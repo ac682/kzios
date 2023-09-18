@@ -4,6 +4,7 @@ use core::fmt::Display;
 
 use alloc::{string::String, vec::Vec};
 use flagset::{flags, FlagSet};
+use num_derive::{FromPrimitive, ToPrimitive};
 use path::Path;
 
 use crate::{path, proc::Pid, time::Timestamp};
@@ -22,16 +23,46 @@ flags! {
 
 pub struct Dentry {
     name: String,
+    created: Timestamp,
+    modified: Timestamp,
+    size: usize,
     attr: FlagSet<DentryAttribute>,
     meta: DentryMeta,
 }
 
 impl Dentry {
-    pub fn new(name: String, attr: FlagSet<DentryAttribute>, meta: DentryMeta) -> Self {
-        Self { name, attr, meta }
+    pub fn new(
+        name: String,
+        created: Timestamp,
+        modified: Timestamp,
+        size: usize,
+        attr: FlagSet<DentryAttribute>,
+        meta: DentryMeta,
+    ) -> Self {
+        Self {
+            name,
+            created,
+            modified,
+            size,
+            attr,
+            meta,
+        }
     }
+
+    pub fn created_at(&self) -> Timestamp {
+        self.created
+    }
+
+    pub fn modified_at(&self) -> Timestamp {
+        self.modified
+    }
+
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    pub fn size(&self) -> usize {
+        self.size
     }
 
     pub fn attributes(&self) -> &FlagSet<DentryAttribute> {
@@ -46,17 +77,22 @@ impl Dentry {
 pub enum DentryMeta {
     Directory(Vec<Dentry>),
     Link,
-    File(File),
+    File(FileKind),
     MountPoint(Mid),
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, FromPrimitive, ToPrimitive)]
 pub enum DentryType {
     Directory = 0,
     Link,
     Stream,
-    Property,
+    Integer,
+    Integers,
+    Decimal,
+    Decimals,
+    String,
+    Blob,
     MountPoint,
 }
 
@@ -70,10 +106,13 @@ impl From<&DentryMeta> for DentryType {
     fn from(value: &DentryMeta) -> Self {
         match &value {
             DentryMeta::Link => DentryType::Link,
-            DentryMeta::File(file) => match file {
-                File::Stream => DentryType::Stream,
-                File::Property(_) => DentryType::Property,
-            },
+            DentryMeta::File(FileKind::Stream) => DentryType::Stream,
+            DentryMeta::File(FileKind::Property(PropertyKind::Integer)) => DentryType::Integer,
+            DentryMeta::File(FileKind::Property(PropertyKind::Integers)) => DentryType::Integers,
+            DentryMeta::File(FileKind::Property(PropertyKind::Decimal)) => DentryType::Decimal,
+            DentryMeta::File(FileKind::Property(PropertyKind::Decimals)) => DentryType::Decimals,
+            DentryMeta::File(FileKind::Property(PropertyKind::String)) => DentryType::Stream,
+            DentryMeta::File(FileKind::Property(PropertyKind::Blob)) => DentryType::Blob,
             DentryMeta::MountPoint(_) => DentryType::MountPoint,
             DentryMeta::Directory(_) => DentryType::Directory,
         }
@@ -87,9 +126,9 @@ pub struct DentryObject {
     pub attr: u8,
     pub created_at: Timestamp,
     pub modified_at: Timestamp,
-    pub size: usize,
+    pub size: u64,
     pub in_use: bool,
-    pub name_length: usize,
+    pub name_length: u64,
 }
 
 impl DentryObject {
@@ -107,14 +146,14 @@ impl DentryObject {
             attr: attr.bits(),
             created_at: created,
             modified_at: modified,
-            size,
+            size: size as u64,
             in_use,
-            name_length,
+            name_length: name_length  as u64,
         }
     }
 }
 
-pub enum File {
+pub enum FileKind {
     Stream,
     Property(PropertyKind),
 }
@@ -142,4 +181,5 @@ pub trait FileSystem {
     fn is_property_supported(&self) -> bool;
     fn is_stream_supported(&self) -> bool;
     fn lookup(&self, path: Path) -> Result<Dentry, FilesystemAbstractLayerError>;
+    fn read(&self, path: Path, buffer: &[u8]) -> Result<usize, FilesystemAbstractLayerError>;
 }
