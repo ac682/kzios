@@ -11,11 +11,6 @@ fn main() {
     debug!("Hello, fs!");
     let mut buffer = String::from("All entries under root shown below\n");
     print_dir(Path::from("/").unwrap(), &mut buffer);
-    if let Ok(prop) = check("/proc/3/memory/page"){
-        if let Ok(DentryValue::Integer(value)) = prop.read(1){
-            debug!("proc 3, pages: {}", value);
-        }
-    }
     debug!("{}", buffer);
 }
 
@@ -59,22 +54,52 @@ fn print_dentry(dentry: &Dentry, path: &Path, buffer: &mut String) {
             writeln!(buffer, "{} -> ", dentry.name());
         }
         DentryType::Integer => {
-            writeln!(buffer, "#{}: i64", dentry.name());
+            writeln!(
+                buffer,
+                "#{} = {:?}",
+                dentry.name(),
+                dentry.read(0).unwrap()
+            );
         }
         DentryType::Integers => {
-            writeln!(buffer, "#{}: [i64]", dentry.name());
+            writeln!(
+                buffer,
+                "#{} = {:?}",
+                dentry.name(),
+                dentry.read(0).unwrap()
+            );
         }
         DentryType::Decimal => {
-            writeln!(buffer, "#{}: f64", dentry.name());
+            writeln!(
+                buffer,
+                "#{} = {:?}",
+                dentry.name(),
+                dentry.read(0).unwrap()
+            );
         }
         DentryType::Decimals => {
-            writeln!(buffer, "#{}: [f64]", dentry.name());
+            writeln!(
+                buffer,
+                "#{} = {:?}",
+                dentry.name(),
+                dentry.read(0).unwrap()
+            );
         }
         DentryType::Stream => {
-            writeln!(buffer, "#{}: string", dentry.name());
+            writeln!(
+                buffer,
+                "#{} = {:?}",
+                dentry.name(),
+                dentry.read(0).unwrap()
+            );
         }
         DentryType::Blob => {
-            writeln!(buffer, "#{}: blob", dentry.name());
+            writeln!(
+                buffer,
+                "#{} = {:?}",
+                dentry.name(),
+                dentry.read(0).unwrap()
+            );
         }
         _ => todo!(),
     }

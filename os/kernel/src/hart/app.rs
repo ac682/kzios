@@ -443,10 +443,13 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                     Ok(buffer) => {
                         let str = unsafe { String::from_utf8_unchecked(buffer) };
                         if let Ok(path) = Path::from(&str) {
-                            let mut buffer = Vec::<u8>::with_capacity(buffer_length);
-                            match fs::read(path, &mut buffer) {
-                                Ok(written) => {
-                                    if process.write(buffer_address, &buffer, written).is_ok() {
+                            match fs::read(path) {
+                                Ok(bytes) => {
+                                    if let Ok(written) = process.write(
+                                        buffer_address,
+                                        &bytes,
+                                        usize::min(bytes.len(), buffer_length),
+                                    ) {
                                         Ok(Some(written))
                                     } else {
                                         Err(SystemCallError::MemoryNotAccessible)

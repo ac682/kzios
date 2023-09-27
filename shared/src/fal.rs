@@ -148,7 +148,7 @@ impl DentryObject {
             modified_at: modified,
             size: size as u64,
             in_use,
-            name_length: name_length  as u64,
+            name_length: name_length as u64,
         }
     }
 }
@@ -174,6 +174,7 @@ pub enum FilesystemAbstractLayerError {
     NotAccessible,
     Mistyped,
     Conflict,
+    Unsupported,
     ForeignMountPoint(Path, Mid),
 }
 
@@ -181,5 +182,5 @@ pub trait FileSystem {
     fn is_property_supported(&self) -> bool;
     fn is_stream_supported(&self) -> bool;
     fn lookup(&self, path: Path) -> Result<Dentry, FilesystemAbstractLayerError>;
-    fn read(&self, path: Path, buffer: &[u8]) -> Result<usize, FilesystemAbstractLayerError>;
+    fn read(&self, path: Path) -> Result<Vec<u8>, FilesystemAbstractLayerError>;
 }

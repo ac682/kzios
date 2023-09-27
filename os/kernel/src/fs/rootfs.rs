@@ -161,7 +161,14 @@ impl LocalDentry {
                     DentryMeta::File(FileKind::Property(PropertyKind::Blob)),
                 ),
             },
-            LocalDentryKind::Link(_) => Dentry::new(self.name.to_owned(), self.created, self.modified, 0, self.attr.clone(), DentryMeta::Link),
+            LocalDentryKind::Link(_) => Dentry::new(
+                self.name.to_owned(),
+                self.created,
+                self.modified,
+                0,
+                self.attr.clone(),
+                DentryMeta::Link,
+            ),
         }
     }
 }
@@ -213,33 +220,6 @@ impl Rootfs {
                 &Path::from(parent).unwrap(),
                 LocalDentry::new_mountpoint(path.filename(), 0, 0, mountpoint),
             )
-        } else {
-            Err(FilesystemAbstractLayerError::InvalidPath)
-        }
-    }
-
-    fn get_parent(&self, path: &Path) -> Result<&Node, FilesystemAbstractLayerError> {
-        if path.is_absolute() {
-            if let Ok(qualified) = path.qualify() {
-                if let Some(parent) = qualified.parent() {
-                    if let Ok(p) = Path::from(parent) {
-                        let mut iter = p.iter();
-                        iter.next();
-                        let node = Self::find_node_internal(&self.root, iter)?;
-                        if let LocalDentryKind::Directory(_, _) = node.kind() {
-                            Ok(node)
-                        } else {
-                            Err(FilesystemAbstractLayerError::Mistyped)
-                        }
-                    } else {
-                        Err(FilesystemAbstractLayerError::InvalidPath)
-                    }
-                } else {
-                    Err(FilesystemAbstractLayerError::InvalidPath)
-                }
-            } else {
-                Err(FilesystemAbstractLayerError::InvalidPath)
-            }
         } else {
             Err(FilesystemAbstractLayerError::InvalidPath)
         }
@@ -346,7 +326,27 @@ impl FileSystem for Rootfs {
         self.find_node(&path).map(|d| d.meta(true))
     }
 
-    fn read(&self, path: Path, buffer: &[u8]) -> Result<usize, FilesystemAbstractLayerError>{
-        todo!()
+    fn read(&self, path: Path) -> Result<Vec<u8>, FilesystemAbstractLayerError> {
+        match self.find_node(&path) {
+            Ok(dentry) => match &dentry.kind {
+                LocalDentryKind::File(LocalFile::Property(prop)) => match prop {
+                    LocalProperty::Integer(it) => Ok(i64::to_ne_bytes(*it).to_vec()),
+                    LocalProperty::Integers(it) => {
+                        Ok(it.iter().flat_map(|i| i64::to_ne_bytes(*i)).collect())
+                    }
+                    LocalProperty::Decimal(it) => Ok(f64::to_ne_bytes(*it).to_vec()),
+                    LocalProperty::Decimals(it) => {
+                        Ok(it.iter().flat_map(|i| f64::to_ne_bytes(*i)).collect())
+                    }
+                    LocalProperty::String(it) => Ok(it.bytes().collect()),
+                    LocalProperty::Blob(it) => Ok(it.clone()),
+                },
+                LocalDentryKind::File(LocalFile::Stream(addr, size)) => {
+                    Err(FilesystemAbstractLayerError::Unsupported)
+                }
+                _ => Err(FilesystemAbstractLayerError::Unsupported),
+            },
+            Err(err) => Err(err),
+        }
     }
 }

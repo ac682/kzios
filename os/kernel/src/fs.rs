@@ -52,22 +52,19 @@ pub fn mount_remote(path: Path, service: Pid) -> Result<(), FilesystemAbstractLa
     unsafe { ROOT.get_mut().unwrap() }.mount(&path, service as Mid)
 }
 
-pub fn lookup<'a>(path: Path) -> Result<Dentry, FilesystemAbstractLayerError> {
-    lookup_filesystem(unsafe { ROOT.get_mut().unwrap() }, path)
-}
-
-pub fn lookup_filesystem(
+fn redirect_with<T, O: Fn(&dyn FileSystem, Path) -> Result<T, FilesystemAbstractLayerError>>(
+    op: O,
     fs: &impl FileSystem,
     path: Path,
-) -> Result<Dentry, FilesystemAbstractLayerError> {
-    match fs.lookup(path) {
+) -> Result<T, FilesystemAbstractLayerError> {
+    match op(fs, path) {
         Ok(dentry) => Ok(dentry),
         Err(err) => match err {
             FilesystemAbstractLayerError::ForeignMountPoint(rem, mid) => {
-                debug!("fs.lookup_internal redirected to {:#x} with {}", mid, rem);
+                debug!("redirected to {:#x} with {}", mid, rem);
                 if let Some(fs) = get_local_fs(mid) {
                     match fs {
-                        LocalMountpoint::Proc(proc) => lookup_filesystem(proc, rem),
+                        LocalMountpoint::Proc(proc) => redirect_with(op, proc, rem),
                     }
                 } else {
                     Err(FilesystemAbstractLayerError::ForeignMountPoint(rem, mid))
@@ -76,6 +73,14 @@ pub fn lookup_filesystem(
             _ => Err(err),
         },
     }
+}
+
+pub fn lookup<'a>(path: Path) -> Result<Dentry, FilesystemAbstractLayerError> {
+    redirect_with(
+        |fs, p| fs.lookup(p),
+        unsafe { ROOT.get_mut().unwrap() },
+        path,
+    )
 }
 
 pub fn get_local_index(mid: Mid) -> Option<usize> {
@@ -99,7 +104,8 @@ pub fn measure(dentry: &Dentry) -> usize {
         }
         DentryMeta::MountPoint(mid) => {
             if let Some(local) = get_local_fs(*mid) {
-                if let Ok(mounted) = lookup_filesystem(
+                if let Ok(mounted) = redirect_with(
+                    |fs, p| fs.lookup(p),
                     match local {
                         LocalMountpoint::Proc(procfs) => procfs,
                     },
@@ -123,9 +129,9 @@ pub fn make_objects<'a>(dentry: &Dentry, buffer: &'a mut Vec<(DentryObject, Stri
         DentryObject::new(
             DentryType::from(meta),
             dentry.attributes(),
-            0,
-            0,
-            0,
+            dentry.created_at(),
+            dentry.modified_at(),
+            dentry.size(),
             false,
             dentry.name().len(),
         ),
@@ -151,7 +157,8 @@ pub fn make_objects<'a>(dentry: &Dentry, buffer: &'a mut Vec<(DentryObject, Stri
         }
         DentryMeta::MountPoint(mid) => {
             if let Some(local) = get_local_fs(*mid) {
-                if let Ok(mounted) = lookup_filesystem(
+                if let Ok(mounted) = redirect_with(
+                    |fs, p| fs.lookup(p),
                     match local {
                         LocalMountpoint::Proc(procfs) => procfs,
                     },
@@ -199,14 +206,6 @@ pub fn create_filesystem<A: Into<FlagSet<DentryAttribute>>>(
     todo!()
 }
 
-pub fn read(path: Path, buffer: &mut [u8]) -> Result<usize, FilesystemAbstractLayerError> {
-    read_filesystem(unsafe { ROOT.get_mut().unwrap() }, path, buffer)
-}
-
-pub fn read_filesystem(
-    fs: &impl FileSystem,
-    path: Path,
-    buffer: &mut [u8],
-) -> Result<usize, FilesystemAbstractLayerError> {
-    fs.read(path, buffer)
+pub fn read(path: Path) -> Result<Vec<u8>, FilesystemAbstractLayerError> {
+    redirect_with(|fs, p| fs.read(p), unsafe { ROOT.get_mut().unwrap() }, path)
 }

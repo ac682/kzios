@@ -40,6 +40,7 @@ impl From<SystemCallError> for FileSystemError {
     }
 }
 
+#[derive(Debug)]
 pub enum DentryValue {
     Integer(i64),
     Integers(Vec<i64>),
@@ -103,14 +104,14 @@ impl Dentry {
             | DentryType::Decimals
             | DentryType::String
             | DentryType::Blob => unsafe {
-                let mut buffer = vec![0u8; usize::min(self.size, count)];
+                let mut buffer = vec![0u8; self.size];
                 match sys_read(&self.identifier, &mut buffer) {
                     Ok(read) => {
                         buffer.truncate(read);
                         match self.kind {
                             DentryType::Integer => {
                                 if read == 8 {
-                                    Ok(DentryValue::Integer(i64::from_le_bytes([
+                                    Ok(DentryValue::Integer(i64::from_ne_bytes([
                                         buffer[0], buffer[1], buffer[2], buffer[3], buffer[4],
                                         buffer[5], buffer[6], buffer[7],
                                     ])))
@@ -123,7 +124,7 @@ impl Dentry {
                                     let count = read / 8;
                                     let mut ints = Vec::<i64>::with_capacity(count);
                                     for i in 0..count {
-                                        let int = i64::from_le_bytes([
+                                        let int = i64::from_ne_bytes([
                                             buffer[i * 8 + 0],
                                             buffer[i * 8 + 1],
                                             buffer[i * 8 + 2],
@@ -143,7 +144,7 @@ impl Dentry {
                             }
                             DentryType::Decimal => {
                                 if read == 8 {
-                                    Ok(DentryValue::Decimal(f64::from_le_bytes([
+                                    Ok(DentryValue::Decimal(f64::from_ne_bytes([
                                         buffer[0], buffer[1], buffer[2], buffer[3], buffer[4],
                                         buffer[5], buffer[6], buffer[7],
                                     ])))
@@ -156,7 +157,7 @@ impl Dentry {
                                     let count = read / 8;
                                     let mut decs = Vec::<f64>::with_capacity(count);
                                     for i in 0..count {
-                                        let int = f64::from_le_bytes([
+                                        let int = f64::from_ne_bytes([
                                             buffer[i * 8 + 0],
                                             buffer[i * 8 + 1],
                                             buffer[i * 8 + 2],
