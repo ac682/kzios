@@ -17,7 +17,10 @@ flags! {
         None = 0,
         Readable = 1 << 0,
         Writeable = 1 << 1,
-        Executable = 1 << 2
+        Executable = 1 << 2,
+        PrivilegedReadable = 1 << 3,
+        PrivilegedWriteable = 1 << 4,
+        PrivilegedExecutable = 1 << 5
     }
 }
 

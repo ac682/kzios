@@ -11,15 +11,32 @@
 - [ ] IPC
   - [x] 信号
   - [ ] 消息
-  - [x] 隧道
+  - [ ] 隧道
+    - [x] syscall
+    - [ ] Runnel
 - [ ] 设备租借
   - [ ] 中断转发
 - [ ] 文件系统
+  - [ ] FAL/syscall
+    - [x] access
+    - [x] inspect
+    - [x] read
+    - [ ] write
+    - [ ] create
+    - [ ] delete
+    - [ ] open
+  - [ ] FAL/ipc
+  - [ ] 内核文件系统
+    - [ ] rootfs
+    - [ ] procfs
+    - [ ] devfs
+  - [ ] 具体文件系统
+    - [ ] FAT32
 
 ## (将)受支持的平台
 
 - [x] qemu-virt: 4 cores 128MB ram with MMU
-- [ ] qemu-sifive_u: 5 cores(#0 disabled) 128MB ram with MMU
+- [x] qemu-sifive_u: 5 cores(#0 disabled) 128MB ram with MMU
 - [ ] k210: 2 cores 8MB ram with MMU *内存太少了哇*
 - [ ] D1s(F133): single core 64MB with MMU
 

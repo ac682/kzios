@@ -250,13 +250,13 @@ impl FileSystem for Procfs {
         debug!("procfs.read {}", path);
         if let Ok(layer) = Self::parse(path) {
             match layer {
-                FsLayer::Root => Err(FilesystemAbstractLayerError::Mistyped),
-                FsLayer::Proc(_) => Err(FilesystemAbstractLayerError::Mistyped),
+                FsLayer::Root => Err(FilesystemAbstractLayerError::Unsupported),
+                FsLayer::Proc(_) => Err(FilesystemAbstractLayerError::Unsupported),
                 FsLayer::Memory(pid, option) => {
                     if let Some(prop) = option {
                         Self::read_prop(pid, prop.as_str())
                     } else {
-                        Err(FilesystemAbstractLayerError::Mistyped)
+                        Err(FilesystemAbstractLayerError::Unsupported)
                     }
                 }
             }
