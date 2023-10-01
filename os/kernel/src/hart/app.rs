@@ -335,7 +335,7 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                                 },
                             }
                         } else {
-                            Err(SystemCallError::ObjectNotFound)
+                            Err(SystemCallError::IllegalArgument)
                         }
                     }
                     Err(err) => Err(match err {
@@ -408,7 +408,7 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                                 },
                             }
                         } else {
-                            Err(SystemCallError::ObjectNotFound)
+                            Err(SystemCallError::IllegalArgument)
                         }
                     }
                     Err(err) => Err(match err {
@@ -423,10 +423,46 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
             SystemCall::Create => {
                 let path_address = arg0;
                 let path_length = arg1;
-                let attr = arg3;
                 if let Some(kind) = DentryType::from_u8(arg2 as u8) {
                     if let Ok(attr) = FlagSet::<DentryAttribute>::new(arg3 as u8) {
-                        todo!()
+                        match process.read(path_address, path_length) {
+                            Ok(buffer) => {
+                                let str = unsafe { String::from_utf8_unchecked(buffer) };
+                                if let Ok(path) = Path::from(&str) {
+                                    match fs::create(path, kind, attr) {
+                                        Ok(()) => Ok(Some(0)),
+                                        Err(err) => match err {
+                                            FilesystemAbstractLayerError::NotAccessible => {
+                                                Err(SystemCallError::ObjectNotAccessible)
+                                            }
+                                            FilesystemAbstractLayerError::InvalidPath => {
+                                                Err(SystemCallError::IllegalArgument)
+                                            }
+                                            FilesystemAbstractLayerError::NotFound => {
+                                                Err(SystemCallError::ObjectNotFound)
+                                            }
+                                            FilesystemAbstractLayerError::ForeignMountPoint(
+                                                rem,
+                                                mid,
+                                            ) => {
+                                                todo!();
+                                                Ok(None)
+                                            }
+                                            _ => Err(SystemCallError::InternalError),
+                                        },
+                                    }
+                                } else {
+                                    Err(SystemCallError::IllegalArgument)
+                                }
+                            }
+                            Err(err) => Err(match err {
+                                ProcessMemoryError::InaccessibleRegion => {
+                                    SystemCallError::MemoryNotAccessible
+                                }
+
+                                _ => SystemCallError::InvalidAddress,
+                            }),
+                        }
                     } else {
                         Err(SystemCallError::IllegalArgument)
                     }
@@ -473,7 +509,7 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                                 },
                             }
                         } else {
-                            Err(SystemCallError::ObjectNotFound)
+                            Err(SystemCallError::IllegalArgument)
                         }
                     }
                     Err(err) => Err(match err {

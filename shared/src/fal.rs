@@ -122,6 +122,19 @@ impl From<&DentryMeta> for DentryType {
     }
 }
 
+impl From<&PropertyKind> for DentryType {
+    fn from(value: &PropertyKind) -> Self {
+        match value {
+            PropertyKind::Integer => DentryType::Integer,
+            PropertyKind::Integers => DentryType::Integers,
+            PropertyKind::Decimal => DentryType::Decimal,
+            PropertyKind::Decimals => DentryType::Decimals,
+            PropertyKind::String => DentryType::String,
+            PropertyKind::Blob => DentryType::Blob,
+        }
+    }
+}
+
 /// Structure for serialization
 #[repr(C)]
 pub struct DentryObject {
@@ -161,6 +174,7 @@ pub enum FileKind {
     Property(PropertyKind),
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum PropertyKind {
     Integer,
     Integers,
@@ -185,5 +199,11 @@ pub trait FileSystem {
     fn is_property_supported(&self) -> bool;
     fn is_stream_supported(&self) -> bool;
     fn lookup(&self, path: Path) -> Result<Dentry, FilesystemAbstractLayerError>;
+    fn create(
+        &self,
+        path: Path,
+        kind: DentryType,
+        attr: FlagSet<DentryAttribute>,
+    ) -> Result<(), FilesystemAbstractLayerError>;
     fn read(&self, path: Path) -> Result<Vec<u8>, FilesystemAbstractLayerError>;
 }

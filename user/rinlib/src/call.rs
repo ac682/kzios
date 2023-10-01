@@ -2,10 +2,13 @@ use core::arch::asm;
 
 use erhino_shared::{
     call::{SystemCall, SystemCallError},
+    fal::{DentryAttribute, DentryType},
     mem::Address,
-    proc::{ExitCode, Pid, SignalMap, Tid},
+    proc::{ExitCode, Pid, SystemSignal, Tid},
 };
+use flagset::FlagSet;
 use num_traits::FromPrimitive;
+use num_traits::ToPrimitive;
 
 type SystemCallResult<T> = Result<T, SystemCallError>;
 
@@ -76,12 +79,24 @@ pub unsafe fn sys_tunnel_dispose(key: usize) -> SystemCallResult<()> {
     sys_call(SystemCall::TunnelDispose, key, 0, 0, 0).map(|_| {})
 }
 
-pub unsafe fn sys_signal_set(mask: SignalMap, handler: Address) -> SystemCallResult<()> {
-    sys_call(SystemCall::SignalSet, mask as usize, handler, 0, 0).map(|_| ())
+pub unsafe fn sys_signal_set(
+    mask: FlagSet<SystemSignal>,
+    handler: Address,
+) -> SystemCallResult<()> {
+    sys_call(SystemCall::SignalSet, mask.bits() as usize, handler, 0, 0).map(|_| ())
 }
 
-pub unsafe fn sys_signal_send(pid: Pid, signal: SignalMap) -> SystemCallResult<bool> {
-    sys_call(SystemCall::SignalSend, pid as usize, signal as usize, 0, 0).map(|f| f != 0)
+pub unsafe fn sys_signal_send(pid: Pid, signal: SystemSignal) -> SystemCallResult<bool> {
+    sys_call(
+        SystemCall::SignalSend,
+        pid as usize,
+        signal
+            .to_u64()
+            .expect("cast system signal to signal map wont failed") as usize,
+        0,
+        0,
+    )
+    .map(|f| f != 0)
 }
 
 pub unsafe fn sys_signal_return() -> SystemCallResult<()> {
@@ -109,5 +124,19 @@ pub unsafe fn sys_read(path: &str, buffer: &[u8]) -> SystemCallResult<usize> {
         path.len(),
         buffer.as_ptr() as usize,
         buffer.len(),
+    )
+}
+
+pub unsafe fn sys_create(
+    path: &str,
+    kind: DentryType,
+    attr: FlagSet<DentryAttribute>,
+) -> SystemCallResult<usize> {
+    sys_call(
+        SystemCall::Create,
+        path.as_ptr() as usize,
+        path.len(),
+        kind as u8 as usize,
+        attr.bits() as usize,
     )
 }

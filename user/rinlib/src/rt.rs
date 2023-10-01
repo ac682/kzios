@@ -24,7 +24,6 @@ impl HeapRecuse {
 
 impl OomHandler for HeapRecuse {
     fn handle_oom(talc: &mut Talc<Self>, layout: Layout) -> Result<(), ()> {
-        unsafe { asm!("ebreak") }
         let mut count = 1;
         let single = 4096;
         while count * single < layout.size() {

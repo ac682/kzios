@@ -77,6 +77,11 @@ impl Path {
         self.inner.starts_with(PATH_SEPARATOR)
     }
 
+    /// Is path contains no ./..
+    pub fn is_qualified(&self) -> bool {
+        !self.inner.contains(".") && !self.inner.contains("..")
+    }
+
     /// Construct an absolute path with no . or ..
     pub fn qualify(&self) -> Result<Path, PathError> {
         if self.is_absolute() {

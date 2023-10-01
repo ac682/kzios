@@ -3,8 +3,8 @@ use core::mem::{size_of, size_of_val};
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use erhino_shared::{
     fal::{
-        Dentry, DentryAttribute, DentryMeta, FileKind, FileSystem, FilesystemAbstractLayerError,
-        Mid, PropertyKind,
+        Dentry, DentryAttribute, DentryMeta, DentryType, FileKind, FileSystem,
+        FilesystemAbstractLayerError, Mid, PropertyKind,
     },
     mem::Address,
     path::{Component, Path, PathIterator},
@@ -59,6 +59,121 @@ impl LocalDentry {
         }
     }
 
+    pub fn new_integer(
+        name: &str,
+        created: Timestamp,
+        modified: Timestamp,
+        attr: FlagSet<DentryAttribute>,
+    ) -> Self {
+        Self {
+            name: name.to_owned(),
+            created,
+            modified,
+            kind: LocalDentryKind::File(LocalFile::Property(LocalProperty::Integer(0))),
+            attr,
+        }
+    }
+
+    pub fn new_integers(
+        name: &str,
+        created: Timestamp,
+        modified: Timestamp,
+        attr: FlagSet<DentryAttribute>,
+    ) -> Self {
+        Self {
+            name: name.to_owned(),
+            created,
+            modified,
+            kind: LocalDentryKind::File(LocalFile::Property(LocalProperty::Integers(
+                Vec::with_capacity(0),
+            ))),
+            attr,
+        }
+    }
+
+    pub fn new_decimal(
+        name: &str,
+        created: Timestamp,
+        modified: Timestamp,
+        attr: FlagSet<DentryAttribute>,
+    ) -> Self {
+        Self {
+            name: name.to_owned(),
+            created,
+            modified,
+            kind: LocalDentryKind::File(LocalFile::Property(LocalProperty::Decimal(0f64))),
+            attr,
+        }
+    }
+
+    pub fn new_decimals(
+        name: &str,
+        created: Timestamp,
+        modified: Timestamp,
+        attr: FlagSet<DentryAttribute>,
+    ) -> Self {
+        Self {
+            name: name.to_owned(),
+            created,
+            modified,
+            kind: LocalDentryKind::File(LocalFile::Property(LocalProperty::Decimals(
+                Vec::with_capacity(0),
+            ))),
+            attr,
+        }
+    }
+
+    pub fn new_string(
+        name: &str,
+        created: Timestamp,
+        modified: Timestamp,
+        attr: FlagSet<DentryAttribute>,
+    ) -> Self {
+        Self {
+            name: name.to_owned(),
+            created,
+            modified,
+            kind: LocalDentryKind::File(LocalFile::Property(LocalProperty::String(
+                String::with_capacity(0),
+            ))),
+            attr,
+        }
+    }
+
+    pub fn new_blob(
+        name: &str,
+        created: Timestamp,
+        modified: Timestamp,
+        attr: FlagSet<DentryAttribute>,
+    ) -> Self {
+        Self {
+            name: name.to_owned(),
+            created,
+            modified,
+            kind: LocalDentryKind::File(LocalFile::Property(LocalProperty::Blob(
+                Vec::with_capacity(0),
+            ))),
+            attr,
+        }
+    }
+
+    pub fn new_memory_stream(
+        name: &str,
+        created: Timestamp,
+        modified: Timestamp,
+        attr: FlagSet<DentryAttribute>,
+        address: Address,
+        length: usize,
+    ) -> Self {
+        Self {
+            name: name.to_owned(),
+            created,
+            modified,
+            kind: LocalDentryKind::File(LocalFile::Stream(address, length)),
+            attr,
+        }
+    }
+
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -104,11 +219,11 @@ impl LocalDentry {
                 DentryMeta::MountPoint(*mid),
             ),
             LocalDentryKind::File(file) => match file {
-                LocalFile::Stream(_, size) => Dentry::new(
+                LocalFile::Stream(_, length) => Dentry::new(
                     self.name.to_owned(),
                     self.created,
                     self.modified,
-                    *size,
+                    *length,
                     self.attr.clone(),
                     DentryMeta::File(FileKind::Stream),
                 ),
@@ -225,6 +340,23 @@ impl Rootfs {
         }
     }
 
+    pub fn create_stream(
+        &self,
+        path: &Path,
+        address: Address,
+        length: usize,
+        attr: FlagSet<DentryAttribute>,
+    ) -> Result<(), FilesystemAbstractLayerError> {
+        if let Some(parent) = path.parent() {
+            self.create_node(
+                &Path::from(parent).unwrap(),
+                LocalDentry::new_memory_stream(path.filename(), 0, 0, attr, address, length),
+            )
+        } else {
+            Err(FilesystemAbstractLayerError::InvalidPath)
+        }
+    }
+
     fn create_node(
         &self,
         parent: &Path,
@@ -260,13 +392,9 @@ impl Rootfs {
 
     fn find_node(&self, path: &Path) -> Result<&Node, FilesystemAbstractLayerError> {
         if path.is_absolute() {
-            if let Ok(qualified) = path.qualify() {
-                let mut iter = qualified.iter();
-                iter.next();
-                Self::find_node_internal(&self.root, iter)
-            } else {
-                Err(FilesystemAbstractLayerError::InvalidPath)
-            }
+            let mut iter = path.iter();
+            iter.next();
+            Self::find_node_internal(&self.root, iter)
         } else {
             Err(FilesystemAbstractLayerError::InvalidPath)
         }
@@ -313,17 +441,54 @@ impl Rootfs {
 }
 
 impl FileSystem for Rootfs {
-    // 等日后写出 ramfs 的解决方案了再让 rootfs 变成 ramfs 并导入 initfs 的内容
     fn is_property_supported(&self) -> bool {
-        false
+        true
     }
 
     fn is_stream_supported(&self) -> bool {
-        false
+        true
     }
 
     fn lookup(&self, path: Path) -> Result<Dentry, FilesystemAbstractLayerError> {
         self.find_node(&path).map(|d| d.meta(true))
+    }
+
+    fn create(
+        &self,
+        path: Path,
+        kind: DentryType,
+        attr: FlagSet<DentryAttribute>,
+    ) -> Result<(), FilesystemAbstractLayerError> {
+        if let Some(parent) = path.parent() {
+            // 只支持内存属性，要添加内存流要用 Rootfs.create_stream
+            if let Ok(dir) = Path::from(parent) {
+                match kind {
+                    DentryType::Directory => self.create_node(
+                        &dir,
+                        LocalDentry::new_directory(path.filename(), 0, 0, attr),
+                    ),
+                    DentryType::Integer => self
+                        .create_node(&dir, LocalDentry::new_integer(path.filename(), 0, 0, attr)),
+                    DentryType::Integers => self
+                        .create_node(&dir, LocalDentry::new_integers(path.filename(), 0, 0, attr)),
+                    DentryType::Decimal => self
+                        .create_node(&dir, LocalDentry::new_decimal(path.filename(), 0, 0, attr)),
+                    DentryType::Decimals => self
+                        .create_node(&dir, LocalDentry::new_decimals(path.filename(), 0, 0, attr)),
+                    DentryType::String => {
+                        self.create_node(&dir, LocalDentry::new_string(path.filename(), 0, 0, attr))
+                    }
+                    DentryType::Blob => {
+                        self.create_node(&dir, LocalDentry::new_blob(path.filename(), 0, 0, attr))
+                    }
+                    _ => Err(FilesystemAbstractLayerError::Unsupported),
+                }
+            } else {
+                Err(FilesystemAbstractLayerError::InvalidPath)
+            }
+        } else {
+            Err(FilesystemAbstractLayerError::InvalidPath)
+        }
     }
 
     fn read(&self, path: Path) -> Result<Vec<u8>, FilesystemAbstractLayerError> {
@@ -341,7 +506,7 @@ impl FileSystem for Rootfs {
                     LocalProperty::String(it) => Ok(it.bytes().collect()),
                     LocalProperty::Blob(it) => Ok(it.clone()),
                 },
-                LocalDentryKind::File(LocalFile::Stream(addr, size)) => {
+                LocalDentryKind::File(LocalFile::Stream(_addr, _length)) => {
                     Err(FilesystemAbstractLayerError::Unsupported)
                 }
                 _ => Err(FilesystemAbstractLayerError::Unsupported),

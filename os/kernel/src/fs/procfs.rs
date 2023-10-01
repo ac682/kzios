@@ -7,10 +7,11 @@ use alloc::vec::Vec;
 use erhino_shared::path::{Component, Path};
 
 use erhino_shared::fal::{
-    Dentry, DentryAttribute, DentryMeta, FileKind, FileSystem, FilesystemAbstractLayerError,
-    PropertyKind,
+    Dentry, DentryAttribute, DentryMeta, DentryType, FileKind, FileSystem,
+    FilesystemAbstractLayerError, PropertyKind,
 };
 use erhino_shared::proc::Pid;
+use flagset::FlagSet;
 
 use crate::debug;
 use crate::hart::SchedulerImpl;
@@ -37,37 +38,33 @@ impl Procfs {
 
     fn parse(path: Path) -> Result<FsLayer, FilesystemAbstractLayerError> {
         if path.is_absolute() {
-            if let Ok(qualified) = path.qualify() {
-                let mut iter = qualified.iter();
-                if let Some(Component::Root) = iter.next() {
-                    if let Some(Component::Normal(pid)) = iter.next() {
-                        if let Ok(id) = pid.parse::<Pid>() {
-                            if let Some(Component::Normal(prop)) = iter.next() {
-                                match prop {
-                                    "memory" => {
-                                        if let Some(Component::Normal(field)) = iter.next() {
-                                            if let None = iter.next() {
-                                                Ok(FsLayer::Memory(id, Some(field.to_owned())))
-                                            } else {
-                                                Err(FilesystemAbstractLayerError::NotFound)
-                                            }
+            let mut iter = path.iter();
+            if let Some(Component::Root) = iter.next() {
+                if let Some(Component::Normal(pid)) = iter.next() {
+                    if let Ok(id) = pid.parse::<Pid>() {
+                        if let Some(Component::Normal(prop)) = iter.next() {
+                            match prop {
+                                "memory" => {
+                                    if let Some(Component::Normal(field)) = iter.next() {
+                                        if let None = iter.next() {
+                                            Ok(FsLayer::Memory(id, Some(field.to_owned())))
                                         } else {
-                                            Ok(FsLayer::Memory(id, None))
+                                            Err(FilesystemAbstractLayerError::NotFound)
                                         }
+                                    } else {
+                                        Ok(FsLayer::Memory(id, None))
                                     }
-                                    _ => Err(FilesystemAbstractLayerError::NotFound),
                                 }
-                            } else {
-                                Ok(FsLayer::Proc(id))
+                                _ => Err(FilesystemAbstractLayerError::NotFound),
                             }
                         } else {
-                            Err(FilesystemAbstractLayerError::NotFound)
+                            Ok(FsLayer::Proc(id))
                         }
                     } else {
-                        Ok(FsLayer::Root)
+                        Err(FilesystemAbstractLayerError::NotFound)
                     }
                 } else {
-                    Err(FilesystemAbstractLayerError::InvalidPath)
+                    Ok(FsLayer::Root)
                 }
             } else {
                 Err(FilesystemAbstractLayerError::InvalidPath)
@@ -244,6 +241,15 @@ impl FileSystem for Procfs {
         } else {
             Err(FilesystemAbstractLayerError::InvalidPath)
         }
+    }
+
+    fn create(
+        &self,
+        path: Path,
+        kind: DentryType,
+        attr: FlagSet<DentryAttribute>,
+    ) -> Result<(), FilesystemAbstractLayerError> {
+        Err(FilesystemAbstractLayerError::Unsupported)
     }
 
     fn read(&self, path: Path) -> Result<Vec<u8>, FilesystemAbstractLayerError> {

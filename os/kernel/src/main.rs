@@ -4,6 +4,11 @@
 
 use core::{arch::global_asm, ptr::slice_from_raw_parts};
 
+use alloc::format;
+use erhino_shared::{
+    fal::{DentryAttribute, DentryType},
+    path::Path,
+};
 use tar_no_std::TarArchiveRef;
 
 use crate::{
@@ -42,14 +47,20 @@ pub fn main() {
         )
     };
     let archive = TarArchiveRef::new(ramfs);
-    let systems = archive.entries();
-    for system in systems {
-        let process = Process::from_elf(system.data()).unwrap();
+    let files = archive.entries();
+    fs::create(
+        Path::from("/initfs").unwrap(),
+        DentryType::Directory,
+        DentryAttribute::Readable | DentryAttribute::Executable,
+    ).unwrap();
+    for file in files {
+        fs::create_memory_stream(
+            Path::from(&format!("/initfs/{}", file.filename())).unwrap(),
+            file.data(),
+            DentryAttribute::Executable | DentryAttribute::Readable,
+        ).unwrap();
+        let process = Process::from_elf(file.data()).unwrap();
         SchedulerImpl::add(process, None);
     }
-    // frame::add_frame(
-    //     _ramfs_start as usize >> PAGE_BITS,
-    //     _frame_start as usize >> PAGE_BITS,
-    // );
     println!("\x1b[0;32m=LINK^START=\x1b[0m");
 }

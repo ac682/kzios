@@ -1,19 +1,18 @@
 use core::mem::size_of;
 
-use alloc::{borrow::ToOwned, string::String, vec, vec::Vec};
+use alloc::{string::String, vec, vec::Vec};
 use erhino_shared::{
     call::SystemCallError,
-    fal::{DentryAttribute, DentryObject, DentryType},
+    fal::{DentryAttribute, DentryObject, DentryType, Mid, PropertyKind},
     path::Path,
-    time::Timestamp,
 };
 use flagset::FlagSet;
 
-use crate::{
-    call::{sys_access, sys_inspect, sys_read},
-    debug,
-    ipc::tunnel::Runnel,
-};
+use crate::call::{sys_access, sys_create, sys_inspect};
+
+use self::components::{Dentry, Directory, Link, MountPoint, Property, Stream};
+
+pub mod components;
 
 #[derive(Debug, Clone, Copy)]
 pub enum FileSystemError {
@@ -51,167 +50,6 @@ pub enum DentryValue {
     Stream(Vec<u8>),
 }
 
-pub struct Dentry {
-    identifier: String,
-    name: String,
-    kind: DentryType,
-    attr: FlagSet<DentryAttribute>,
-    size: usize,
-    created_at: Timestamp,
-    modified_at: Timestamp,
-    children: Option<Vec<Dentry>>,
-}
-
-impl Dentry {
-    fn from_object(obj: &DentryObject, name: &str, identifier: &str) -> Self {
-        Self {
-            identifier: identifier.to_owned(),
-            name: name.to_owned(),
-            kind: obj.kind,
-            attr: FlagSet::new(obj.attr).unwrap(),
-            size: obj.size as usize,
-            created_at: obj.created_at,
-            modified_at: obj.modified_at,
-            children: None,
-        }
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn kind(&self) -> &DentryType {
-        &self.kind
-    }
-
-    pub fn attributes(&self) -> &FlagSet<DentryAttribute> {
-        &self.attr
-    }
-
-    pub fn size(&self) -> usize {
-        self.size
-    }
-
-    pub fn children(&self) -> Option<&[Dentry]> {
-        self.children.as_ref().map(|f| f as &[Dentry])
-    }
-
-    pub fn read(&self, count: usize) -> Result<DentryValue, FileSystemError> {
-        match self.kind {
-            DentryType::Integer
-            | DentryType::Integers
-            | DentryType::Decimal
-            | DentryType::Decimals
-            | DentryType::String
-            | DentryType::Blob => unsafe {
-                let mut buffer = vec![0u8; self.size];
-                match sys_read(&self.identifier, &mut buffer) {
-                    Ok(read) => {
-                        buffer.truncate(read);
-                        match self.kind {
-                            DentryType::Integer => {
-                                if read == 8 {
-                                    Ok(DentryValue::Integer(i64::from_ne_bytes([
-                                        buffer[0], buffer[1], buffer[2], buffer[3], buffer[4],
-                                        buffer[5], buffer[6], buffer[7],
-                                    ])))
-                                } else {
-                                    Err(FileSystemError::SystemError)
-                                }
-                            }
-                            DentryType::Integers => {
-                                if read % 8 == 0 {
-                                    let count = read / 8;
-                                    let mut ints = Vec::<i64>::with_capacity(count);
-                                    for i in 0..count {
-                                        let int = i64::from_ne_bytes([
-                                            buffer[i * 8 + 0],
-                                            buffer[i * 8 + 1],
-                                            buffer[i * 8 + 2],
-                                            buffer[i * 8 + 3],
-                                            buffer[i * 8 + 4],
-                                            buffer[i * 8 + 5],
-                                            buffer[i * 8 + 6],
-                                            buffer[i * 8 + 7],
-                                        ]);
-                                        ints.push(int);
-                                    }
-                                    ints.truncate(count);
-                                    Ok(DentryValue::Integers(ints))
-                                } else {
-                                    Err(FileSystemError::SystemError)
-                                }
-                            }
-                            DentryType::Decimal => {
-                                if read == 8 {
-                                    Ok(DentryValue::Decimal(f64::from_ne_bytes([
-                                        buffer[0], buffer[1], buffer[2], buffer[3], buffer[4],
-                                        buffer[5], buffer[6], buffer[7],
-                                    ])))
-                                } else {
-                                    Err(FileSystemError::SystemError)
-                                }
-                            }
-                            DentryType::Decimals => {
-                                if read % 8 == 0 {
-                                    let count = read / 8;
-                                    let mut decs = Vec::<f64>::with_capacity(count);
-                                    for i in 0..count {
-                                        let int = f64::from_ne_bytes([
-                                            buffer[i * 8 + 0],
-                                            buffer[i * 8 + 1],
-                                            buffer[i * 8 + 2],
-                                            buffer[i * 8 + 3],
-                                            buffer[i * 8 + 4],
-                                            buffer[i * 8 + 5],
-                                            buffer[i * 8 + 6],
-                                            buffer[i * 8 + 7],
-                                        ]);
-                                        decs.push(int);
-                                    }
-                                    decs.truncate(count);
-                                    Ok(DentryValue::Decimals(decs))
-                                } else {
-                                    Err(FileSystemError::SystemError)
-                                }
-                            }
-                            DentryType::String => {
-                                buffer.truncate(count);
-                                if let Ok(s) = String::from_utf8(buffer) {
-                                    Ok(DentryValue::String(s))
-                                } else {
-                                    Err(FileSystemError::SystemError)
-                                }
-                            }
-                            DentryType::Blob => {
-                                buffer.truncate(count);
-                                Ok(DentryValue::Blob(buffer))
-                            }
-                            _ => unreachable!(),
-                        }
-                    }
-                    Err(err) => Err(FileSystemError::from(err)),
-                }
-            },
-            DentryType::Stream => unsafe {
-                let mut buffer = vec![0u8; usize::min(self.size, count)];
-                match sys_read(&self.identifier, &mut buffer) {
-                    Ok(read) => {
-                        buffer.truncate(read);
-                        Ok(DentryValue::Stream(buffer))
-                    }
-                    Err(err) => Err(FileSystemError::from(err)),
-                }
-            },
-            _ => Err(FileSystemError::UnsupportedOperation),
-        }
-    }
-
-    pub fn open(&self) -> Result<Runnel, FileSystemError> {
-        todo!();
-    }
-}
-
 unsafe fn read_dentry_from_object_bytes(
     bytes: &[u8],
     count: usize,
@@ -222,7 +60,6 @@ unsafe fn read_dentry_from_object_bytes(
         let first = &*(bytes.as_ptr() as *const DentryObject);
         let first_name =
             core::str::from_utf8_unchecked(&bytes[size..(size + first.name_length as usize)]);
-        let mut dentry = Dentry::from_object(first, first_name, request_path);
         match first.kind {
             DentryType::Directory => {
                 if count > 1 {
@@ -235,13 +72,28 @@ unsafe fn read_dentry_from_object_bytes(
                             &bytes[(pointer + size)..(pointer + size + this.name_length as usize)],
                         );
                         dir_path.append(name).unwrap();
-                        let child = Dentry::from_object(this, name, dir_path.as_str());
-                        pointer += size + ((this.name_length as usize + 8 - 1) & !(8 - 1));
+                        let child =
+                            read_dentry_from_object_bytes(&bytes[pointer..], 1, dir_path.as_str())?;
                         children.push(child);
+                        pointer += size + ((this.name_length as usize + 8 - 1) & !(8 - 1));
                     }
-                    dentry.children = Some(children);
+                    Ok(Dentry::Directory(Directory::new(
+                        first_name,
+                        request_path,
+                        first.created_at,
+                        first.modified_at,
+                        FlagSet::new(first.attr).unwrap(),
+                        children,
+                    )))
                 } else {
-                    dentry.children = Some(Vec::new());
+                    Ok(Dentry::Directory(Directory::new(
+                        first_name,
+                        request_path,
+                        first.created_at,
+                        first.modified_at,
+                        FlagSet::new(first.attr).unwrap(),
+                        Vec::with_capacity(0),
+                    )))
                 }
             }
             DentryType::MountPoint => {
@@ -251,23 +103,99 @@ unsafe fn read_dentry_from_object_bytes(
                         count - 1,
                         request_path,
                     )?;
-                    dentry.children = Some(vec![mounted]);
+                    Ok(Dentry::MountPoint(MountPoint::new(
+                        first_name,
+                        request_path,
+                        first.created_at,
+                        first.modified_at,
+                        Some(mounted),
+                    )))
                 } else {
-                    panic!("no mounted info")
+                    Ok(Dentry::MountPoint(MountPoint::new(
+                        first_name,
+                        request_path,
+                        first.created_at,
+                        first.modified_at,
+                        None,
+                    )))
                 }
             }
-            _ => {
-                // don't care
-            }
+            DentryType::Link => Ok(Dentry::Link(Link::new(
+                first_name,
+                request_path,
+                first.created_at,
+                first.modified_at,
+                FlagSet::new(first.attr).unwrap(),
+            ))),
+            DentryType::Stream => Ok(Dentry::Stream(Stream::new(
+                first_name,
+                request_path,
+                first.created_at,
+                first.modified_at,
+                first.size as usize,
+                FlagSet::new(first.attr).unwrap(),
+            ))),
+            DentryType::Integer => Ok(Dentry::Property(Property::new(
+                first_name,
+                request_path,
+                first.created_at,
+                first.modified_at,
+                first.size as usize,
+                FlagSet::new(first.attr).unwrap(),
+                PropertyKind::Integer,
+            ))),
+            DentryType::Integers => Ok(Dentry::Property(Property::new(
+                first_name,
+                request_path,
+                first.created_at,
+                first.modified_at,
+                first.size as usize,
+                FlagSet::new(first.attr).unwrap(),
+                PropertyKind::Integers,
+            ))),
+            DentryType::Decimal => Ok(Dentry::Property(Property::new(
+                first_name,
+                request_path,
+                first.created_at,
+                first.modified_at,
+                first.size as usize,
+                FlagSet::new(first.attr).unwrap(),
+                PropertyKind::Decimal,
+            ))),
+            DentryType::Decimals => Ok(Dentry::Property(Property::new(
+                first_name,
+                request_path,
+                first.created_at,
+                first.modified_at,
+                first.size as usize,
+                FlagSet::new(first.attr).unwrap(),
+                PropertyKind::Decimals,
+            ))),
+            DentryType::String => Ok(Dentry::Property(Property::new(
+                first_name,
+                request_path,
+                first.created_at,
+                first.modified_at,
+                first.size as usize,
+                FlagSet::new(first.attr).unwrap(),
+                PropertyKind::String,
+            ))),
+            DentryType::Blob => Ok(Dentry::Property(Property::new(
+                first_name,
+                request_path,
+                first.created_at,
+                first.modified_at,
+                first.size as usize,
+                FlagSet::new(first.attr).unwrap(),
+                PropertyKind::Blob,
+            ))),
         }
-        Ok(dentry)
     } else {
         Err(FileSystemError::NotAvailable)
     }
 }
 
 pub fn check(path: &str) -> Result<Dentry, FileSystemError> {
-    debug!("check {}", path);
     unsafe {
         match sys_access(path) {
             Ok(size) => {
@@ -280,4 +208,55 @@ pub fn check(path: &str) -> Result<Dentry, FileSystemError> {
             Err(err) => Err(FileSystemError::from(err)),
         }
     }
+}
+
+pub fn create_directory<A: Into<FlagSet<DentryAttribute>>>(
+    path: &str,
+    attr: A,
+) -> Result<(), FileSystemError> {
+    match unsafe { sys_create(path, DentryType::Directory, attr.into()) } {
+        Ok(_) => Ok(()),
+        Err(err) => Err(FileSystemError::from(err)),
+    }
+}
+
+pub fn create_stream<A: Into<FlagSet<DentryAttribute>>>(
+    path: &str,
+    attr: A,
+) -> Result<(), FileSystemError> {
+    match unsafe { sys_create(path, DentryType::Stream, attr.into()) } {
+        Ok(_) => Ok(()),
+        Err(err) => Err(FileSystemError::from(err)),
+    }
+}
+
+pub fn create_property<A: Into<FlagSet<DentryAttribute>>>(
+    path: &str,
+    kind: PropertyKind,
+    attr: A,
+) -> Result<(), FileSystemError> {
+    match unsafe { sys_create(path, DentryType::from(&kind), attr.into()) } {
+        Ok(_) => Ok(()),
+        Err(err) => Err(FileSystemError::from(err)),
+    }
+}
+
+pub fn link(path: &str, target: &str) -> Result<(), FileSystemError> {
+    todo!()
+}
+
+pub fn delete(path: &str) -> Result<(), FileSystemError> {
+    todo!()
+}
+
+pub fn r#move(from: &str, to: &str) -> Result<(), FileSystemError> {
+    todo!()
+}
+
+pub fn mount(path: &str, mid: Mid) -> Result<(), FileSystemError> {
+    todo!()
+}
+
+pub fn unmount(path: &str) -> Result<(), FileSystemError> {
+    todo!()
 }

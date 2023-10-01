@@ -6,6 +6,7 @@ use erhino_shared::{
         Dentry, DentryAttribute, DentryMeta, DentryObject, DentryType, FileSystem,
         FilesystemAbstractLayerError, Mid,
     },
+    mem::Address,
     path::Path,
     proc::Pid,
 };
@@ -40,16 +41,28 @@ pub fn init() {
     }
 }
 
-pub fn make_dir<A: Into<FlagSet<DentryAttribute>>>(path: Path, recursive: bool, attr: A) {
-    todo!()
-}
-
+// NOTE: MountPoint 没有 Attributes，对于挂载点的操作会被转发到其挂载的目标文件系统的根目录上，包括 Execute 进入目录权限。
+// 对于挂载点本身的操作都要用对应的挂载点系统调用进行，Access/Inspect 这种检查本身的则不会受权限影响。
+// 对挂载点本身 Move 则会在挂载点所在的文件系统中移动挂载点，但是当对其 Delete 时则会对挂载的文件系统的根 Dentry 发送 Delete
 pub fn mount_local(path: Path, slot: usize) -> Result<(), FilesystemAbstractLayerError> {
     unsafe { ROOT.get_mut().unwrap() }.mount(&path, ((slot + 1) << 32) as Mid)
 }
 
 pub fn mount_remote(path: Path, service: Pid) -> Result<(), FilesystemAbstractLayerError> {
     unsafe { ROOT.get_mut().unwrap() }.mount(&path, service as Mid)
+}
+
+pub fn create_memory_stream<A: Into<FlagSet<DentryAttribute>>>(
+    path: Path,
+    data: &[u8],
+    attr: A,
+) -> Result<(), FilesystemAbstractLayerError> {
+    unsafe { ROOT.get_mut().unwrap() }.create_stream(
+        &path,
+        data.as_ptr() as usize,
+        data.len(),
+        attr.into(),
+    )
 }
 
 fn redirect_with<T, O: Fn(&dyn FileSystem, Path) -> Result<T, FilesystemAbstractLayerError>>(
@@ -194,16 +207,12 @@ pub fn create<A: Into<FlagSet<DentryAttribute>>>(
     kind: DentryType,
     attr: A,
 ) -> Result<(), FilesystemAbstractLayerError> {
-    create_filesystem(unsafe { ROOT.get_mut().unwrap() }, path, kind, attr)
-}
-
-pub fn create_filesystem<A: Into<FlagSet<DentryAttribute>>>(
-    fs: &impl FileSystem,
-    path: Path,
-    kind: DentryType,
-    attr: A,
-) -> Result<(), FilesystemAbstractLayerError> {
-    todo!()
+    let flags = attr.into();
+    redirect_with(
+        |fs, p| fs.create(p, kind, flags),
+        unsafe { ROOT.get_mut().unwrap() },
+        path,
+    )
 }
 
 pub fn read(path: Path) -> Result<Vec<u8>, FilesystemAbstractLayerError> {
