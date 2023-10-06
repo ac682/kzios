@@ -4,7 +4,7 @@
 
 use core::{arch::global_asm, ptr::slice_from_raw_parts};
 
-use alloc::format;
+use alloc::{format, vec::Vec};
 use erhino_shared::{
     fal::{DentryAttribute, DentryType},
     path::Path,
@@ -37,30 +37,33 @@ const BANNER: &str = include_str!("../banner.txt");
 
 global_asm!(include_str!("assembly.asm"));
 
+static RAMFS: &[u8] = include_bytes!("../../../artifacts/initfs.tar");
+
 pub fn main() {
     println!("{}", BANNER);
-    // load program with tar-no-std
-    let ramfs = unsafe {
-        &*slice_from_raw_parts(
-            _ramfs_start as usize as *const u8,
-            _ramfs_end as usize - _ramfs_start as usize,
-        )
-    };
-    let archive = TarArchiveRef::new(ramfs);
+    // load program with zip
+    let archive = TarArchiveRef::new(RAMFS);
     let files = archive.entries();
-    fs::create(
-        Path::from("/initfs").unwrap(),
-        DentryType::Directory,
-        DentryAttribute::Readable | DentryAttribute::Executable,
-    ).unwrap();
+    // fs::create(
+    //     Path::from("/initfs").unwrap(),
+    //     DentryType::Directory,
+    //     DentryAttribute::Readable
+    //         | DentryAttribute::Executable
+    //         | DentryAttribute::PrivilegedWriteable,
+    // )
+    // .unwrap();
     for file in files {
-        fs::create_memory_stream(
-            Path::from(&format!("/initfs/{}", file.filename())).unwrap(),
-            file.data(),
-            DentryAttribute::Executable | DentryAttribute::Readable,
-        ).unwrap();
-        let process = Process::from_elf(file.data()).unwrap();
-        SchedulerImpl::add(process, None);
+        println!("{}", file.filename());
+        // fs::create_memory_stream(
+        //     Path::from(&format!("/initfs/{}", file.filename())).unwrap(),
+        //     file.data(),
+        //     DentryAttribute::Executable | DentryAttribute::Readable,
+        // )
+        // .unwrap();
+        if file.filename().starts_with("bin/") {
+            let process = Process::from_elf(file.data()).unwrap();
+            SchedulerImpl::add(process, None);
+        }
     }
     println!("\x1b[0;32m=LINK^START=\x1b[0m");
 }

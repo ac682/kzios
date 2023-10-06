@@ -1,13 +1,6 @@
 .option norvc
 .attribute arch, "rv64gc"
 
-.section .initfs, "ax", %progbits
-.global _ramfs_end
-.global _ramfs_start
-_ramfs_start:
-    .incbin "../artifacts/initfs.tar"
-_ramfs_end:
-
 .section .text.init
 .global _start
 _start:

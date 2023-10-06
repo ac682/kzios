@@ -49,11 +49,6 @@ SECTIONS
         . = . + STACK_SIZE * HART_NUM_LIMIT;
         . = ALIGN(4096);  
         PROVIDE(_kernel_end = .);
-    } > RAM
-
-    .ramfs : ALIGN(4096) {
-        KEEP(*(.initfs))
-        . = ALIGN(4096);
         PROVIDE(_frame_start = .);
     } > RAM
 

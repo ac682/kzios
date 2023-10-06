@@ -20,7 +20,7 @@ fn main() {
         DentryAttribute::Readable | DentryAttribute::Writeable,
     )
     .unwrap();
-    let mut buffer = String::from("All entries under root shown below\n");
+    let mut buffer = String::from("All entries under root shown below\nDirectory/, [MountPoint]Mounted, x[Broken MountPoint], #Property: Value, Link -> Target, Stream: Size\n");
     print_dir(Path::from("/").unwrap(), &mut buffer).unwrap();
     debug!("{}", buffer);
 }

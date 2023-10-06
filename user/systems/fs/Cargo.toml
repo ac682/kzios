@@ -1,5 +1,5 @@
 [package]
-name = "fs"
+name = "srv_fs"
 version = "0.1.0"
 authors = ["Chien Zhang (zqy0224@live.com)"]
 description = "Filesystem in userspace"

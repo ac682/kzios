@@ -29,7 +29,7 @@
   - [ ] 内核文件系统
     - [ ] rootfs
     - [ ] procfs
-    - [ ] devfs
+    - [ ] sysfs
   - [ ] 具体文件系统
     - [ ] FAT32
 

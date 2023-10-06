@@ -1,12 +1,12 @@
 [package]
-name = "srv_init"
+name = "drv_spi_sifive"
 version = "0.1.0"
 authors = ["Chien Zhang (zqy0224@live.com)"]
-description = "Power of kzios userspace"
+description = "Sifive SPI Driver"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 rinlib = { path = "../../rinlib" }
-rhai = { version = "1.16", default-features = false, features = ["no_std"] }
+libdrv = { path = "../../frameworks/libdrv" }

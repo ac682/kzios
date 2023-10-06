@@ -55,6 +55,9 @@ artifact_dir:
     if [ ! -d "artifacts" ]; then
     	mkdir artifacts
     fi
+    if [ ! -d "artifacts/build" ]; then
+    	mkdir artifacts/build
+    fi
     if [ ! -d "artifacts/initfs" ]; then
     	mkdir artifacts/initfs
     fi
@@ -71,11 +74,15 @@ make_sdcard: artifact_dir
     fi
 
 build_user: artifact_dir
-    @cd user && RUSTFLAGS="{{RUSTFLAGS_USER}}" cargo build --bins {{RELEASE}} -Z unstable-options --out-dir "{{TARGET_DIR}}/initfs"
+    @cd user && RUSTFLAGS="{{RUSTFLAGS_USER}}" cargo build --bins {{RELEASE}} -Z unstable-options --out-dir "{{TARGET_DIR}}/build"
+    @mkdir -p "{{TARGET_DIR}}/initfs/bin"
+    @cp {{TARGET_DIR}}/build/srv_* "{{TARGET_DIR}}/initfs/bin"
+    @cp {{TARGET_DIR}}/build/drv_* "{{TARGET_DIR}}/initfs/bin"
     @echo -e "\033[0;32mUser space programs build successfully!\033[0m"
 
 make_initfs: build_user
-    @cd "{{TARGET_DIR}}/initfs" && tar -cf ../initfs.tar *
+    @cp "os/platforms/{{PLATFORM}}/{{MODEL}}/init.rhai" "{{TARGET_DIR}}/initfs/init.rhai"
+    @cd "{{TARGET_DIR}}/initfs" && find . -type f | tar --transform 's/^..//' -cvf ../initfs.tar --files-from=/dev/stdin
 
 build_opensbi options:
     @echo -e "\033[0;36mBuild OpenSBI: {{options}}\033[0m"
