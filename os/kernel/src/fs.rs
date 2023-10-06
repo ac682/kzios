@@ -7,7 +7,7 @@ use erhino_shared::{
         FilesystemAbstractLayerError, Mid,
     },
     mem::Address,
-    path::Path,
+    path::{Component, Path},
     proc::Pid,
 };
 use flagset::FlagSet;
@@ -199,6 +199,29 @@ pub fn get_local_fs(mid: Mid) -> Option<&'static LocalMountpoint> {
         }
     } else {
         None
+    }
+}
+
+pub fn make_directory<A: Into<FlagSet<DentryAttribute>>>(
+    path: Path,
+    attr: A,
+) -> Result<(), FilesystemAbstractLayerError> {
+    make_directory_internal(path, attr.into())
+}
+
+fn make_directory_internal(
+    path: Path,
+    attr: FlagSet<DentryAttribute>,
+) -> Result<(), FilesystemAbstractLayerError> {
+    match lookup(path.clone()) {
+        Ok(_) => Ok(()),
+        Err(FilesystemAbstractLayerError::NotFound) => {
+            if let Some(parent) = path.parent() {
+                make_directory_internal(parent, attr.clone())?;
+            }
+            create(path, DentryType::Directory, attr)
+        }
+        Err(err) => Err(err),
     }
 }
 

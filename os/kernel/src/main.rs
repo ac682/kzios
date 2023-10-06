@@ -44,22 +44,29 @@ pub fn main() {
     // load program with zip
     let archive = TarArchiveRef::new(RAMFS);
     let files = archive.entries();
-    // fs::create(
-    //     Path::from("/initfs").unwrap(),
-    //     DentryType::Directory,
-    //     DentryAttribute::Readable
-    //         | DentryAttribute::Executable
-    //         | DentryAttribute::PrivilegedWriteable,
-    // )
-    // .unwrap();
+    fs::create(
+        Path::from("/boot").unwrap(),
+        DentryType::Directory,
+        DentryAttribute::Readable
+            | DentryAttribute::Executable
+            | DentryAttribute::PrivilegedWriteable,
+    )
+    .unwrap();
     for file in files {
-        println!("{}", file.filename());
-        // fs::create_memory_stream(
-        //     Path::from(&format!("/initfs/{}", file.filename())).unwrap(),
-        //     file.data(),
-        //     DentryAttribute::Executable | DentryAttribute::Readable,
-        // )
-        // .unwrap();
+        let path = Path::from(&format!("/boot/{}", file.filename())).unwrap();
+        let parent = path.parent().unwrap();
+        fs::make_directory(
+            parent,
+            DentryAttribute::Readable
+                | DentryAttribute::Executable
+                | DentryAttribute::PrivilegedWriteable,
+        ).unwrap();
+        fs::create_memory_stream(
+            path,
+            file.data(),
+            DentryAttribute::Executable | DentryAttribute::Readable,
+        )
+        .unwrap();
         if file.filename().starts_with("bin/") {
             let process = Process::from_elf(file.data()).unwrap();
             SchedulerImpl::add(process, None);

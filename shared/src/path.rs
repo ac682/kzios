@@ -122,11 +122,13 @@ impl Path {
     }
 
     /// Get its parent full path regardless it's directory or file
-    pub fn parent(&self) -> Option<&str> {
+    pub fn parent(&self) -> Option<Path> {
         let non_separator_terminated = self.get_non_separated_terminated();
         if let Some(p) = Self::get_break_position(non_separator_terminated) {
             // its a dir so must be containing / at the end
-            Some(&non_separator_terminated[..(p + 1)])
+            Some(Path::from_string_unchecked(
+                (&non_separator_terminated[..(p + 1)]).to_owned(),
+            ))
         } else {
             None
         }

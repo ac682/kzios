@@ -332,7 +332,7 @@ impl Rootfs {
         // Self::mount 不会检查 service traits，但用户接口中的 mount 会
         if let Some(parent) = path.parent() {
             self.create_node(
-                &Path::from(parent).unwrap(),
+                &parent,
                 LocalDentry::new_mountpoint(path.filename(), 0, 0, mountpoint),
             )
         } else {
@@ -349,7 +349,7 @@ impl Rootfs {
     ) -> Result<(), FilesystemAbstractLayerError> {
         if let Some(parent) = path.parent() {
             self.create_node(
-                &Path::from(parent).unwrap(),
+                &parent,
                 LocalDentry::new_memory_stream(path.filename(), 0, 0, attr, address, length),
             )
         } else {
@@ -461,30 +461,35 @@ impl FileSystem for Rootfs {
     ) -> Result<(), FilesystemAbstractLayerError> {
         if let Some(parent) = path.parent() {
             // 只支持内存属性，要添加内存流要用 Rootfs.create_stream
-            if let Ok(dir) = Path::from(parent) {
-                match kind {
-                    DentryType::Directory => self.create_node(
-                        &dir,
-                        LocalDentry::new_directory(path.filename(), 0, 0, attr),
-                    ),
-                    DentryType::Integer => self
-                        .create_node(&dir, LocalDentry::new_integer(path.filename(), 0, 0, attr)),
-                    DentryType::Integers => self
-                        .create_node(&dir, LocalDentry::new_integers(path.filename(), 0, 0, attr)),
-                    DentryType::Decimal => self
-                        .create_node(&dir, LocalDentry::new_decimal(path.filename(), 0, 0, attr)),
-                    DentryType::Decimals => self
-                        .create_node(&dir, LocalDentry::new_decimals(path.filename(), 0, 0, attr)),
-                    DentryType::String => {
-                        self.create_node(&dir, LocalDentry::new_string(path.filename(), 0, 0, attr))
-                    }
-                    DentryType::Blob => {
-                        self.create_node(&dir, LocalDentry::new_blob(path.filename(), 0, 0, attr))
-                    }
-                    _ => Err(FilesystemAbstractLayerError::Unsupported),
+            match kind {
+                DentryType::Directory => self.create_node(
+                    &parent,
+                    LocalDentry::new_directory(path.filename(), 0, 0, attr),
+                ),
+                DentryType::Integer => self.create_node(
+                    &parent,
+                    LocalDentry::new_integer(path.filename(), 0, 0, attr),
+                ),
+                DentryType::Integers => self.create_node(
+                    &parent,
+                    LocalDentry::new_integers(path.filename(), 0, 0, attr),
+                ),
+                DentryType::Decimal => self.create_node(
+                    &parent,
+                    LocalDentry::new_decimal(path.filename(), 0, 0, attr),
+                ),
+                DentryType::Decimals => self.create_node(
+                    &parent,
+                    LocalDentry::new_decimals(path.filename(), 0, 0, attr),
+                ),
+                DentryType::String => self.create_node(
+                    &parent,
+                    LocalDentry::new_string(path.filename(), 0, 0, attr),
+                ),
+                DentryType::Blob => {
+                    self.create_node(&parent, LocalDentry::new_blob(path.filename(), 0, 0, attr))
                 }
-            } else {
-                Err(FilesystemAbstractLayerError::InvalidPath)
+                _ => Err(FilesystemAbstractLayerError::Unsupported),
             }
         } else {
             Err(FilesystemAbstractLayerError::InvalidPath)
