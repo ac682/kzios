@@ -252,7 +252,7 @@ impl FileSystem for Procfs {
         Err(FilesystemAbstractLayerError::Unsupported)
     }
 
-    fn read(&self, path: Path) -> Result<Vec<u8>, FilesystemAbstractLayerError> {
+    fn read(&self, path: Path, length: usize) -> Result<Vec<u8>, FilesystemAbstractLayerError> {
         debug!("procfs.read {}", path);
         if let Ok(layer) = Self::parse(path) {
             match layer {

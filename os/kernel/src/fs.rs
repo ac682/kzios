@@ -245,6 +245,6 @@ pub fn write(path: Path, value: Vec<u8>) -> Result<(), FilesystemAbstractLayerEr
     )
 }
 
-pub fn read(path: Path) -> Result<Vec<u8>, FilesystemAbstractLayerError> {
-    redirect_with(|fs, p| fs.read(p), unsafe { ROOT.get_mut().unwrap() }, path)
+pub fn read(path: Path, length: usize) -> Result<Vec<u8>, FilesystemAbstractLayerError> {
+    redirect_with(|fs, p| fs.read(p, length), unsafe { ROOT.get_mut().unwrap() }, path)
 }

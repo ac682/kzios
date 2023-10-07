@@ -12,7 +12,7 @@ use erhino_shared::{
     mem::{Address, MemoryRegionAttribute},
     path::Path,
     proc::{ExitCode, Pid, SignalMap},
-    sync::spin::QueueLock,
+    sync::spin::{QueueLock, SimpleLock},
 };
 use flagset::FlagSet;
 use lock_api::Mutex;
@@ -42,7 +42,7 @@ use crate::{
 use super::{enter_user, send_ipi, HartStatus};
 
 static IDLE_HARTS: AtomicUsize = AtomicUsize::new(0);
-static TUNNELS: Mutex<QueueLock, Vec<Tunnel>> = Mutex::new(Vec::new());
+static TUNNELS: Mutex<SimpleLock, Vec<Tunnel>> = Mutex::new(Vec::new());
 
 pub struct ApplicationHart<S, R> {
     id: usize,
@@ -312,11 +312,7 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                         let str = unsafe { String::from_utf8_unchecked(buffer) };
                         if let Ok(path) = Path::from(&str) {
                             match fs::lookup(path) {
-                                Ok(dentry) => Ok(Some({
-                                    let size = fs::measure(&dentry);
-                                    debug!("app.access {} {}", str, size);
-                                    size
-                                })),
+                                Ok(dentry) => Ok(Some(fs::measure(&dentry))),
                                 Err(err) => match err {
                                     FilesystemAbstractLayerError::NotAccessible => {
                                         Err(SystemCallError::ObjectNotAccessible)
@@ -384,10 +380,6 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                                             break;
                                         }
                                     }
-                                    debug!(
-                                        "app.inspect {} count: {}, size: {}/{}",
-                                        str, count, copied, buffer_length
-                                    );
                                     Ok(Some(count))
                                 }
                                 Err(err) => match err {
@@ -479,13 +471,11 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                     Ok(buffer) => {
                         let str = unsafe { String::from_utf8_unchecked(buffer) };
                         if let Ok(path) = Path::from(&str) {
-                            match fs::read(path) {
+                            match fs::read(path, buffer_length) {
                                 Ok(bytes) => {
-                                    if let Ok(written) = process.write(
-                                        buffer_address,
-                                        &bytes,
-                                        usize::min(bytes.len(), buffer_length),
-                                    ) {
+                                    if let Ok(written) =
+                                        process.write(buffer_address, &bytes, bytes.len())
+                                    {
                                         Ok(Some(written))
                                     } else {
                                         Err(SystemCallError::MemoryNotAccessible)

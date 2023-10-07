@@ -7,6 +7,7 @@ use flagset::FlagSet;
 
 use crate::{
     call::{sys_read, sys_write},
+    debug,
     ipc::tunnel::Runnel,
 };
 
@@ -75,7 +76,7 @@ impl Dentry {
 }
 
 #[derive(Debug)]
-pub enum DentryValue {
+pub enum PropertyValue {
     Boolean(bool),
     Integer(i64),
     Integers(Vec<i64>),
@@ -83,22 +84,21 @@ pub enum DentryValue {
     Decimals(Vec<f64>),
     String(String),
     Blob(Vec<u8>),
-    Stream(Vec<u8>),
 }
 
-impl DentryValue {
+impl PropertyValue {
     fn from_bytes(kind: PropertyKind, bytes: Vec<u8>) -> Result<Self, ()> {
         match kind {
             PropertyKind::Boolean => {
                 if bytes.len() == 1 {
-                    Ok(DentryValue::Boolean(bytes[0] > 0))
+                    Ok(PropertyValue::Boolean(bytes[0] > 0))
                 } else {
                     Err(())
                 }
             }
             PropertyKind::Integer => {
                 if bytes.len() == 8 {
-                    Ok(DentryValue::Integer(i64::from_ne_bytes([
+                    Ok(PropertyValue::Integer(i64::from_ne_bytes([
                         bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
                         bytes[7],
                     ])))
@@ -124,14 +124,14 @@ impl DentryValue {
                         ints.push(int);
                     }
                     ints.truncate(count);
-                    Ok(DentryValue::Integers(ints))
+                    Ok(PropertyValue::Integers(ints))
                 } else {
                     Err(())
                 }
             }
             PropertyKind::Decimal => {
                 if bytes.len() == 8 {
-                    Ok(DentryValue::Decimal(f64::from_ne_bytes([
+                    Ok(PropertyValue::Decimal(f64::from_ne_bytes([
                         bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
                         bytes[7],
                     ])))
@@ -157,33 +157,50 @@ impl DentryValue {
                         decs.push(int);
                     }
                     decs.truncate(count);
-                    Ok(DentryValue::Decimals(decs))
+                    Ok(PropertyValue::Decimals(decs))
                 } else {
                     Err(())
                 }
             }
             PropertyKind::String => {
                 if let Ok(s) = String::from_utf8(bytes) {
-                    Ok(DentryValue::String(s))
+                    Ok(PropertyValue::String(s))
                 } else {
                     Err(())
                 }
             }
-            PropertyKind::Blob => Ok(DentryValue::Blob(bytes)),
+            PropertyKind::Blob => Ok(PropertyValue::Blob(bytes)),
         }
     }
 
     fn to_bytes(self) -> Result<Vec<u8>, ()> {
         match self {
-            DentryValue::Boolean(it) => Ok(vec![if it { 1u8 } else { 0u8 }]),
-            DentryValue::Integer(it) => Ok(i64::to_ne_bytes(it).to_vec()),
-            DentryValue::Integers(it) => Ok(it.iter().flat_map(|i| i64::to_ne_bytes(*i)).collect()),
-            DentryValue::Decimal(it) => Ok(f64::to_ne_bytes(it).to_vec()),
-            DentryValue::Decimals(it) => Ok(it.iter().flat_map(|f| f64::to_ne_bytes(*f)).collect()),
-            DentryValue::String(it) => Ok(it.as_bytes().to_vec()),
-            DentryValue::Blob(it) => Ok(it),
-            DentryValue::Stream(it) => Ok(it),
+            PropertyValue::Boolean(it) => Ok(vec![if it { 1u8 } else { 0u8 }]),
+            PropertyValue::Integer(it) => Ok(i64::to_ne_bytes(it).to_vec()),
+            PropertyValue::Integers(it) => {
+                Ok(it.iter().flat_map(|i| i64::to_ne_bytes(*i)).collect())
+            }
+            PropertyValue::Decimal(it) => Ok(f64::to_ne_bytes(it).to_vec()),
+            PropertyValue::Decimals(it) => {
+                Ok(it.iter().flat_map(|f| f64::to_ne_bytes(*f)).collect())
+            }
+            PropertyValue::String(it) => Ok(it.as_bytes().to_vec()),
+            PropertyValue::Blob(it) => Ok(it),
         }
+    }
+}
+
+pub struct StreamValue {
+    bytes: Vec<u8>,
+}
+
+impl StreamValue {
+    fn from_bytes(bytes: Vec<u8>) -> Self {
+        Self { bytes }
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
     }
 }
 
@@ -299,6 +316,19 @@ impl Stream {
     pub fn open(&self) -> Result<Runnel, FileSystemError> {
         todo!()
     }
+
+    pub fn read(&self, length: usize) -> Result<StreamValue, FileSystemError> {
+        let mut buffer = vec![0u8; length];
+        unsafe {
+            match sys_read(&self.fullname, &mut buffer) {
+                Ok(read) => {
+                    buffer.truncate(read);
+                    Ok(StreamValue::from_bytes(buffer))
+                }
+                Err(err) => Err(FileSystemError::from(err)),
+            }
+        }
+    }
 }
 
 pub struct Property {
@@ -346,13 +376,13 @@ impl Property {
         self.kind
     }
 
-    pub fn read(&self) -> Result<DentryValue, FileSystemError> {
+    pub fn read(&self) -> Result<PropertyValue, FileSystemError> {
         let mut buffer = vec![0u8; self.size];
         unsafe {
             match sys_read(&self.fullname, &mut buffer) {
                 Ok(read) => {
                     buffer.truncate(read);
-                    DentryValue::from_bytes(self.kind, buffer)
+                    PropertyValue::from_bytes(self.kind, buffer)
                         .map_err(|_| FileSystemError::SerializationFailure)
                 }
                 Err(err) => Err(FileSystemError::from(err)),
@@ -360,11 +390,14 @@ impl Property {
         }
     }
 
-    pub fn write(&mut self, value: DentryValue) -> Result<(), FileSystemError> {
+    pub fn write(&mut self, value: PropertyValue) -> Result<(), FileSystemError> {
         if let Ok(bytes) = value.to_bytes() {
             unsafe {
                 match sys_write(&self.fullname, &bytes) {
-                    Ok(()) => Ok(()),
+                    Ok(()) => {
+                        self.size = bytes.len();
+                        Ok(())
+                    }
                     Err(err) => Err(FileSystemError::from(err)),
                 }
             }

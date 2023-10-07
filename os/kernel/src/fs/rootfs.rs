@@ -1,3 +1,5 @@
+use core::slice::from_raw_parts;
+
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use erhino_shared::{
     fal::{
@@ -6,7 +8,7 @@ use erhino_shared::{
     },
     mem::Address,
     path::{Component, Path, PathIterator},
-    sync::spin::QueueLock,
+    sync::spin::{QueueLock, SimpleLock},
     time::Timestamp,
 };
 
@@ -38,7 +40,7 @@ impl LocalDentry {
             created,
             modified,
             attr: attr.into(),
-            kind: LocalDentryKind::Directory(UpSafeCell::new(Vec::new()), QueueLock::new()),
+            kind: LocalDentryKind::Directory(UpSafeCell::new(Vec::new()), SimpleLock::new()),
         }
     }
 
@@ -314,7 +316,7 @@ impl LocalDentry {
 }
 
 pub enum LocalDentryKind {
-    Directory(UpSafeCell<Vec<Node>>, QueueLock),
+    Directory(UpSafeCell<Vec<Node>>, SimpleLock),
     Link(Path),
     File(LocalFile),
     MountPoint(Mid),
@@ -336,15 +338,35 @@ pub enum LocalProperty {
 }
 
 impl LocalProperty {
-    fn to_bytes(&self) -> Vec<u8> {
+    fn to_bytes(&self, length: usize) -> Vec<u8> {
         match self {
-            LocalProperty::Boolean(it) => u8::to_ne_bytes(if *it { 1 } else { 0 }).to_vec(),
-            LocalProperty::Integer(it) => i64::to_ne_bytes(*it).to_vec(),
-            LocalProperty::Integers(it) => it.iter().flat_map(|i| i64::to_ne_bytes(*i)).collect(),
-            LocalProperty::Decimal(it) => f64::to_ne_bytes(*it).to_vec(),
-            LocalProperty::Decimals(it) => it.iter().flat_map(|i| f64::to_ne_bytes(*i)).collect(),
-            LocalProperty::String(it) => it.bytes().collect(),
-            LocalProperty::Blob(it) => it.clone(),
+            LocalProperty::Boolean(it) => {
+                let mut vec = u8::to_ne_bytes(if *it { 1 } else { 0 }).to_vec();
+                vec.truncate(length);
+                vec
+            }
+            LocalProperty::Integer(it) => {
+                let mut res = i64::to_ne_bytes(*it).to_vec();
+                res.truncate(length & !7);
+                res
+            }
+            LocalProperty::Integers(it) => it
+                .iter()
+                .take(length / 8)
+                .flat_map(|i| i64::to_ne_bytes(*i))
+                .collect(),
+            LocalProperty::Decimal(it) => {
+                let mut res = f64::to_ne_bytes(*it).to_vec();
+                res.truncate(length & !7);
+                res
+            }
+            LocalProperty::Decimals(it) => it
+                .iter()
+                .take(length / 8)
+                .flat_map(|i| f64::to_ne_bytes(*i))
+                .collect(),
+            LocalProperty::String(it) => it.bytes().take(length).collect(),
+            LocalProperty::Blob(it) => it.iter().take(length).map(|b| *b).collect(),
         }
     }
 }
@@ -540,15 +562,18 @@ impl FileSystem for Rootfs {
         }
     }
 
-    fn read(&self, path: Path) -> Result<Vec<u8>, FilesystemAbstractLayerError> {
+    fn read(&self, path: Path, length: usize) -> Result<Vec<u8>, FilesystemAbstractLayerError> {
         match self.find_node(&path) {
-            Ok(dentry) => match &dentry.kind {
-                LocalDentryKind::File(LocalFile::Property(prop)) => Ok(prop.to_bytes()),
-                LocalDentryKind::File(LocalFile::Stream(_addr, _length)) => {
-                    Err(FilesystemAbstractLayerError::Unsupported)
+            Ok(dentry) => {
+                match &dentry.kind {
+                    LocalDentryKind::File(LocalFile::Property(prop)) => Ok(prop.to_bytes(length)),
+                    LocalDentryKind::File(LocalFile::Stream(addr, len)) => Ok(unsafe {
+                        from_raw_parts((*addr) as *const u8, usize::min(length, *len))
+                    }
+                    .to_vec()),
+                    _ => Err(FilesystemAbstractLayerError::Unsupported),
                 }
-                _ => Err(FilesystemAbstractLayerError::Unsupported),
-            },
+            }
             Err(err) => Err(err),
         }
     }

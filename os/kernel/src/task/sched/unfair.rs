@@ -7,7 +7,7 @@ use alloc::{
 use erhino_shared::{
     mem::{Address, MemoryRegionAttribute, PageNumber},
     proc::{ExecutionState, Pid, Tid},
-    sync::spin::QueueLock,
+    sync::spin::{QueueLock, SimpleLock},
 };
 use flagset::FlagSet;
 use lock_api::RawMutex;
@@ -143,12 +143,11 @@ struct ProcessCell {
     parent: Pid,
     layout: ProcessLayout,
     head: Option<Arc<Shared<ThreadCell>>>,
-    head_lock: QueueLock,
+    head_lock: SimpleLock,
     next: Option<Arc<Shared<ProcessCell>>>,
     prev: Option<Weak<Shared<ProcessCell>>>,
-    ring_lock: QueueLock,
-    state_lock: QueueLock,
-}
+    ring_lock: SimpleLock,
+    state_lock: SimpleLock}
 
 const TRAPFRAME_SIZE: usize = 1024;
 const TRAPFRAME_HOLD: usize = PAGE_SIZE / TRAPFRAME_SIZE;
@@ -173,11 +172,11 @@ impl ProcessCell {
             parent,
             layout: layout,
             head: None,
-            head_lock: QueueLock::new(),
+            head_lock: SimpleLock::new(),
             next: None,
             prev: None,
-            ring_lock: QueueLock::new(),
-            state_lock: QueueLock::new(),
+            ring_lock: SimpleLock::new(),
+            state_lock: SimpleLock::new(),
         }
     }
 
@@ -327,8 +326,8 @@ struct ThreadCell {
     timeslice: usize,
     trapframe: Address,
     next: Option<Arc<Shared<ThreadCell>>>,
-    run_lock: QueueLock,
-    ring_lock: QueueLock,
+    run_lock: SimpleLock,
+    ring_lock: SimpleLock,
 }
 
 impl ThreadCell {
@@ -341,8 +340,8 @@ impl ThreadCell {
             timeslice: 0,
             trapframe,
             next: None,
-            run_lock: QueueLock::new(),
-            ring_lock: QueueLock::new(),
+            run_lock: SimpleLock::new(),
+            ring_lock: SimpleLock::new(),
         }
     }
 
@@ -375,9 +374,9 @@ struct ProcessTable {
     generation: AtomicUsize,
     pid_generator: AtomicUsize,
     head: Option<Arc<Shared<ProcessCell>>>,
-    head_lock: QueueLock,
+    head_lock: SimpleLock,
     last: Option<Weak<Shared<ProcessCell>>>,
-    last_lock: QueueLock,
+    last_lock: SimpleLock,
 }
 
 impl ProcessTable {
@@ -386,9 +385,9 @@ impl ProcessTable {
             generation: AtomicUsize::new(0),
             pid_generator: AtomicUsize::new(1),
             head: None,
-            head_lock: QueueLock::new(),
+            head_lock: SimpleLock::new(),
             last: None,
-            last_lock: QueueLock::new(),
+            last_lock: SimpleLock::new(),
         }
     }
 

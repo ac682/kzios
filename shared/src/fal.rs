@@ -210,6 +210,6 @@ pub trait FileSystem {
         kind: DentryType,
         attr: FlagSet<DentryAttribute>,
     ) -> Result<(), FilesystemAbstractLayerError>;
-    fn read(&self, path: Path) -> Result<Vec<u8>, FilesystemAbstractLayerError>;
+    fn read(&self, path: Path, length: usize) -> Result<Vec<u8>, FilesystemAbstractLayerError>;
     fn write(&self, path: Path, value: &[u8]) -> Result<(), FilesystemAbstractLayerError>;
 }

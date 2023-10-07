@@ -1,10 +1,10 @@
 #![no_std]
 
-use alloc::{fmt::Write, string::String};
+use alloc::{fmt::Write, string::String, vec};
 use rinlib::{
     fs::{
         self, check,
-        components::{Dentry, DentryValue},
+        components::{Dentry, PropertyValue},
     },
     preclude::*,
     shared::{fal::DentryAttribute, path::Path},
@@ -17,16 +17,24 @@ fn main() {
         DentryAttribute::Readable | DentryAttribute::Executable | DentryAttribute::Writeable,
     )
     .unwrap();
-    fs::create_property(
+    let mut world = fs::create_property(
         "/hello/world",
-        rinlib::shared::fal::PropertyKind::Integer,
+        rinlib::shared::fal::PropertyKind::Integers,
         DentryAttribute::Readable | DentryAttribute::Writeable,
     )
-    .unwrap()
-    .write(DentryValue::Integer(42)).unwrap();
+    .unwrap();
     let mut buffer = String::from("All entries under root shown below\nDirectory/, [MountPoint]Mounted, x[Broken MountPoint], #Property: Value, Link -> Target, Stream: Size\n");
     print_dir(Path::from("/").unwrap(), &mut buffer).unwrap();
     debug!("{}", buffer);
+    world
+        .write(PropertyValue::Integers(vec![114514i64, -1919810i64]))
+        .unwrap();
+    debug!("{} {:?}", world.fullname(), world.read().unwrap());
+    if let Ok(Dentry::Stream(stream)) = fs::check("/boot/bin/srv_init") {
+        if let Ok(value) = stream.read(8) {
+            debug!("srv_init first 8 bytes: {:x?}", value.bytes());
+        }
+    }
 }
 
 fn print_dir(path: Path, buffer: &mut String) -> core::fmt::Result {
