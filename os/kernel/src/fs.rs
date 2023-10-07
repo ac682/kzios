@@ -6,8 +6,7 @@ use erhino_shared::{
         Dentry, DentryAttribute, DentryMeta, DentryObject, DentryType, FileSystem,
         FilesystemAbstractLayerError, Mid,
     },
-    mem::Address,
-    path::{Component, Path},
+    path::Path,
     proc::Pid,
 };
 use flagset::FlagSet;
@@ -233,6 +232,14 @@ pub fn create<A: Into<FlagSet<DentryAttribute>>>(
     let flags = attr.into();
     redirect_with(
         |fs, p| fs.create(p, kind, flags),
+        unsafe { ROOT.get_mut().unwrap() },
+        path,
+    )
+}
+
+pub fn write(path: Path, value: Vec<u8>) -> Result<(), FilesystemAbstractLayerError> {
+    redirect_with(
+        |fs, p| fs.write(p, &value),
         unsafe { ROOT.get_mut().unwrap() },
         path,
     )

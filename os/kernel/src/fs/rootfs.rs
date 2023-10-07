@@ -1,5 +1,3 @@
-use core::mem::{size_of, size_of_val};
-
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use erhino_shared::{
     fal::{
@@ -56,6 +54,21 @@ impl LocalDentry {
             modified,
             kind: LocalDentryKind::MountPoint(reference),
             attr: DentryAttribute::None.into(),
+        }
+    }
+
+    pub fn new_boolean(
+        name: &str,
+        created: Timestamp,
+        modified: Timestamp,
+        attr: FlagSet<DentryAttribute>,
+    ) -> Self {
+        Self {
+            name: name.to_owned(),
+            created,
+            modified,
+            kind: LocalDentryKind::File(LocalFile::Property(LocalProperty::Boolean(false))),
+            attr,
         }
     }
 
@@ -174,6 +187,10 @@ impl LocalDentry {
         }
     }
 
+    pub fn replace(&mut self, kind: LocalDentryKind) {
+        self.kind = kind
+    }
+
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -227,11 +244,19 @@ impl LocalDentry {
                     self.attr.clone(),
                     DentryMeta::File(FileKind::Stream),
                 ),
+                LocalFile::Property(LocalProperty::Boolean(_)) => Dentry::new(
+                    self.name.to_owned(),
+                    self.created,
+                    self.modified,
+                    1,
+                    self.attr.clone(),
+                    DentryMeta::File(FileKind::Property(PropertyKind::Boolean)),
+                ),
                 LocalFile::Property(LocalProperty::Integer(_)) => Dentry::new(
                     self.name.to_owned(),
                     self.created,
                     self.modified,
-                    size_of::<i64>(),
+                    8,
                     self.attr.clone(),
                     DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
                 ),
@@ -239,7 +264,7 @@ impl LocalDentry {
                     self.name.to_owned(),
                     self.created,
                     self.modified,
-                    size_of::<i64>() * it.len(),
+                    8 * it.len(),
                     self.attr.clone(),
                     DentryMeta::File(FileKind::Property(PropertyKind::Integers)),
                 ),
@@ -247,7 +272,7 @@ impl LocalDentry {
                     self.name.to_owned(),
                     self.created,
                     self.modified,
-                    size_of::<f64>(),
+                    8,
                     self.attr.clone(),
                     DentryMeta::File(FileKind::Property(PropertyKind::Decimal)),
                 ),
@@ -255,7 +280,7 @@ impl LocalDentry {
                     self.name.to_owned(),
                     self.created,
                     self.modified,
-                    size_of::<f64>() * it.len(),
+                    8 * it.len(),
                     self.attr.clone(),
                     DentryMeta::File(FileKind::Property(PropertyKind::Decimals)),
                 ),
@@ -271,7 +296,7 @@ impl LocalDentry {
                     self.name.to_owned(),
                     self.created,
                     self.modified,
-                    size_of::<u8>() * it.len(),
+                    8 * it.len(),
                     self.attr.clone(),
                     DentryMeta::File(FileKind::Property(PropertyKind::Blob)),
                 ),
@@ -301,12 +326,27 @@ pub enum LocalFile {
 }
 
 pub enum LocalProperty {
+    Boolean(bool),
     Integer(i64),
     Integers(Vec<i64>),
     Decimal(f64),
     Decimals(Vec<f64>),
     String(String),
     Blob(Vec<u8>),
+}
+
+impl LocalProperty {
+    fn to_bytes(&self) -> Vec<u8> {
+        match self {
+            LocalProperty::Boolean(it) => u8::to_ne_bytes(if *it { 1 } else { 0 }).to_vec(),
+            LocalProperty::Integer(it) => i64::to_ne_bytes(*it).to_vec(),
+            LocalProperty::Integers(it) => it.iter().flat_map(|i| i64::to_ne_bytes(*i)).collect(),
+            LocalProperty::Decimal(it) => f64::to_ne_bytes(*it).to_vec(),
+            LocalProperty::Decimals(it) => it.iter().flat_map(|i| f64::to_ne_bytes(*i)).collect(),
+            LocalProperty::String(it) => it.bytes().collect(),
+            LocalProperty::Blob(it) => it.clone(),
+        }
+    }
 }
 
 pub struct Rootfs {
@@ -466,6 +506,10 @@ impl FileSystem for Rootfs {
                     &parent,
                     LocalDentry::new_directory(path.filename(), 0, 0, attr),
                 ),
+                DentryType::Boolean => self.create_node(
+                    &parent,
+                    LocalDentry::new_boolean(path.filename(), 0, 0, attr),
+                ),
                 DentryType::Integer => self.create_node(
                     &parent,
                     LocalDentry::new_integer(path.filename(), 0, 0, attr),
@@ -499,23 +543,133 @@ impl FileSystem for Rootfs {
     fn read(&self, path: Path) -> Result<Vec<u8>, FilesystemAbstractLayerError> {
         match self.find_node(&path) {
             Ok(dentry) => match &dentry.kind {
-                LocalDentryKind::File(LocalFile::Property(prop)) => match prop {
-                    LocalProperty::Integer(it) => Ok(i64::to_ne_bytes(*it).to_vec()),
-                    LocalProperty::Integers(it) => {
-                        Ok(it.iter().flat_map(|i| i64::to_ne_bytes(*i)).collect())
-                    }
-                    LocalProperty::Decimal(it) => Ok(f64::to_ne_bytes(*it).to_vec()),
-                    LocalProperty::Decimals(it) => {
-                        Ok(it.iter().flat_map(|i| f64::to_ne_bytes(*i)).collect())
-                    }
-                    LocalProperty::String(it) => Ok(it.bytes().collect()),
-                    LocalProperty::Blob(it) => Ok(it.clone()),
-                },
+                LocalDentryKind::File(LocalFile::Property(prop)) => Ok(prop.to_bytes()),
                 LocalDentryKind::File(LocalFile::Stream(_addr, _length)) => {
                     Err(FilesystemAbstractLayerError::Unsupported)
                 }
                 _ => Err(FilesystemAbstractLayerError::Unsupported),
             },
+            Err(err) => Err(err),
+        }
+    }
+
+    fn write(&self, path: Path, value: &[u8]) -> Result<(), FilesystemAbstractLayerError> {
+        match self.find_node(&path) {
+            Ok(dentry) => {
+                match &dentry.kind {
+                    LocalDentryKind::File(LocalFile::Property(prop)) => {
+                        match prop {
+                            LocalProperty::Boolean(_) => {
+                                if value.len() == 1 {
+                                    dentry.get_mut().replace(LocalDentryKind::File(
+                                        LocalFile::Property(LocalProperty::Boolean(
+                                            if value[0] > 0 { true } else { false },
+                                        )),
+                                    ));
+                                    Ok(())
+                                } else {
+                                    Err(FilesystemAbstractLayerError::SerializationFailure)
+                                }
+                            }
+                            LocalProperty::Integer(_) => {
+                                if value.len() == 8 {
+                                    dentry.get_mut().replace(LocalDentryKind::File(
+                                        LocalFile::Property(LocalProperty::Integer(
+                                            i64::from_ne_bytes([
+                                                value[0], value[1], value[2], value[3], value[4],
+                                                value[5], value[6], value[7],
+                                            ]),
+                                        )),
+                                    ));
+                                    Ok(())
+                                } else {
+                                    Err(FilesystemAbstractLayerError::SerializationFailure)
+                                }
+                            }
+                            LocalProperty::Integers(_) => {
+                                if value.len() % 8 == 0 {
+                                    let count = value.len() / 8;
+                                    let mut container = Vec::<i64>::with_capacity(count);
+                                    for i in 0..count {
+                                        container.push(i64::from_ne_bytes([
+                                            value[i * 8 + 0],
+                                            value[i * 8 + 1],
+                                            value[i * 8 + 2],
+                                            value[i * 8 + 3],
+                                            value[i * 8 + 4],
+                                            value[i * 8 + 5],
+                                            value[i * 8 + 6],
+                                            value[i * 8 + 7],
+                                        ]));
+                                    }
+                                    dentry.get_mut().replace(LocalDentryKind::File(
+                                        LocalFile::Property(LocalProperty::Integers(container)),
+                                    ));
+                                    Ok(())
+                                } else {
+                                    Err(FilesystemAbstractLayerError::SerializationFailure)
+                                }
+                            }
+                            LocalProperty::Decimal(_) => {
+                                if value.len() == 8 {
+                                    dentry.get_mut().replace(LocalDentryKind::File(
+                                        LocalFile::Property(LocalProperty::Decimal(
+                                            f64::from_ne_bytes([
+                                                value[0], value[1], value[2], value[3], value[4],
+                                                value[5], value[6], value[7],
+                                            ]),
+                                        )),
+                                    ));
+                                    Ok(())
+                                } else {
+                                    Err(FilesystemAbstractLayerError::SerializationFailure)
+                                }
+                            }
+                            LocalProperty::Decimals(_) => {
+                                if value.len() % 8 == 0 {
+                                    let count = value.len() / 8;
+                                    let mut container = Vec::<f64>::with_capacity(count);
+                                    for i in 0..count {
+                                        container.push(f64::from_ne_bytes([
+                                            value[i * 8 + 0],
+                                            value[i * 8 + 1],
+                                            value[i * 8 + 2],
+                                            value[i * 8 + 3],
+                                            value[i * 8 + 4],
+                                            value[i * 8 + 5],
+                                            value[i * 8 + 6],
+                                            value[i * 8 + 7],
+                                        ]));
+                                    }
+                                    dentry.get_mut().replace(LocalDentryKind::File(
+                                        LocalFile::Property(LocalProperty::Decimals(container)),
+                                    ));
+                                    Ok(())
+                                } else {
+                                    Err(FilesystemAbstractLayerError::SerializationFailure)
+                                }
+                            }
+                            LocalProperty::String(_) => {
+                                if let Ok(str) = String::from_utf8(value.to_vec()) {
+                                    dentry.get_mut().replace(LocalDentryKind::File(
+                                        LocalFile::Property(LocalProperty::String(str)),
+                                    ));
+                                    Ok(())
+                                } else {
+                                    Err(FilesystemAbstractLayerError::SerializationFailure)
+                                }
+                            }
+                            LocalProperty::Blob(_) => {
+                                dentry.get_mut().replace(LocalDentryKind::File(
+                                    LocalFile::Property(LocalProperty::Blob(value.to_vec())),
+                                ));
+                                Ok(())
+                            }
+                        }
+                    }
+                    _ => Err(FilesystemAbstractLayerError::Unsupported),
+                }
+            }
             Err(err) => Err(err),
         }
     }

@@ -9,4 +9,3 @@ edition = "2021"
 
 [dependencies]
 rinlib = { path = "../../rinlib" }
-rhai = { version = "1.16", default-features = false, features = ["no_std"] }

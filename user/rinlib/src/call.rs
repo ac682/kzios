@@ -127,11 +127,22 @@ pub unsafe fn sys_read(path: &str, buffer: &[u8]) -> SystemCallResult<usize> {
     )
 }
 
+pub unsafe fn sys_write(path: &str, buffer: &[u8]) -> SystemCallResult<()> {
+    sys_call(
+        SystemCall::Write,
+        path.as_ptr() as usize,
+        path.len(),
+        buffer.as_ptr() as usize,
+        buffer.len(),
+    )
+    .map(|_| ())
+}
+
 pub unsafe fn sys_create(
     path: &str,
     kind: DentryType,
     attr: FlagSet<DentryAttribute>,
-) -> SystemCallResult<usize> {
+) -> SystemCallResult<()> {
     sys_call(
         SystemCall::Create,
         path.as_ptr() as usize,
@@ -139,4 +150,5 @@ pub unsafe fn sys_create(
         kind as u8 as usize,
         attr.bits() as usize,
     )
+    .map(|_| ())
 }

@@ -2,7 +2,10 @@
 
 use alloc::{fmt::Write, string::String};
 use rinlib::{
-    fs::{self, check, components::Dentry},
+    fs::{
+        self, check,
+        components::{Dentry, DentryValue},
+    },
     preclude::*,
     shared::{fal::DentryAttribute, path::Path},
 };
@@ -19,7 +22,8 @@ fn main() {
         rinlib::shared::fal::PropertyKind::Integer,
         DentryAttribute::Readable | DentryAttribute::Writeable,
     )
-    .unwrap();
+    .unwrap()
+    .write(DentryValue::Integer(42)).unwrap();
     let mut buffer = String::from("All entries under root shown below\nDirectory/, [MountPoint]Mounted, x[Broken MountPoint], #Property: Value, Link -> Target, Stream: Size\n");
     print_dir(Path::from("/").unwrap(), &mut buffer).unwrap();
     debug!("{}", buffer);

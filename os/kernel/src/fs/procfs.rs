@@ -176,7 +176,7 @@ impl Procfs {
         )
     }
 
-    fn spawn_usage_field(pid: Pid, field: &str) -> Dentry {
+    fn spawn_usage_field(field: &str) -> Dentry {
         match field {
             "page" => Dentry::new(
                 "page".to_owned(),
@@ -230,9 +230,9 @@ impl FileSystem for Procfs {
             match layer {
                 FsLayer::Root => Ok(Self::spawn_root()),
                 FsLayer::Proc(pid) => Ok(Self::spawn_proc(pid)),
-                FsLayer::Memory(pid, option) => {
+                FsLayer::Memory(_, option) => {
                     if let Some(prop) = option {
-                        Ok(Self::spawn_usage_field(pid, prop.as_str()))
+                        Ok(Self::spawn_usage_field(prop.as_str()))
                     } else {
                         Ok(Self::spawn_usage())
                     }
@@ -245,9 +245,9 @@ impl FileSystem for Procfs {
 
     fn create(
         &self,
-        path: Path,
-        kind: DentryType,
-        attr: FlagSet<DentryAttribute>,
+        _path: Path,
+        _kind: DentryType,
+        _attr: FlagSet<DentryAttribute>,
     ) -> Result<(), FilesystemAbstractLayerError> {
         Err(FilesystemAbstractLayerError::Unsupported)
     }
@@ -269,5 +269,9 @@ impl FileSystem for Procfs {
         } else {
             Err(FilesystemAbstractLayerError::InvalidPath)
         }
+    }
+
+    fn write(&self, _path: Path, _value: &[u8]) -> Result<(), FilesystemAbstractLayerError> {
+        Err(FilesystemAbstractLayerError::Unsupported)
     }
 }

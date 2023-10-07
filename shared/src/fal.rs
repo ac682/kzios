@@ -7,7 +7,7 @@ use flagset::{flags, FlagSet};
 use num_derive::{FromPrimitive, ToPrimitive};
 use path::Path;
 
-use crate::{path, proc::Pid, time::Timestamp};
+use crate::{path, time::Timestamp};
 
 /// Mountpoint id, may be pid or internal id
 pub type Mid = u64;
@@ -90,6 +90,7 @@ pub enum DentryType {
     Directory = 0,
     Link,
     Stream,
+    Boolean,
     Integer,
     Integers,
     Decimal,
@@ -110,6 +111,7 @@ impl From<&DentryMeta> for DentryType {
         match &value {
             DentryMeta::Link => DentryType::Link,
             DentryMeta::File(FileKind::Stream) => DentryType::Stream,
+            DentryMeta::File(FileKind::Property(PropertyKind::Boolean)) => DentryType::Boolean,
             DentryMeta::File(FileKind::Property(PropertyKind::Integer)) => DentryType::Integer,
             DentryMeta::File(FileKind::Property(PropertyKind::Integers)) => DentryType::Integers,
             DentryMeta::File(FileKind::Property(PropertyKind::Decimal)) => DentryType::Decimal,
@@ -125,6 +127,7 @@ impl From<&DentryMeta> for DentryType {
 impl From<&PropertyKind> for DentryType {
     fn from(value: &PropertyKind) -> Self {
         match value {
+            PropertyKind::Boolean => DentryType::Boolean,
             PropertyKind::Integer => DentryType::Integer,
             PropertyKind::Integers => DentryType::Integers,
             PropertyKind::Decimal => DentryType::Decimal,
@@ -176,6 +179,7 @@ pub enum FileKind {
 
 #[derive(Debug, Clone, Copy)]
 pub enum PropertyKind {
+    Boolean,
     Integer,
     Integers,
     Decimal,
@@ -186,6 +190,7 @@ pub enum PropertyKind {
 
 #[derive(Debug)]
 pub enum FilesystemAbstractLayerError {
+    SerializationFailure,
     InvalidPath,
     NotFound,
     NotAccessible,
@@ -206,4 +211,5 @@ pub trait FileSystem {
         attr: FlagSet<DentryAttribute>,
     ) -> Result<(), FilesystemAbstractLayerError>;
     fn read(&self, path: Path) -> Result<Vec<u8>, FilesystemAbstractLayerError>;
+    fn write(&self, path: Path, value: &[u8]) -> Result<(), FilesystemAbstractLayerError>;
 }

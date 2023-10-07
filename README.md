@@ -21,7 +21,7 @@
     - [x] access
     - [x] inspect
     - [x] read
-    - [ ] write
+    - [x] write
     - [ ] create
     - [ ] delete
     - [ ] open

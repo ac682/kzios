@@ -6,14 +6,10 @@ use erhino_shared::{
 };
 use flagset::FlagSet;
 
-use crate::{
-    mm::{
-        page::{PageEntryFlag, PageEntryImpl, PageTableEntry, PAGE_BITS, PAGE_SIZE},
-        unit::{MemoryUnit, MemoryUnitError},
-        usage::MemoryUsage,
-    },
-    println,
-    sbi::legacy_console_putchar,
+use crate::mm::{
+    page::{PageEntryFlag, PageEntryImpl, PageTableEntry, PAGE_BITS, PAGE_SIZE},
+    unit::{MemoryUnit, MemoryUnitError},
+    usage::MemoryUsage,
 };
 
 use super::ipc::{signal::SignalControlBlock, tunnel::Endpoint};

@@ -17,6 +17,7 @@ pub mod components;
 #[derive(Debug, Clone, Copy)]
 pub enum FileSystemError {
     Unknown,
+    SerializationFailure,
     InvalidPath,
     NotFound,
     UnsupportedOperation,
@@ -37,17 +38,6 @@ impl From<SystemCallError> for FileSystemError {
             _ => FileSystemError::Unknown,
         }
     }
-}
-
-#[derive(Debug)]
-pub enum DentryValue {
-    Integer(i64),
-    Integers(Vec<i64>),
-    Decimal(f64),
-    Decimals(Vec<f64>),
-    String(String),
-    Blob(Vec<u8>),
-    Stream(Vec<u8>),
 }
 
 unsafe fn read_dentry_from_object_bytes(
@@ -135,6 +125,15 @@ unsafe fn read_dentry_from_object_bytes(
                 first.size as usize,
                 FlagSet::new(first.attr).unwrap(),
             ))),
+            DentryType::Boolean => Ok(Dentry::Property(Property::new(
+                first_name,
+                request_path,
+                first.created_at,
+                first.modified_at,
+                1,
+                FlagSet::new(first.attr).unwrap(),
+                PropertyKind::Boolean,
+            ))),
             DentryType::Integer => Ok(Dentry::Property(Property::new(
                 first_name,
                 request_path,
@@ -213,9 +212,13 @@ pub fn check(path: &str) -> Result<Dentry, FileSystemError> {
 pub fn create_directory<A: Into<FlagSet<DentryAttribute>>>(
     path: &str,
     attr: A,
-) -> Result<(), FileSystemError> {
+) -> Result<Directory, FileSystemError> {
     match unsafe { sys_create(path, DentryType::Directory, attr.into()) } {
-        Ok(_) => Ok(()),
+        Ok(_) => match check(path) {
+            Ok(Dentry::Directory(dir)) => Ok(dir),
+            Ok(_) => Err(FileSystemError::SystemError),
+            Err(err) => Err(FileSystemError::from(err)),
+        },
         Err(err) => Err(FileSystemError::from(err)),
     }
 }
@@ -223,9 +226,13 @@ pub fn create_directory<A: Into<FlagSet<DentryAttribute>>>(
 pub fn create_stream<A: Into<FlagSet<DentryAttribute>>>(
     path: &str,
     attr: A,
-) -> Result<(), FileSystemError> {
+) -> Result<Stream, FileSystemError> {
     match unsafe { sys_create(path, DentryType::Stream, attr.into()) } {
-        Ok(_) => Ok(()),
+        Ok(_) => match check(path) {
+            Ok(Dentry::Stream(stream)) => Ok(stream),
+            Ok(_) => Err(FileSystemError::SystemError),
+            Err(err) => Err(FileSystemError::from(err)),
+        },
         Err(err) => Err(FileSystemError::from(err)),
     }
 }
@@ -234,9 +241,13 @@ pub fn create_property<A: Into<FlagSet<DentryAttribute>>>(
     path: &str,
     kind: PropertyKind,
     attr: A,
-) -> Result<(), FileSystemError> {
+) -> Result<Property, FileSystemError> {
     match unsafe { sys_create(path, DentryType::from(&kind), attr.into()) } {
-        Ok(_) => Ok(()),
+        Ok(_) => match check(path) {
+            Ok(Dentry::Property(prop)) => Ok(prop),
+            Ok(_) => Err(FileSystemError::SystemError),
+            Err(err) => Err(FileSystemError::from(err)),
+        },
         Err(err) => Err(FileSystemError::from(err)),
     }
 }

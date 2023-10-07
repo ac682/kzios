@@ -521,6 +521,59 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                     }),
                 }
             }
+            SystemCall::Write => {
+                let path_address = arg0;
+                let path_length = arg1;
+                let buffer_address = arg2;
+                let buffer_length = arg3;
+                match process.read(path_address, path_length) {
+                    Ok(path_buffer) => {
+                        let str = unsafe { String::from_utf8_unchecked(path_buffer) };
+                        if let Ok(path) = Path::from(&str) {
+                            match process.read(buffer_address, buffer_length) {
+                                Ok(buffer) => match fs::write(path, buffer) {
+                                    Ok(()) => Ok(Some(0000usize)),
+                                    Err(err) => match err {
+                                        FilesystemAbstractLayerError::NotAccessible => {
+                                            Err(SystemCallError::ObjectNotAccessible)
+                                        }
+                                        FilesystemAbstractLayerError::InvalidPath => {
+                                            Err(SystemCallError::IllegalArgument)
+                                        }
+                                        FilesystemAbstractLayerError::NotFound => {
+                                            Err(SystemCallError::ObjectNotFound)
+                                        }
+                                        FilesystemAbstractLayerError::ForeignMountPoint(
+                                            rem,
+                                            mid,
+                                        ) => {
+                                            todo!();
+                                            Ok(None)
+                                        }
+                                        _ => Err(SystemCallError::InternalError),
+                                    },
+                                },
+                                Err(err) => Err(match err {
+                                    ProcessMemoryError::InaccessibleRegion => {
+                                        SystemCallError::MemoryNotAccessible
+                                    }
+
+                                    _ => SystemCallError::InvalidAddress,
+                                }),
+                            }
+                        } else {
+                            Err(SystemCallError::IllegalArgument)
+                        }
+                    }
+                    Err(err) => Err(match err {
+                        ProcessMemoryError::InaccessibleRegion => {
+                            SystemCallError::MemoryNotAccessible
+                        }
+
+                        _ => SystemCallError::InvalidAddress,
+                    }),
+                }
+            }
             _ => unimplemented!("unimplemented syscall: {:?}", call),
         }
     }
@@ -533,6 +586,7 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                 self.scheduler.schedule();
             }
             TrapCause::Breakpoint => {
+                // for debugger
                 self.scheduler.with_context(|ctx| {
                     ctx.process().health = ProcessHealth::Dead(-0x114514);
                     println!(

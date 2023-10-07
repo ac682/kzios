@@ -5,9 +5,12 @@ use erhino_shared::{
 };
 use flagset::FlagSet;
 
-use crate::{call::sys_read, ipc::tunnel::Runnel};
+use crate::{
+    call::{sys_read, sys_write},
+    ipc::tunnel::Runnel,
+};
 
-use super::{DentryValue, FileSystemError};
+use super::FileSystemError;
 
 macro_rules! dentry_method {
     ($method: ident, $result: ty) => {
@@ -69,6 +72,119 @@ impl Dentry {
     dentry_method!(created_at, Timestamp);
 
     dentry_method!(modified_at, Timestamp);
+}
+
+#[derive(Debug)]
+pub enum DentryValue {
+    Boolean(bool),
+    Integer(i64),
+    Integers(Vec<i64>),
+    Decimal(f64),
+    Decimals(Vec<f64>),
+    String(String),
+    Blob(Vec<u8>),
+    Stream(Vec<u8>),
+}
+
+impl DentryValue {
+    fn from_bytes(kind: PropertyKind, bytes: Vec<u8>) -> Result<Self, ()> {
+        match kind {
+            PropertyKind::Boolean => {
+                if bytes.len() == 1 {
+                    Ok(DentryValue::Boolean(bytes[0] > 0))
+                } else {
+                    Err(())
+                }
+            }
+            PropertyKind::Integer => {
+                if bytes.len() == 8 {
+                    Ok(DentryValue::Integer(i64::from_ne_bytes([
+                        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
+                        bytes[7],
+                    ])))
+                } else {
+                    Err(())
+                }
+            }
+            PropertyKind::Integers => {
+                if bytes.len() % 8 == 0 {
+                    let count = bytes.len() / 8;
+                    let mut ints = Vec::<i64>::with_capacity(count);
+                    for i in 0..count {
+                        let int = i64::from_ne_bytes([
+                            bytes[i * 8 + 0],
+                            bytes[i * 8 + 1],
+                            bytes[i * 8 + 2],
+                            bytes[i * 8 + 3],
+                            bytes[i * 8 + 4],
+                            bytes[i * 8 + 5],
+                            bytes[i * 8 + 6],
+                            bytes[i * 8 + 7],
+                        ]);
+                        ints.push(int);
+                    }
+                    ints.truncate(count);
+                    Ok(DentryValue::Integers(ints))
+                } else {
+                    Err(())
+                }
+            }
+            PropertyKind::Decimal => {
+                if bytes.len() == 8 {
+                    Ok(DentryValue::Decimal(f64::from_ne_bytes([
+                        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
+                        bytes[7],
+                    ])))
+                } else {
+                    Err(())
+                }
+            }
+            PropertyKind::Decimals => {
+                if bytes.len() % 8 == 0 {
+                    let count = bytes.len() / 8;
+                    let mut decs = Vec::<f64>::with_capacity(count);
+                    for i in 0..count {
+                        let int = f64::from_ne_bytes([
+                            bytes[i * 8 + 0],
+                            bytes[i * 8 + 1],
+                            bytes[i * 8 + 2],
+                            bytes[i * 8 + 3],
+                            bytes[i * 8 + 4],
+                            bytes[i * 8 + 5],
+                            bytes[i * 8 + 6],
+                            bytes[i * 8 + 7],
+                        ]);
+                        decs.push(int);
+                    }
+                    decs.truncate(count);
+                    Ok(DentryValue::Decimals(decs))
+                } else {
+                    Err(())
+                }
+            }
+            PropertyKind::String => {
+                if let Ok(s) = String::from_utf8(bytes) {
+                    Ok(DentryValue::String(s))
+                } else {
+                    Err(())
+                }
+            }
+            PropertyKind::Blob => Ok(DentryValue::Blob(bytes)),
+        }
+    }
+
+    fn to_bytes(self) -> Result<Vec<u8>, ()> {
+        match self {
+            DentryValue::Boolean(it) => Ok(vec![if it { 1u8 } else { 0u8 }]),
+            DentryValue::Integer(it) => Ok(i64::to_ne_bytes(it).to_vec()),
+            DentryValue::Integers(it) => Ok(it.iter().flat_map(|i| i64::to_ne_bytes(*i)).collect()),
+            DentryValue::Decimal(it) => Ok(f64::to_ne_bytes(it).to_vec()),
+            DentryValue::Decimals(it) => Ok(it.iter().flat_map(|f| f64::to_ne_bytes(*f)).collect()),
+            DentryValue::String(it) => Ok(it.as_bytes().to_vec()),
+            DentryValue::Blob(it) => Ok(it),
+            DentryValue::Stream(it) => Ok(it),
+        }
+    }
 }
 
 pub struct Directory {
@@ -236,85 +352,24 @@ impl Property {
             match sys_read(&self.fullname, &mut buffer) {
                 Ok(read) => {
                     buffer.truncate(read);
-                    match self.kind {
-                        PropertyKind::Integer => {
-                            if read == 8 {
-                                Ok(DentryValue::Integer(i64::from_ne_bytes([
-                                    buffer[0], buffer[1], buffer[2], buffer[3], buffer[4],
-                                    buffer[5], buffer[6], buffer[7],
-                                ])))
-                            } else {
-                                Err(FileSystemError::SystemError)
-                            }
-                        }
-                        PropertyKind::Integers => {
-                            if read % 8 == 0 {
-                                let count = read / 8;
-                                let mut ints = Vec::<i64>::with_capacity(count);
-                                for i in 0..count {
-                                    let int = i64::from_ne_bytes([
-                                        buffer[i * 8 + 0],
-                                        buffer[i * 8 + 1],
-                                        buffer[i * 8 + 2],
-                                        buffer[i * 8 + 3],
-                                        buffer[i * 8 + 4],
-                                        buffer[i * 8 + 5],
-                                        buffer[i * 8 + 6],
-                                        buffer[i * 8 + 7],
-                                    ]);
-                                    ints.push(int);
-                                }
-                                ints.truncate(count);
-                                Ok(DentryValue::Integers(ints))
-                            } else {
-                                Err(FileSystemError::SystemError)
-                            }
-                        }
-                        PropertyKind::Decimal => {
-                            if read == 8 {
-                                Ok(DentryValue::Decimal(f64::from_ne_bytes([
-                                    buffer[0], buffer[1], buffer[2], buffer[3], buffer[4],
-                                    buffer[5], buffer[6], buffer[7],
-                                ])))
-                            } else {
-                                Err(FileSystemError::SystemError)
-                            }
-                        }
-                        PropertyKind::Decimals => {
-                            if read % 8 == 0 {
-                                let count = read / 8;
-                                let mut decs = Vec::<f64>::with_capacity(count);
-                                for i in 0..count {
-                                    let int = f64::from_ne_bytes([
-                                        buffer[i * 8 + 0],
-                                        buffer[i * 8 + 1],
-                                        buffer[i * 8 + 2],
-                                        buffer[i * 8 + 3],
-                                        buffer[i * 8 + 4],
-                                        buffer[i * 8 + 5],
-                                        buffer[i * 8 + 6],
-                                        buffer[i * 8 + 7],
-                                    ]);
-                                    decs.push(int);
-                                }
-                                decs.truncate(count);
-                                Ok(DentryValue::Decimals(decs))
-                            } else {
-                                Err(FileSystemError::SystemError)
-                            }
-                        }
-                        PropertyKind::String => {
-                            if let Ok(s) = String::from_utf8(buffer) {
-                                Ok(DentryValue::String(s))
-                            } else {
-                                Err(FileSystemError::SystemError)
-                            }
-                        }
-                        PropertyKind::Blob => Ok(DentryValue::Blob(buffer)),
-                    }
+                    DentryValue::from_bytes(self.kind, buffer)
+                        .map_err(|_| FileSystemError::SerializationFailure)
                 }
                 Err(err) => Err(FileSystemError::from(err)),
             }
+        }
+    }
+
+    pub fn write(&mut self, value: DentryValue) -> Result<(), FileSystemError> {
+        if let Ok(bytes) = value.to_bytes() {
+            unsafe {
+                match sys_write(&self.fullname, &bytes) {
+                    Ok(()) => Ok(()),
+                    Err(err) => Err(FileSystemError::from(err)),
+                }
+            }
+        } else {
+            Err(FileSystemError::SerializationFailure)
         }
     }
 }
