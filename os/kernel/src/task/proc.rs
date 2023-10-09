@@ -1,6 +1,7 @@
 use alloc::vec::Vec;
 use elf_rs::{Elf, ElfFile, ElfMachine, ElfType, ProgramHeaderFlags, ProgramType};
 use erhino_shared::{
+    call::SystemCallError,
     mem::{Address, MemoryRegionAttribute, PageNumber},
     proc::{ExitCode, ProcessPermission},
 };
@@ -12,7 +13,11 @@ use crate::mm::{
     usage::MemoryUsage,
 };
 
-use super::ipc::{signal::SignalControlBlock, tunnel::Endpoint};
+use super::ipc::{
+    message::{Mailbox, Message},
+    signal::SignalControlBlock,
+    tunnel::Endpoint,
+};
 
 const TUNNEL_LIMIT: usize = 65536;
 
@@ -49,6 +54,17 @@ impl From<MemoryUnitError> for ProcessMemoryError {
     }
 }
 
+impl Into<SystemCallError> for ProcessMemoryError {
+    fn into(self) -> SystemCallError {
+        match self {
+            Self::InaccessibleRegion => SystemCallError::MemoryNotAccessible,
+            Self::OutOfMemory => SystemCallError::OutOfMemory,
+            Self::MisalignedAddress => SystemCallError::InvalidAddress,
+            _ => SystemCallError::Unknown,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ProcessHealth {
     Healthy,
@@ -64,6 +80,7 @@ pub struct Process {
     tunnel_point: Address,
     permissions: FlagSet<ProcessPermission>,
     tunnels: Vec<Endpoint>,
+    mailbox: Mailbox,
     pub health: ProcessHealth,
     pub signal: SignalControlBlock,
 }
@@ -85,6 +102,7 @@ impl Process {
                 usage: MemoryUsage::new(),
                 tunnels: Vec::new(),
                 health: ProcessHealth::Healthy,
+                mailbox: Mailbox::new(),
                 signal: SignalControlBlock::new(),
             };
             let header = elf.elf_header();

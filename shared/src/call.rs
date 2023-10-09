@@ -28,12 +28,14 @@ pub enum SystemCallError {
     // Special operations
     /// Specific operation cannot be applied due to bad reference
     ObjectNotFound = 0x30,
+    /// Found but unready to use
+    ObjectNotAvailable = 0x31,
     /// Found but owned by others
-    ObjectNotAccessible = 0x31,
+    ObjectNotAccessible = 0x32,
     /// Can not own more objects
-    ReachLimit = 0x32,
+    ReachLimit = 0x33,
     /// Cannot perform operation on this type of objects
-    NotSupported = 0x33,
+    NotSupported = 0x34,
 }
 
 /// Predefined system calls
@@ -78,18 +80,24 @@ pub enum SystemCall {
     // -----Messaging-----
     /// Send a message carrying a huge payload then block until message received
     Send = 0x40,
-    /// Block and check if a message enter then retrieve payload
-    Receive = 0x41,
-    /// IDK
-    Notify = 0x42,
+    /// Check the mailbox if there is a message and get the payload size
+    /// 
+    /// **Note**: Empty mailbox causes an expected error [SystemCallError::ObjectNotAvailable].
+    /// `Peek` will steal the content in the mailbox of the process and put it into the thread private space for `Receive` to use
+    Peek = 0x41,
+    /// Empty the mailbox
+    Discard = 0x42,
+    /// Retrieve payload
+    Receive = 0x43,
     
     // -----Process memory-----
     /// Map a range of virtual addresses for the process with kernel served pages
     Extend = 0x50,
     /// Map a range of virtual addresses for the process with specific range of physical addresses
-    /// Aka. IOMap, Memory permission required
+    /// 
+    /// **Permissions**: *Haven't determined yet*
     Map = 0x51,
-    /// Discard and tell kernel to reuse a range of virtual addresses
+    /// Tell kernel to reuse a range of virtual addresses
     Free = 0x52,
 
     // -----Tunnel-----

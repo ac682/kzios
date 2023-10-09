@@ -12,7 +12,7 @@ use erhino_shared::{
     mem::{Address, MemoryRegionAttribute},
     path::Path,
     proc::{ExitCode, Pid, SignalMap},
-    sync::spin::{QueueLock, SimpleLock},
+    sync::spin::SimpleLock,
 };
 use flagset::FlagSet;
 use lock_api::Mutex;
@@ -154,12 +154,7 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                         );
                         Ok(Some(length))
                     }
-                    Err(e) => Err(match e {
-                        ProcessMemoryError::InaccessibleRegion => {
-                            SystemCallError::MemoryNotAccessible
-                        }
-                        _ => SystemCallError::InvalidAddress,
-                    }),
+                    Err(err) => Err(err.into()),
                 }
             }
             SystemCall::Exit => {
@@ -176,11 +171,7 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                 );
                 process
                     .extend(bytes)
-                    .map_err(|err| match err {
-                        ProcessMemoryError::OutOfMemory => SystemCallError::OutOfMemory,
-                        ProcessMemoryError::MisalignedAddress => SystemCallError::InvalidAddress,
-                        _ => SystemCallError::Unknown,
-                    })
+                    .map_err(|err| err.into())
                     .map(|r| Some(r))
             }
             SystemCall::ThreadSpawn => {
@@ -308,221 +299,11 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                 let address: Address = arg0;
                 let length: usize = arg1;
                 match process.read(address, length) {
-                    Ok(buffer) => {
-                        let str = unsafe { String::from_utf8_unchecked(buffer) };
-                        if let Ok(path) = Path::from(&str) {
-                            match fs::lookup(path) {
-                                Ok(dentry) => Ok(Some(fs::measure(&dentry))),
-                                Err(err) => match err {
-                                    FilesystemAbstractLayerError::NotAccessible => {
-                                        Err(SystemCallError::ObjectNotAccessible)
-                                    }
-                                    FilesystemAbstractLayerError::InvalidPath => {
-                                        Err(SystemCallError::IllegalArgument)
-                                    }
-                                    FilesystemAbstractLayerError::NotFound => {
-                                        Err(SystemCallError::ObjectNotFound)
-                                    }
-                                    FilesystemAbstractLayerError::ForeignMountPoint(rem, mid) => {
-                                        todo!();
-                                        Ok(None)
-                                    }
-                                    _ => Err(SystemCallError::InternalError),
-                                },
-                            }
-                        } else {
-                            Err(SystemCallError::IllegalArgument)
-                        }
-                    }
-                    Err(err) => Err(match err {
-                        ProcessMemoryError::InaccessibleRegion => {
-                            SystemCallError::MemoryNotAccessible
-                        }
-
-                        _ => SystemCallError::InvalidAddress,
-                    }),
-                }
-            }
-            SystemCall::Inspect => {
-                let path_address = arg0;
-                let path_length = arg1;
-                let buffer_address = arg2;
-                let buffer_length = arg3;
-                match process.read(path_address, path_length) {
-                    Ok(buffer) => {
-                        let str = unsafe { String::from_utf8_unchecked(buffer) };
-                        if let Ok(path) = Path::from(&str) {
-                            match fs::lookup(path) {
-                                Ok(dentry) => {
-                                    let mut obj = Vec::<(DentryObject, String)>::new();
-                                    fs::make_objects(&dentry, &mut obj);
-                                    let mut copied = 0usize;
-                                    let mut count = 0usize;
-                                    for (d, s) in &obj {
-                                        let size = size_of::<DentryObject>();
-                                        // 写入对象必须按 8 对齐， DentryObject 已经保证 8 byte 对齐了，就差 name 了。
-                                        let name_length = (s.len() + 8 - 1) & !(8 - 1);
-                                        if copied + size + name_length <= buffer_length {
-                                            process.write(buffer_address + copied, unsafe{
-                                                from_raw_parts(d as *const DentryObject as *const u8, size)
-                                            }, size).expect("return user an error if failed or kill process");
-                                            process
-                                                .write(
-                                                    buffer_address + copied + size,
-                                                    s.as_bytes(),
-                                                    s.len(),
-                                                )
-                                                .expect("error!");
-                                            copied += size + name_length;
-                                            count += 1;
-                                        } else {
-                                            // 空间不够就不继续了
-                                            break;
-                                        }
-                                    }
-                                    Ok(Some(count))
-                                }
-                                Err(err) => match err {
-                                    FilesystemAbstractLayerError::NotAccessible => {
-                                        Err(SystemCallError::ObjectNotAccessible)
-                                    }
-                                    FilesystemAbstractLayerError::InvalidPath => {
-                                        Err(SystemCallError::IllegalArgument)
-                                    }
-                                    FilesystemAbstractLayerError::NotFound => {
-                                        Err(SystemCallError::ObjectNotFound)
-                                    }
-                                    FilesystemAbstractLayerError::ForeignMountPoint(rem, mid) => {
-                                        todo!();
-                                        Ok(None)
-                                    }
-                                    _ => Err(SystemCallError::InternalError),
-                                },
-                            }
-                        } else {
-                            Err(SystemCallError::IllegalArgument)
-                        }
-                    }
-                    Err(err) => Err(match err {
-                        ProcessMemoryError::InaccessibleRegion => {
-                            SystemCallError::MemoryNotAccessible
-                        }
-
-                        _ => SystemCallError::InvalidAddress,
-                    }),
-                }
-            }
-            SystemCall::Create => {
-                let path_address = arg0;
-                let path_length = arg1;
-                if let Some(kind) = DentryType::from_u8(arg2 as u8) {
-                    if let Ok(attr) = FlagSet::<DentryAttribute>::new(arg3 as u8) {
-                        match process.read(path_address, path_length) {
-                            Ok(buffer) => {
-                                let str = unsafe { String::from_utf8_unchecked(buffer) };
-                                if let Ok(path) = Path::from(&str) {
-                                    match fs::create(path, kind, attr) {
-                                        Ok(()) => Ok(Some(0)),
-                                        Err(err) => match err {
-                                            FilesystemAbstractLayerError::NotAccessible => {
-                                                Err(SystemCallError::ObjectNotAccessible)
-                                            }
-                                            FilesystemAbstractLayerError::InvalidPath => {
-                                                Err(SystemCallError::IllegalArgument)
-                                            }
-                                            FilesystemAbstractLayerError::NotFound => {
-                                                Err(SystemCallError::ObjectNotFound)
-                                            }
-                                            FilesystemAbstractLayerError::ForeignMountPoint(
-                                                rem,
-                                                mid,
-                                            ) => {
-                                                todo!();
-                                                Ok(None)
-                                            }
-                                            _ => Err(SystemCallError::InternalError),
-                                        },
-                                    }
-                                } else {
-                                    Err(SystemCallError::IllegalArgument)
-                                }
-                            }
-                            Err(err) => Err(match err {
-                                ProcessMemoryError::InaccessibleRegion => {
-                                    SystemCallError::MemoryNotAccessible
-                                }
-
-                                _ => SystemCallError::InvalidAddress,
-                            }),
-                        }
-                    } else {
-                        Err(SystemCallError::IllegalArgument)
-                    }
-                } else {
-                    Err(SystemCallError::IllegalArgument)
-                }
-            }
-            SystemCall::Read => {
-                let path_address = arg0;
-                let path_length = arg1;
-                let buffer_address = arg2;
-                let buffer_length = arg3;
-                match process.read(path_address, path_length) {
-                    Ok(buffer) => {
-                        let str = unsafe { String::from_utf8_unchecked(buffer) };
-                        if let Ok(path) = Path::from(&str) {
-                            match fs::read(path, buffer_length) {
-                                Ok(bytes) => {
-                                    if let Ok(written) =
-                                        process.write(buffer_address, &bytes, bytes.len())
-                                    {
-                                        Ok(Some(written))
-                                    } else {
-                                        Err(SystemCallError::MemoryNotAccessible)
-                                    }
-                                }
-                                Err(err) => match err {
-                                    FilesystemAbstractLayerError::NotAccessible => {
-                                        Err(SystemCallError::ObjectNotAccessible)
-                                    }
-                                    FilesystemAbstractLayerError::InvalidPath => {
-                                        Err(SystemCallError::IllegalArgument)
-                                    }
-                                    FilesystemAbstractLayerError::NotFound => {
-                                        Err(SystemCallError::ObjectNotFound)
-                                    }
-                                    FilesystemAbstractLayerError::ForeignMountPoint(rem, mid) => {
-                                        todo!();
-                                        Ok(None)
-                                    }
-                                    _ => Err(SystemCallError::InternalError),
-                                },
-                            }
-                        } else {
-                            Err(SystemCallError::IllegalArgument)
-                        }
-                    }
-                    Err(err) => Err(match err {
-                        ProcessMemoryError::InaccessibleRegion => {
-                            SystemCallError::MemoryNotAccessible
-                        }
-
-                        _ => SystemCallError::InvalidAddress,
-                    }),
-                }
-            }
-            SystemCall::Write => {
-                let path_address = arg0;
-                let path_length = arg1;
-                let buffer_address = arg2;
-                let buffer_length = arg3;
-                match process.read(path_address, path_length) {
                     Ok(path_buffer) => {
-                        let str = unsafe { String::from_utf8_unchecked(path_buffer) };
-                        if let Ok(path) = Path::from(&str) {
-                            match process.read(buffer_address, buffer_length) {
-                                Ok(buffer) => match fs::write(path, buffer) {
-                                    Ok(()) => Ok(Some(0000usize)),
+                        if let Ok(str) = String::from_utf8(path_buffer) {
+                            if let Ok(path) = Path::from(&str) {
+                                match fs::lookup(path) {
+                                    Ok(dentry) => Ok(Some(fs::measure(&dentry))),
                                     Err(err) => match err {
                                         FilesystemAbstractLayerError::NotAccessible => {
                                             Err(SystemCallError::ObjectNotAccessible)
@@ -542,26 +323,224 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                                         }
                                         _ => Err(SystemCallError::InternalError),
                                     },
-                                },
-                                Err(err) => Err(match err {
-                                    ProcessMemoryError::InaccessibleRegion => {
-                                        SystemCallError::MemoryNotAccessible
-                                    }
-
-                                    _ => SystemCallError::InvalidAddress,
-                                }),
+                                }
+                            } else {
+                                Err(SystemCallError::IllegalArgument)
                             }
                         } else {
                             Err(SystemCallError::IllegalArgument)
                         }
                     }
-                    Err(err) => Err(match err {
-                        ProcessMemoryError::InaccessibleRegion => {
-                            SystemCallError::MemoryNotAccessible
+                    Err(err) => Err(err.into()),
+                }
+            }
+            SystemCall::Inspect => {
+                let path_address = arg0;
+                let path_length = arg1;
+                let buffer_address = arg2;
+                let buffer_length = arg3;
+                match process.read(path_address, path_length) {
+                    Ok(path_buffer) => {
+                        if let Ok(str) = String::from_utf8(path_buffer) {
+                            if let Ok(path) = Path::from(&str) {
+                                match fs::lookup(path) {
+                                    Ok(dentry) => {
+                                        let mut obj = Vec::<(DentryObject, String)>::new();
+                                        fs::make_objects(&dentry, &mut obj);
+                                        let mut copied = 0usize;
+                                        let mut count = 0usize;
+                                        for (d, s) in &obj {
+                                            let size = size_of::<DentryObject>();
+                                            // 写入对象必须按 8 对齐， DentryObject 已经保证 8 byte 对齐了，就差 name 了。
+                                            let name_length = (s.len() + 8 - 1) & !(8 - 1);
+                                            if copied + size + name_length <= buffer_length {
+                                                process.write(buffer_address + copied, unsafe{
+                                                    from_raw_parts(d as *const DentryObject as *const u8, size)
+                                                }, size).expect("return user an error if failed or kill process");
+                                                process
+                                                    .write(
+                                                        buffer_address + copied + size,
+                                                        s.as_bytes(),
+                                                        s.len(),
+                                                    )
+                                                    .expect("error!");
+                                                copied += size + name_length;
+                                                count += 1;
+                                            } else {
+                                                // 空间不够就不继续了
+                                                break;
+                                            }
+                                        }
+                                        Ok(Some(count))
+                                    }
+                                    Err(err) => match err {
+                                        FilesystemAbstractLayerError::NotAccessible => {
+                                            Err(SystemCallError::ObjectNotAccessible)
+                                        }
+                                        FilesystemAbstractLayerError::InvalidPath => {
+                                            Err(SystemCallError::IllegalArgument)
+                                        }
+                                        FilesystemAbstractLayerError::NotFound => {
+                                            Err(SystemCallError::ObjectNotFound)
+                                        }
+                                        FilesystemAbstractLayerError::ForeignMountPoint(
+                                            rem,
+                                            mid,
+                                        ) => {
+                                            todo!();
+                                            Ok(None)
+                                        }
+                                        _ => Err(SystemCallError::InternalError),
+                                    },
+                                }
+                            } else {
+                                Err(SystemCallError::IllegalArgument)
+                            }
+                        } else {
+                            Err(SystemCallError::IllegalArgument)
                         }
-
-                        _ => SystemCallError::InvalidAddress,
-                    }),
+                    }
+                    Err(err) => Err(err.into()),
+                }
+            }
+            SystemCall::Create => {
+                let path_address = arg0;
+                let path_length = arg1;
+                if let Some(kind) = DentryType::from_u8(arg2 as u8) {
+                    if let Ok(attr) = FlagSet::<DentryAttribute>::new(arg3 as u8) {
+                        match process.read(path_address, path_length) {
+                            Ok(path_buffer) => {
+                                if let Ok(str) = String::from_utf8(path_buffer) {
+                                    if let Ok(path) = Path::from(&str) {
+                                        match fs::create(path, kind, attr) {
+                                            Ok(()) => Ok(Some(0)),
+                                            Err(err) => match err {
+                                                FilesystemAbstractLayerError::NotAccessible => {
+                                                    Err(SystemCallError::ObjectNotAccessible)
+                                                }
+                                                FilesystemAbstractLayerError::InvalidPath => {
+                                                    Err(SystemCallError::IllegalArgument)
+                                                }
+                                                FilesystemAbstractLayerError::NotFound => {
+                                                    Err(SystemCallError::ObjectNotFound)
+                                                }
+                                                FilesystemAbstractLayerError::ForeignMountPoint(
+                                                    rem,
+                                                    mid,
+                                                ) => {
+                                                    todo!();
+                                                    Ok(None)
+                                                }
+                                                _ => Err(SystemCallError::InternalError),
+                                            },
+                                        }
+                                    } else {
+                                        Err(SystemCallError::IllegalArgument)
+                                    }
+                                } else {
+                                    Err(SystemCallError::IllegalArgument)
+                                }
+                            }
+                            Err(err) => Err(err.into()),
+                        }
+                    } else {
+                        Err(SystemCallError::IllegalArgument)
+                    }
+                } else {
+                    Err(SystemCallError::IllegalArgument)
+                }
+            }
+            SystemCall::Read => {
+                let path_address = arg0;
+                let path_length = arg1;
+                let buffer_address = arg2;
+                let buffer_length = arg3;
+                match process.read(path_address, path_length) {
+                    Ok(path_buffer) => {
+                        if let Ok(str) = String::from_utf8(path_buffer) {
+                            if let Ok(path) = Path::from(&str) {
+                                match fs::read(path, buffer_length) {
+                                    Ok(bytes) => {
+                                        if let Ok(written) =
+                                            process.write(buffer_address, &bytes, bytes.len())
+                                        {
+                                            Ok(Some(written))
+                                        } else {
+                                            Err(SystemCallError::MemoryNotAccessible)
+                                        }
+                                    }
+                                    Err(err) => match err {
+                                        FilesystemAbstractLayerError::NotAccessible => {
+                                            Err(SystemCallError::ObjectNotAccessible)
+                                        }
+                                        FilesystemAbstractLayerError::InvalidPath => {
+                                            Err(SystemCallError::IllegalArgument)
+                                        }
+                                        FilesystemAbstractLayerError::NotFound => {
+                                            Err(SystemCallError::ObjectNotFound)
+                                        }
+                                        FilesystemAbstractLayerError::ForeignMountPoint(
+                                            rem,
+                                            mid,
+                                        ) => {
+                                            todo!();
+                                            Ok(None)
+                                        }
+                                        _ => Err(SystemCallError::InternalError),
+                                    },
+                                }
+                            } else {
+                                Err(SystemCallError::IllegalArgument)
+                            }
+                        } else {
+                            Err(SystemCallError::IllegalArgument)
+                        }
+                    }
+                    Err(err) => Err(err.into()),
+                }
+            }
+            SystemCall::Write => {
+                let path_address = arg0;
+                let path_length = arg1;
+                let buffer_address = arg2;
+                let buffer_length = arg3;
+                match process.read(path_address, path_length) {
+                    Ok(path_buffer) => {
+                        if let Ok(str) = String::from_utf8(path_buffer) {
+                            if let Ok(path) = Path::from(&str) {
+                                match process.read(buffer_address, buffer_length) {
+                                    Ok(buffer) => match fs::write(path, buffer) {
+                                        Ok(()) => Ok(Some(0000usize)),
+                                        Err(err) => match err {
+                                            FilesystemAbstractLayerError::NotAccessible => {
+                                                Err(SystemCallError::ObjectNotAccessible)
+                                            }
+                                            FilesystemAbstractLayerError::InvalidPath => {
+                                                Err(SystemCallError::IllegalArgument)
+                                            }
+                                            FilesystemAbstractLayerError::NotFound => {
+                                                Err(SystemCallError::ObjectNotFound)
+                                            }
+                                            FilesystemAbstractLayerError::ForeignMountPoint(
+                                                rem,
+                                                mid,
+                                            ) => {
+                                                todo!();
+                                                Ok(None)
+                                            }
+                                            _ => Err(SystemCallError::InternalError),
+                                        },
+                                    },
+                                    Err(err) => Err(err.into()),
+                                }
+                            } else {
+                                Err(SystemCallError::IllegalArgument)
+                            }
+                        } else {
+                            Err(SystemCallError::IllegalArgument)
+                        }
+                    }
+                    Err(err) => Err(err.into()),
                 }
             }
             _ => unimplemented!("unimplemented syscall: {:?}", call),

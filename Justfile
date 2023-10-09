@@ -81,7 +81,6 @@ build_user: artifact_dir
     @echo -e "\033[0;32mUser space programs build successfully!\033[0m"
 
 make_initfs: build_user
-    @cp "os/platforms/{{PLATFORM}}/{{MODEL}}/init.rhai" "{{TARGET_DIR}}/initfs/init.rhai"
     @cd "{{TARGET_DIR}}/initfs" && find . -type f | tar --transform 's/^..//' -cvf ../initfs.tar --files-from=/dev/stdin
 
 build_opensbi options:

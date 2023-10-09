@@ -225,7 +225,6 @@ impl FileSystem for Procfs {
     }
 
     fn lookup(&self, path: Path) -> Result<Dentry, FilesystemAbstractLayerError> {
-        debug!("procfs.lookup {}", path.as_str());
         if let Ok(layer) = Self::parse(path) {
             match layer {
                 FsLayer::Root => Ok(Self::spawn_root()),
@@ -253,7 +252,6 @@ impl FileSystem for Procfs {
     }
 
     fn read(&self, path: Path, length: usize) -> Result<Vec<u8>, FilesystemAbstractLayerError> {
-        debug!("procfs.read {}", path);
         if let Ok(layer) = Self::parse(path) {
             match layer {
                 FsLayer::Root => Err(FilesystemAbstractLayerError::Unsupported),

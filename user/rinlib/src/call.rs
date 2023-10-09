@@ -103,10 +103,12 @@ pub unsafe fn sys_signal_return() -> SystemCallResult<()> {
     sys_call(SystemCall::SignalReturn, 0, 0, 0, 0).map(|_| ())
 }
 
+// 返回需要准备的 buffer 大小
 pub unsafe fn sys_access(path: &str) -> SystemCallResult<usize> {
     sys_call(SystemCall::Access, path.as_ptr() as usize, path.len(), 0, 0)
 }
 
+// 返回在 buffer 中实际写入的 Dentry 数量
 pub unsafe fn sys_inspect(path: &str, buffer: &[u8]) -> SystemCallResult<usize> {
     sys_call(
         SystemCall::Inspect,
@@ -117,6 +119,7 @@ pub unsafe fn sys_inspect(path: &str, buffer: &[u8]) -> SystemCallResult<usize> 
     )
 }
 
+// 实际写入在 buffer 有效部分的长度
 pub unsafe fn sys_read(path: &str, buffer: &[u8]) -> SystemCallResult<usize> {
     sys_call(
         SystemCall::Read,

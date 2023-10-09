@@ -73,7 +73,6 @@ fn redirect_with<T, O: Fn(&dyn FileSystem, Path) -> Result<T, FilesystemAbstract
         Ok(dentry) => Ok(dentry),
         Err(err) => match err {
             FilesystemAbstractLayerError::ForeignMountPoint(rem, mid) => {
-                debug!("redirected to {:#x} with {}", mid, rem);
                 if let Some(fs) = get_local_fs(mid) {
                     match fs {
                         LocalMountpoint::Proc(proc) => redirect_with(op, proc, rem),
