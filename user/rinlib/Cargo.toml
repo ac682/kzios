@@ -1,15 +1,15 @@
 [package]
 name = "rinlib"
 version = "0.1.0"
-authors = [ "Chien Zhang (zqy0224@live.com)"]
+authors = ["Chien Zhang (zqy0224@live.com)"]
 description = "Userspace lib for eRhino"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-erhino_shared = { path = "../../shared"}
+erhino_shared = { path = "../../shared" }
 talc = "3.0"
 lock_api = "0.4"
 flagset = "0.4"
-num-traits = { version = "0.2", default-features = false}
+num-traits = { version = "0.2", default-features = false }

@@ -127,7 +127,7 @@ pub unsafe fn sys_read(path: &str, buffer: &[u8]) -> SystemCallResult<usize> {
         path.as_ptr() as usize,
         path.len(),
         buffer.as_ptr() as usize,
-        buffer.len(),
+        0,
     )
 }
 
@@ -169,9 +169,22 @@ pub unsafe fn sys_send(target: Pid, kind: usize, buffer: &[u8]) -> SystemCallRes
 }
 
 pub unsafe fn sys_peek(digest_buffer: &[u8]) -> SystemCallResult<bool> {
-    sys_call(SystemCall::Peek, digest_buffer.as_ptr() as usize, size_of::<MessageDigest>(), 0, 0).map(|b| b > 0)
+    sys_call(
+        SystemCall::Peek,
+        digest_buffer.as_ptr() as usize,
+        size_of::<MessageDigest>(),
+        0,
+        0,
+    )
+    .map(|b| b > 0)
 }
 
-pub unsafe fn sys_receive(buffer: &[u8]) ->SystemCallResult<usize>{
-    todo!()
+pub unsafe fn sys_receive(buffer: &[u8]) -> SystemCallResult<usize> {
+    sys_call(
+        SystemCall::Receive,
+        buffer.as_ptr() as usize,
+        buffer.len(),
+        0,
+        0,
+    )
 }

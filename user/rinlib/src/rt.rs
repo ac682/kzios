@@ -1,6 +1,5 @@
-use core::arch::asm;
 use core::{alloc::Layout, panic::PanicInfo};
-use erhino_shared::proc::{SystemSignal, Termination, Tid, Pid};
+use erhino_shared::proc::{Pid, SystemSignal, Termination, Tid};
 use erhino_shared::sync::spin::SimpleLock;
 use talc::{OomHandler, Span, Talc, Talck};
 
@@ -55,13 +54,13 @@ fn lang_start<T: Termination + 'static>(
     main: fn() -> T,
     argc: isize,
     argv: *const *const u8,
-    sigpipe: u8,
+    _sigpipe: u8,
 ) -> isize {
-    let _tid = argc as usize as Tid;
-    let pid = argv as usize as Pid;
-    let _parent = sigpipe as usize as Pid;
+    let pid = argc as usize as Pid;
+    let parent = argv as usize as Pid;
     unsafe {
         env::PID.set(pid).unwrap();
+        env::PARENT_PID.set(parent).unwrap();
         let mut talc = HEAP_ALLOCATOR.talc();
         if let Ok(offset) = sys_extend(INITIAL_HEAP_SIZE) {
             let start = offset - INITIAL_HEAP_SIZE;

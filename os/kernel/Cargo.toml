@@ -27,3 +27,5 @@ strum_macros = "0.25"
 semver = { version = "1.0", default-features = false }
 tar-no-std = "0.2"
 lock_api = "0.4"
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+postcard = "1.0"

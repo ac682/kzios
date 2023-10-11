@@ -21,6 +21,14 @@ impl Message {
     pub fn digest(&self) -> MessageDigest {
         MessageDigest::new(self.sender, self.kind, self.time, self.content.len())
     }
+
+    pub fn len(&self) -> usize {
+        self.content.len()
+    }
+
+    pub fn content(&self) -> &[u8] {
+        &self.content
+    }
 }
 
 pub struct Mailbox {

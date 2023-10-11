@@ -587,8 +587,7 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                             };
                             match process.write(buffer_address, bytes, size_of::<MessageDigest>()) {
                                 Ok(_) => Ok(Some(1)),
-                                Err(err) => 
-                                return Err(err.into()),
+                                Err(err) => return Err(err.into()),
                             }
                         } else {
                             Err(SystemCallError::ObjectNotAvailable)
@@ -598,6 +597,23 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                     }
                 } else {
                     Err(SystemCallError::IllegalArgument)
+                }
+            }
+            SystemCall::Receive => {
+                let buffer_address = arg0 as Address;
+                let buffer_length = arg1;
+                let thread = context.thread();
+                if let Some(message) = thread.mailbox.take() {
+                    if message.len() == buffer_length {
+                        match process.write(buffer_address, message.content(), buffer_length) {
+                            Ok(written) => Ok(Some(written)),
+                            Err(err) => Err(err.into()),
+                        }
+                    } else {
+                        Err(SystemCallError::IllegalArgument)
+                    }
+                } else {
+                    Err(SystemCallError::ObjectNotAvailable)
                 }
             }
             _ => unimplemented!("unimplemented syscall: {:?}", call),

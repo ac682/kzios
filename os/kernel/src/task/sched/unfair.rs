@@ -285,7 +285,8 @@ impl ProcessCell {
             entry,
             stack,
             self.layout.trampoline,
-            [tid as u64, self.id as u64, self.parent as u64],
+            tid,
+            [self.id as u64, self.parent as u64],
         );
         if let Some(gap) = &option {
             gap.ring_lock.lock();

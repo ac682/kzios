@@ -6,6 +6,7 @@ members = [
     "systems/pm",
     "frameworks/libsrv",
     "frameworks/libdrv",
+    "frameworks/libfal",
     "drivers/spi_sifive"
 ]
 resolver = "2"

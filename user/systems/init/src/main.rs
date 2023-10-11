@@ -1,19 +1,22 @@
 #![no_std]
 
-use alloc::vec::Vec;
 use rinlib::{
-    ipc::message::{peek, send},
+    env,
+    ipc::message::{peek, receive, send},
     preclude::*,
 };
 
 fn main() {
     debug!("Hello, init!");
 
-    if send(4, 114, &[5u8, 1u8, 4u8]) {
+    if send(env::pid(), 114, &[5u8, 1u8, 4u8]) {
         if let Some(digest) = peek() {
-            debug!("{}", digest.kind);
-            let payload = Vec::<u8>::with_capacity(digest.payload_length);
-            
+            debug!("{}: {}", digest.kind, digest.payload_length);
+            if let Some(payload) = receive(&digest) {
+                debug!("payload: {:?}", payload);
+            } else {
+                debug!("no payload")
+            }
         } else {
             debug!("peek fail");
         }

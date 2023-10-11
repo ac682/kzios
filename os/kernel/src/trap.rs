@@ -2,7 +2,7 @@ use core::fmt::Display;
 
 use erhino_shared::{
     call::{SystemCall, SystemCallError},
-    mem::{Address, MemoryOperation},
+    mem::{Address, MemoryOperation}, proc::Tid,
 };
 use num_traits::FromPrimitive;
 use riscv::register::{
@@ -75,12 +75,13 @@ impl TrapFrame {
         entry_point: Address,
         stack_address: Address,
         user_trap: Address,
-        registers: [u64; 3],
+        thread_id: Tid,
+        registers: [u64; 2],
     ) {
         self.x = [0; 32];
+        self.x[4] = thread_id as u64;
         self.x[10] = registers[0];
         self.x[11] = registers[1];
-        self.x[11] = registers[2];
         self.f = [0; 32];
         self.x[2] = stack_address as u64;
         self.pc = entry_point as u64;
