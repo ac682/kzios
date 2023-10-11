@@ -127,7 +127,7 @@ pub unsafe fn sys_read(path: &str, buffer: &[u8]) -> SystemCallResult<usize> {
         path.as_ptr() as usize,
         path.len(),
         buffer.as_ptr() as usize,
-        0,
+        buffer.len(),
     )
 }
 

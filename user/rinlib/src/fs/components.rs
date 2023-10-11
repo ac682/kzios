@@ -7,7 +7,6 @@ use flagset::FlagSet;
 
 use crate::{
     call::{sys_read, sys_write},
-    debug,
     ipc::tunnel::Runnel,
 };
 

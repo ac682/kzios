@@ -13,14 +13,18 @@ use erhino_shared::fal::{
 use erhino_shared::proc::Pid;
 use flagset::FlagSet;
 
-use crate::debug;
 use crate::hart::SchedulerImpl;
 use crate::task::sched::Scheduler;
 
 enum FsLayer {
     Root,
     Proc(Pid),
-    Memory(Pid, Option<String>),
+    PropPid(Pid),
+    Memory,
+    MemoryPage(Pid),
+    MemoryProgram(Pid),
+    MemoryHeap(Pid),
+    MemoryStack(Pid),
 }
 
 // 结构
@@ -47,12 +51,25 @@ impl Procfs {
                                 "memory" => {
                                     if let Some(Component::Normal(field)) = iter.next() {
                                         if let None = iter.next() {
-                                            Ok(FsLayer::Memory(id, Some(field.to_owned())))
+                                            match field {
+                                                "page" => Ok(FsLayer::MemoryPage(id)),
+                                                "program" => Ok(FsLayer::MemoryProgram(id)),
+                                                "heap" => Ok(FsLayer::MemoryHeap(id)),
+                                                "stack" => Ok(FsLayer::MemoryStack(id)),
+                                                _ => Err(FilesystemAbstractLayerError::NotFound),
+                                            }
                                         } else {
                                             Err(FilesystemAbstractLayerError::NotFound)
                                         }
                                     } else {
-                                        Ok(FsLayer::Memory(id, None))
+                                        Ok(FsLayer::Memory)
+                                    }
+                                }
+                                "pid" => {
+                                    if let None = iter.next() {
+                                        Ok(FsLayer::PropPid(id))
+                                    } else {
+                                        Err(FilesystemAbstractLayerError::NotFound)
                                     }
                                 }
                                 _ => Err(FilesystemAbstractLayerError::NotFound),
@@ -74,143 +91,21 @@ impl Procfs {
         }
     }
 
-    fn read_prop(pid: Pid, prop: &str) -> Result<Vec<u8>, FilesystemAbstractLayerError> {
+    fn read_prop(pid: Pid, prop: FsLayer) -> Result<Vec<u8>, FilesystemAbstractLayerError> {
         let mut buffer: Option<Vec<u8>> = None;
         SchedulerImpl::find(pid, |p| match prop {
-            "page" => buffer = Some((p.usage.page as i64).to_ne_bytes().to_vec()),
-            "program" => buffer = Some((p.usage.program as i64).to_ne_bytes().to_vec()),
-            "heap" => buffer = Some((p.usage.heap as i64).to_ne_bytes().to_vec()),
-            "stack" => buffer = Some((p.usage.stack as i64).to_ne_bytes().to_vec()),
+            FsLayer::MemoryPage(_) => buffer = Some((p.usage.page as i64).to_ne_bytes().to_vec()),
+            FsLayer::MemoryProgram(_) => {
+                buffer = Some((p.usage.program as i64).to_ne_bytes().to_vec())
+            }
+            FsLayer::MemoryHeap(_) => buffer = Some((p.usage.heap as i64).to_ne_bytes().to_vec()),
+            FsLayer::MemoryStack(_) => buffer = Some((p.usage.stack as i64).to_ne_bytes().to_vec()),
             _ => {}
         });
         if let Some(res) = buffer {
             Ok(res)
         } else {
             Err(FilesystemAbstractLayerError::NotFound)
-        }
-    }
-
-    fn spawn_root() -> Dentry {
-        let mut proc = Vec::<Dentry>::new();
-        for i in SchedulerImpl::snapshot() {
-            proc.push(Dentry::new(
-                i.to_string(),
-                0,
-                0,
-                0,
-                DentryAttribute::Executable | DentryAttribute::Readable,
-                DentryMeta::Directory(Vec::with_capacity(0)),
-            ));
-        }
-        Dentry::new(
-            "".to_owned(),
-            0,
-            0,
-            0,
-            DentryAttribute::Executable | DentryAttribute::Readable,
-            DentryMeta::Directory(proc),
-        )
-    }
-
-    fn spawn_proc(pid: Pid) -> Dentry {
-        let props = vec![Dentry::new(
-            "memory".to_owned(),
-            0,
-            0,
-            0,
-            DentryAttribute::Executable | DentryAttribute::Readable,
-            DentryMeta::Directory(Vec::new()),
-        )];
-        Dentry::new(
-            pid.to_string(),
-            0,
-            0,
-            0,
-            DentryAttribute::Readable | DentryAttribute::Executable,
-            DentryMeta::Directory(props),
-        )
-    }
-
-    fn spawn_usage() -> Dentry {
-        let props = vec![
-            Dentry::new(
-                "page".to_owned(),
-                0,
-                0,
-                size_of::<i64>(),
-                DentryAttribute::Readable.into(),
-                DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
-            ),
-            Dentry::new(
-                "program".to_owned(),
-                0,
-                0,
-                size_of::<i64>(),
-                DentryAttribute::Readable.into(),
-                DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
-            ),
-            Dentry::new(
-                "heap".to_owned(),
-                0,
-                0,
-                size_of::<i64>(),
-                DentryAttribute::Readable.into(),
-                DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
-            ),
-            Dentry::new(
-                "stack".to_owned(),
-                0,
-                0,
-                size_of::<i64>(),
-                DentryAttribute::Readable.into(),
-                DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
-            ),
-        ];
-        Dentry::new(
-            "memory".to_owned(),
-            0,
-            0,
-            0,
-            DentryAttribute::Executable | DentryAttribute::Readable,
-            DentryMeta::Directory(props),
-        )
-    }
-
-    fn spawn_usage_field(field: &str) -> Dentry {
-        match field {
-            "page" => Dentry::new(
-                "page".to_owned(),
-                0,
-                0,
-                size_of::<i64>(),
-                DentryAttribute::Readable.into(),
-                DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
-            ),
-            "program" => Dentry::new(
-                "program".to_owned(),
-                0,
-                0,
-                size_of::<i64>(),
-                DentryAttribute::Readable.into(),
-                DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
-            ),
-            "heap" => Dentry::new(
-                "heap".to_owned(),
-                0,
-                0,
-                size_of::<i64>(),
-                DentryAttribute::Readable.into(),
-                DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
-            ),
-            "stack" => Dentry::new(
-                "stack".to_owned(),
-                0,
-                0,
-                size_of::<i64>(),
-                DentryAttribute::Readable.into(),
-                DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
-            ),
-            _ => unimplemented!(),
         }
     }
 }
@@ -227,15 +122,139 @@ impl FileSystem for Procfs {
     fn lookup(&self, path: Path) -> Result<Dentry, FilesystemAbstractLayerError> {
         if let Ok(layer) = Self::parse(path) {
             match layer {
-                FsLayer::Root => Ok(Self::spawn_root()),
-                FsLayer::Proc(pid) => Ok(Self::spawn_proc(pid)),
-                FsLayer::Memory(_, option) => {
-                    if let Some(prop) = option {
-                        Ok(Self::spawn_usage_field(prop.as_str()))
-                    } else {
-                        Ok(Self::spawn_usage())
+                FsLayer::Root => {
+                    let mut proc = Vec::<Dentry>::new();
+                    for i in SchedulerImpl::snapshot() {
+                        proc.push(Dentry::new(
+                            i.to_string(),
+                            0,
+                            0,
+                            0,
+                            DentryAttribute::Executable | DentryAttribute::Readable,
+                            DentryMeta::Directory(Vec::with_capacity(0)),
+                        ));
                     }
+                    Ok(Dentry::new(
+                        "".to_owned(),
+                        0,
+                        0,
+                        0,
+                        DentryAttribute::Executable | DentryAttribute::Readable,
+                        DentryMeta::Directory(proc),
+                    ))
                 }
+                FsLayer::Proc(pid) => {
+                    let props = vec![
+                        Dentry::new(
+                            "memory".to_owned(),
+                            0,
+                            0,
+                            0,
+                            DentryAttribute::Executable | DentryAttribute::Readable,
+                            DentryMeta::Directory(Vec::new()),
+                        ),
+                        Dentry::new(
+                            "pid".to_owned(),
+                            0,
+                            0,
+                            size_of::<Pid>(),
+                            DentryAttribute::Readable.into(),
+                            DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
+                        ),
+                    ];
+                    Ok(Dentry::new(
+                        pid.to_string(),
+                        0,
+                        0,
+                        0,
+                        DentryAttribute::Readable | DentryAttribute::Executable,
+                        DentryMeta::Directory(props),
+                    ))
+                }
+                FsLayer::PropPid(_) => Ok(Dentry::new(
+                    "pid".to_owned(),
+                    0,
+                    0,
+                    size_of::<i64>(),
+                    DentryAttribute::Readable.into(),
+                    DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
+                )),
+                FsLayer::Memory => {
+                    let props = vec![
+                        Dentry::new(
+                            "page".to_owned(),
+                            0,
+                            0,
+                            size_of::<i64>(),
+                            DentryAttribute::Readable.into(),
+                            DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
+                        ),
+                        Dentry::new(
+                            "program".to_owned(),
+                            0,
+                            0,
+                            size_of::<i64>(),
+                            DentryAttribute::Readable.into(),
+                            DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
+                        ),
+                        Dentry::new(
+                            "heap".to_owned(),
+                            0,
+                            0,
+                            size_of::<i64>(),
+                            DentryAttribute::Readable.into(),
+                            DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
+                        ),
+                        Dentry::new(
+                            "stack".to_owned(),
+                            0,
+                            0,
+                            size_of::<i64>(),
+                            DentryAttribute::Readable.into(),
+                            DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
+                        ),
+                    ];
+                    Ok(Dentry::new(
+                        "memory".to_owned(),
+                        0,
+                        0,
+                        0,
+                        DentryAttribute::Executable | DentryAttribute::Readable,
+                        DentryMeta::Directory(props),
+                    ))
+                }
+                FsLayer::MemoryPage(_) => Ok(Dentry::new(
+                    "page".to_owned(),
+                    0,
+                    0,
+                    size_of::<i64>(),
+                    DentryAttribute::Readable.into(),
+                    DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
+                )),
+                FsLayer::MemoryProgram(_) => Ok(Dentry::new(
+                    "program".to_owned(),
+                    0,
+                    0,
+                    size_of::<i64>(),
+                    DentryAttribute::Readable.into(),
+                    DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
+                )),
+                FsLayer::MemoryHeap(_) => Ok(Dentry::new(
+                    "heap".to_owned(),
+                    0,
+                    0,
+                    size_of::<i64>(),
+                    DentryAttribute::Readable.into(),
+                    DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
+                )),
+                FsLayer::MemoryStack(_) => Ok(Dentry::new(
+                    "stack".to_owned(),
+                    0,
+                    0,
+                    size_of::<i64>(),
+                    DentryAttribute::Readable.into(),
+                    DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
+                )),
             }
         } else {
             Err(FilesystemAbstractLayerError::InvalidPath)
@@ -251,18 +270,17 @@ impl FileSystem for Procfs {
         Err(FilesystemAbstractLayerError::Unsupported)
     }
 
-    fn read(&self, path: Path, length: usize) -> Result<Vec<u8>, FilesystemAbstractLayerError> {
+    fn read(&self, path: Path, _: usize) -> Result<Vec<u8>, FilesystemAbstractLayerError> {
         if let Ok(layer) = Self::parse(path) {
             match layer {
                 FsLayer::Root => Err(FilesystemAbstractLayerError::Unsupported),
                 FsLayer::Proc(_) => Err(FilesystemAbstractLayerError::Unsupported),
-                FsLayer::Memory(pid, option) => {
-                    if let Some(prop) = option {
-                        Self::read_prop(pid, prop.as_str())
-                    } else {
-                        Err(FilesystemAbstractLayerError::Unsupported)
-                    }
-                }
+                FsLayer::PropPid(pid) => Ok((pid as i64).to_ne_bytes().to_vec()),
+                FsLayer::Memory => Err(FilesystemAbstractLayerError::Unsupported),
+                FsLayer::MemoryPage(pid) => Self::read_prop(pid, layer),
+                FsLayer::MemoryProgram(pid) => Self::read_prop(pid, layer),
+                FsLayer::MemoryHeap(pid) => Self::read_prop(pid, layer),
+                FsLayer::MemoryStack(pid) => Self::read_prop(pid, layer),
             }
         } else {
             Err(FilesystemAbstractLayerError::InvalidPath)
