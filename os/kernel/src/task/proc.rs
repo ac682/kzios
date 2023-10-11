@@ -80,7 +80,7 @@ pub struct Process {
     tunnel_point: Address,
     permissions: FlagSet<ProcessPermission>,
     tunnels: Vec<Endpoint>,
-    mailbox: Mailbox,
+    pub mailbox: Mailbox,
     pub health: ProcessHealth,
     pub signal: SignalControlBlock,
 }

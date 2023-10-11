@@ -10,6 +10,7 @@ use erhino_shared::{
     call::{SystemCall, SystemCallError},
     fal::{DentryAttribute, DentryObject, DentryType, FilesystemAbstractLayerError},
     mem::{Address, MemoryRegionAttribute},
+    message::MessageDigest,
     path::Path,
     proc::{ExitCode, Pid, SignalMap},
     sync::spin::SimpleLock,
@@ -31,8 +32,8 @@ use crate::{
     rng::RandomGenerator,
     sbi,
     task::{
-        ipc::tunnel::Tunnel,
-        proc::{ProcessHealth, ProcessMemoryError, ProcessTunnelError},
+        ipc::{message::Message, tunnel::Tunnel},
+        proc::{ProcessHealth, ProcessTunnelError},
         sched::{ScheduleContext, Scheduler},
         thread::Thread,
     },
@@ -541,6 +542,62 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                         }
                     }
                     Err(err) => Err(err.into()),
+                }
+            }
+            SystemCall::Send => {
+                let target = arg0 as Pid;
+                let kind = arg1;
+                let buffer_address = arg2 as Address;
+                let buffer_length = arg3;
+                let mut error: Option<SystemCallError> = None;
+                if context.find(target, |to| {
+                    match process.read(buffer_address, buffer_length) {
+                        Ok(buffer) => {
+                            let msg = Message::new(context.pid(), kind, buffer);
+                            if !to.mailbox.put(msg) {
+                                error = Some(SystemCallError::ObjectNotAvailable)
+                            }
+                        }
+                        Err(err) => error = Some(err.into()),
+                    }
+                }) {
+                    if let Some(err) = error {
+                        Err(err)
+                    } else {
+                        Ok(Some(0))
+                    }
+                } else {
+                    Err(SystemCallError::ObjectNotFound)
+                }
+            }
+            SystemCall::Peek => {
+                let buffer_address = arg0 as Address;
+                let buffer_length = arg1;
+                if buffer_length == size_of::<MessageDigest>() {
+                    let thread = context.thread();
+                    if thread.mailbox.available() {
+                        if let Some(message) = process.mailbox.take() {
+                            let digest = message.digest();
+                            thread.mailbox.put(message);
+                            let bytes = unsafe {
+                                from_raw_parts(
+                                    (&digest as *const MessageDigest) as *const u8,
+                                    size_of::<MessageDigest>(),
+                                )
+                            };
+                            match process.write(buffer_address, bytes, size_of::<MessageDigest>()) {
+                                Ok(_) => Ok(Some(1)),
+                                Err(err) => 
+                                return Err(err.into()),
+                            }
+                        } else {
+                            Err(SystemCallError::ObjectNotAvailable)
+                        }
+                    } else {
+                        Err(SystemCallError::ReachLimit)
+                    }
+                } else {
+                    Err(SystemCallError::IllegalArgument)
                 }
             }
             _ => unimplemented!("unimplemented syscall: {:?}", call),

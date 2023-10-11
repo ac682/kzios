@@ -22,3 +22,5 @@ pub mod fal;
 pub mod path;
 /// Time-related functions
 pub mod time;
+/// Messaging primitives
+pub mod message;

@@ -7,7 +7,7 @@ use alloc::{
 use erhino_shared::{
     mem::{Address, MemoryRegionAttribute, PageNumber},
     proc::{ExecutionState, Pid, Tid},
-    sync::spin::{QueueLock, SimpleLock},
+    sync::spin::SimpleLock,
 };
 use flagset::FlagSet;
 use lock_api::RawMutex;
@@ -82,14 +82,19 @@ impl ScheduleContext for UnfairContext {
     }
 
     fn find<F: FnMut(&mut Process)>(&self, pid: Pid, mut action: F) -> bool {
-        if let Some(p) = unsafe { &PROC_TABLE }.find_process(pid) {
-            p.state_lock.lock();
-            let mutable = p.get_mut();
-            action(&mut mutable.inner);
-            unsafe { p.state_lock.unlock() };
+        if self.process.id == pid {
+            action(self.process());
             true
         } else {
-            false
+            if let Some(p) = unsafe { &PROC_TABLE }.find_process(pid) {
+                p.state_lock.lock();
+                let mutable = p.get_mut();
+                action(&mut mutable.inner);
+                unsafe { p.state_lock.unlock() };
+                true
+            } else {
+                false
+            }
         }
     }
 }
@@ -147,7 +152,8 @@ struct ProcessCell {
     next: Option<Arc<Shared<ProcessCell>>>,
     prev: Option<Weak<Shared<ProcessCell>>>,
     ring_lock: SimpleLock,
-    state_lock: SimpleLock}
+    state_lock: SimpleLock,
+}
 
 const TRAPFRAME_SIZE: usize = 1024;
 const TRAPFRAME_HOLD: usize = PAGE_SIZE / TRAPFRAME_SIZE;

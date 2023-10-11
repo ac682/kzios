@@ -1,9 +1,10 @@
-use core::arch::asm;
+use core::{arch::asm, mem::size_of};
 
 use erhino_shared::{
     call::{SystemCall, SystemCallError},
     fal::{DentryAttribute, DentryType},
     mem::Address,
+    message::MessageDigest,
     proc::{ExitCode, Pid, SystemSignal, Tid},
 };
 use flagset::FlagSet;
@@ -154,4 +155,23 @@ pub unsafe fn sys_create(
         attr.bits() as usize,
     )
     .map(|_| ())
+}
+
+pub unsafe fn sys_send(target: Pid, kind: usize, buffer: &[u8]) -> SystemCallResult<()> {
+    sys_call(
+        SystemCall::Send,
+        target as usize,
+        kind,
+        buffer.as_ptr() as usize,
+        buffer.len(),
+    )
+    .map(|_| ())
+}
+
+pub unsafe fn sys_peek(digest_buffer: &[u8]) -> SystemCallResult<bool> {
+    sys_call(SystemCall::Peek, digest_buffer.as_ptr() as usize, size_of::<MessageDigest>(), 0, 0).map(|b| b > 0)
+}
+
+pub unsafe fn sys_receive(buffer: &[u8]) ->SystemCallResult<usize>{
+    todo!()
 }
