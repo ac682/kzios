@@ -29,7 +29,7 @@ OPENSBI_BUILD_DIR := invocation_directory()/"submodules/opensbi/build"
 
 # qemu
 QEMU_OPTIONS := if MODEL == "sifive_u" { "-smp cores=5 -dtb '"+DTB+"' -drive file='"+SDCARD+"',if=sd,format=raw" } else { "-smp cores=4" }
-QEMU_LAUNCH := "qemu-system-riscv64 -M "+MODEL+" -m 128M -nographic -kernel '"+KERNEL_ELF+"' "+QEMU_OPTIONS
+QEMU_LAUNCH := "qemu-system-riscv64 -M "+MODEL+" -m 128M -nographic -kernel '"+KERNEL_ELF+"' -dtb '"+DTB+"'"
 
 # gdb
 GDB_BINARY := "gdb-multiarch"
@@ -103,9 +103,9 @@ build_k210: && (build_opensbi "PLATFORM=kendryte/k210 FW_PAYLOAD=y FW_PAYLOAD_OF
     @cp '{{OPENSBI_BUILD_DIR}}/platform/kendryte/k210/firmware/fw_payload.bin' '{{TARGET_DIR}}'
 
 # make_sdcard 可以先稍稍
-run_qemu +EXPOSE="": make_dtb make_initfs build_kernel
+run_qemu +OPTIONS: make_dtb make_initfs build_kernel
     @echo -e "\033[0;36mQEMU: Simulating\033[0m"
-    @{{QEMU_LAUNCH}} {{EXPOSE}}
+    @{{QEMU_LAUNCH}} {{OPTIONS}}
 
 run_qemu_dump_dtb:
     @{{QEMU_LAUNCH}} -machine dumpdtb="{{TARGET_DIR}}/dump.dtb"
@@ -115,7 +115,7 @@ run_k210: build_k210
     @just PLATFORM=kendryte MODEL=k210 MODE=release run_renode
 
 run:
-    @just PLATFORM={{PLATFORM}} MODEL={{MODEL}} MODE={{MODE}} run_{{PLATFORM}}
+    @just PLATFORM={{PLATFORM}} MODEL={{MODEL}} MODE={{MODE}} run_{{PLATFORM}} -smp cores=4 -device loader,file=artifacts/initfs.tar,addr=0x86000000
 
 flash_k210: build_k210
     @python3 -m kflash -p /dev/ttyUSB1 -b 1500000 "{{KERNEL_ELF}}_merged.bin"

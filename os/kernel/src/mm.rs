@@ -57,7 +57,9 @@ pub fn init() {
     // kernel has no trap frame so it has no trap frame mapped
     let satp = unit.satp();
     unsafe {
-        KERNEL_UNIT.set(unit);
+        if let Err(_) = KERNEL_UNIT.set(unit){
+            panic!("set KERNEL_UNIT shared data failed")
+        }
         KERNEL_SATP = satp;
     }
 }

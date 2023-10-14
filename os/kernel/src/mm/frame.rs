@@ -37,13 +37,13 @@ impl Drop for FrameTracker {
     }
 }
 
-pub fn init() {
-    let free_start: usize = _frame_start as usize >> PAGE_BITS;
+pub fn init(start_addr: usize) {
+    let free_start: usize = start_addr >> PAGE_BITS;
     let free_end = _memory_end as usize >> PAGE_BITS;
     unsafe {
         let allocator = LockedFrameAllocator::new();
         allocator.lock().add_frame(free_start, free_end);
-        FRAME_ALLOCATOR.set(allocator);
+        let _ = FRAME_ALLOCATOR.set(allocator);
     }
 }
 

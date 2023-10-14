@@ -8,7 +8,7 @@ use erhino_shared::{
     },
     mem::Address,
     path::{Component, Path, PathIterator},
-    sync::spin::{QueueLock, SimpleLock},
+    sync::spin::SimpleLock,
     time::Timestamp,
 };
 

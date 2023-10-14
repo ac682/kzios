@@ -11,7 +11,7 @@ use erhino_shared::{
 };
 use flagset::FlagSet;
 
-use crate::debug;
+
 
 use self::{procfs::Procfs, rootfs::Rootfs};
 
@@ -36,7 +36,7 @@ pub fn init() {
     unsafe {
         // slot id = 0, mid = 1 << 32
         MOUNTPOINTS.push(LocalMountpoint::Proc(Procfs::new()));
-        ROOT.set(rootfs);
+        let _ = ROOT.set(rootfs);
     }
 }
 

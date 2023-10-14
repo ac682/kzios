@@ -1,6 +1,6 @@
 use core::fmt::{Arguments, Write};
 
-use erhino_shared::sync::spin::{QueueLock, SimpleLock};
+use erhino_shared::sync::spin::{SimpleLock};
 use lock_api::Mutex;
 
 use crate::sbi::{self};

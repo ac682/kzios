@@ -14,7 +14,7 @@ use crate::mm::{
 };
 
 use super::ipc::{
-    message::{Mailbox, Message},
+    message::Mailbox,
     signal::SignalControlBlock,
     tunnel::Endpoint,
 };

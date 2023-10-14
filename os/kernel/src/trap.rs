@@ -12,7 +12,7 @@ use riscv::register::{
 };
 
 use crate::{
-    external::{_kernel_end, _kernel_trap, _stack_size},
+    external::{_kernel_trap},
     hart::{self, HartKind},
     mm::KERNEL_SATP,
 };

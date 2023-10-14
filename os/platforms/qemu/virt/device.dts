@@ -6,6 +6,15 @@
 	compatible = "riscv-virtio";
 	model = "riscv-virtio,qemu";
 
+	chosen {
+		#address-cells = <0x2>;
+		#size-cells = <0x01>;
+		initfs {
+			reg = <0x0 0x86000000 0x2000000>;
+			compatible = "tar";
+		};
+	};
+
 	fw-cfg@10100000 {
 		dma-coherent;
 		reg = <0x00 0x10100000 0x00 0x18>;
@@ -16,11 +25,6 @@
 		bank-width = <0x04>;
 		reg = <0x00 0x20000000 0x00 0x2000000 0x00 0x22000000 0x00 0x2000000>;
 		compatible = "cfi-flash";
-	};
-
-	chosen {
-		rng-seed = <0x995a1fd6 0x147746ef 0x7a93844f 0x7888b40 0x86dd30a3 0x8fc519fe 0x458634f7 0xdd2c8687>;
-		stdout-path = "/soc/serial@10000000";
 	};
 
 	poweroff {

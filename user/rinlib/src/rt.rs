@@ -1,5 +1,5 @@
 use core::{alloc::Layout, panic::PanicInfo};
-use erhino_shared::proc::{Pid, SystemSignal, Termination, Tid};
+use erhino_shared::proc::{Pid, SystemSignal, Termination};
 use erhino_shared::sync::spin::SimpleLock;
 use talc::{OomHandler, Span, Talc, Talck};
 

@@ -316,8 +316,8 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                                             Err(SystemCallError::ObjectNotFound)
                                         }
                                         FilesystemAbstractLayerError::ForeignMountPoint(
-                                            rem,
-                                            mid,
+                                            _rem,
+                                            _mid,
                                         ) => {
                                             todo!();
                                             Ok(None)
@@ -385,8 +385,8 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                                             Err(SystemCallError::ObjectNotFound)
                                         }
                                         FilesystemAbstractLayerError::ForeignMountPoint(
-                                            rem,
-                                            mid,
+                                            _rem,
+                                            _mid,
                                         ) => {
                                             todo!();
                                             Ok(None)
@@ -426,8 +426,8 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                                                     Err(SystemCallError::ObjectNotFound)
                                                 }
                                                 FilesystemAbstractLayerError::ForeignMountPoint(
-                                                    rem,
-                                                    mid,
+                                                    _rem,
+                                                    _mid,
                                                 ) => {
                                                     todo!();
                                                     Ok(None)
@@ -481,8 +481,8 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                                             Err(SystemCallError::ObjectNotFound)
                                         }
                                         FilesystemAbstractLayerError::ForeignMountPoint(
-                                            rem,
-                                            mid,
+                                            _rem,
+                                            _mid,
                                         ) => {
                                             todo!();
                                             Ok(None)
@@ -523,8 +523,8 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
                                                 Err(SystemCallError::ObjectNotFound)
                                             }
                                             FilesystemAbstractLayerError::ForeignMountPoint(
-                                                rem,
-                                                mid,
+                                                _rem,
+                                                _mid,
                                             ) => {
                                                 todo!();
                                                 Ok(None)

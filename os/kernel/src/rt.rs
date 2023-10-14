@@ -1,8 +1,12 @@
 use core::{alloc::Layout, panic::PanicInfo};
 
 use buddy_system_allocator::{Heap, LockedHeapWithRescue};
-use dtb_parser::{prop::PropertyValue, traits::HasNamedProperty};
-use erhino_shared::proc::Termination;
+use dtb_parser::{
+    prop::PropertyValue,
+    traits::{FindPropertyValue, HasNamedProperty},
+    DeviceTree,
+};
+use erhino_shared::{mem::Address, proc::Termination};
 
 use crate::{
     external::{_heap_start, _stack_start},
@@ -42,10 +46,23 @@ fn rust_start<T: Termination + 'static>(
     hart::enter_user();
 }
 
+pub static mut INITFS: (Address, usize) = (0, 0);
+
 fn early_init(dtb_addr: usize) {
     sbi::init();
-    frame::init();
-    let tree = dtb_parser::device_tree::DeviceTree::from_address(dtb_addr).unwrap();
+    let tree = DeviceTree::from_address(dtb_addr).expect("device tree not available");
+    if let Some(chosen) = tree.find_node("/chosen/initfs") {
+        if let Some(PropertyValue::Address(addr, len)) = chosen.value("reg") {
+            unsafe {
+                INITFS = (*addr as usize, *len as usize);
+            };
+        }
+    }
+    if let (0, 0) = unsafe { INITFS } {
+        panic!("no initfs info");
+    } else {
+        frame::init(unsafe { INITFS.0 })
+    }
     let mut timebase_frequency: usize = 0;
     for node in tree.into_iter() {
         if node.name() == "cpus" {
