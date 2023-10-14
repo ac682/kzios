@@ -6,13 +6,13 @@ use erhino_shared::proc::Termination;
 
 use crate::{
     external::{_heap_start, _stack_start},
-    hart,
+    fs, hart,
     mm::{
         self,
         frame::{self, alloc},
         page::PAGE_SIZE,
     },
-    println, sbi, fs,
+    println, sbi,
 };
 
 const HEAP_ORDER: usize = 32;

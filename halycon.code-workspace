@@ -123,6 +123,9 @@
 			"./user/Cargo.toml"
 		],
 		"rust-analyzer.showUnlinkedFileNotification": false,
+		"terminal.integrated.env.linux": {
+			"CROSS_COMPILE": "riscv64-linux-gnu-"
+		},
 	},
 	"tasks": {
 		"version": "2.0.0",

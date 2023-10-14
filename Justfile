@@ -85,12 +85,12 @@ make_initfs: build_user
 
 build_opensbi options:
     @echo -e "\033[0;36mBuild OpenSBI: {{options}}\033[0m"
-    @cd submodules/opensbi && make -j4 CROSS_COMPILE=riscv64-linux-gnu- {{options}}
+    @cd submodules/opensbi && make -j8 CROSS_COMPILE=riscv64-linux-gnu- {{options}}
     @cp {{OPENSBI_BUILD_DIR}}/platform/generic/firmware/fw_*.bin '{{TARGET_DIR}}'
     @cp {{OPENSBI_BUILD_DIR}}/platform/generic/firmware/fw_*.elf '{{TARGET_DIR}}'
     @echo -e "\033[0;32mOpenSBI build successfully!\033[0m"
 
-build_kernel: make_initfs
+build_kernel: 
     @echo -e "\033[0;36mBuild kernel: {{PLATFORM}}\033[0m"
     @cp "{{MEMORY_SCRIPT}}" "{{TARGET_DIR}}"
     @cd os && RUSTFLAGS="{{RUSTFLAGS_OS}}" cargo build --bin erhino_kernel {{RELEASE}} -Z unstable-options --out-dir {{TARGET_DIR}}
@@ -103,21 +103,13 @@ build_k210: && (build_opensbi "PLATFORM=kendryte/k210 FW_PAYLOAD=y FW_PAYLOAD_OF
     @cp '{{OPENSBI_BUILD_DIR}}/platform/kendryte/k210/firmware/fw_payload.bin' '{{TARGET_DIR}}'
 
 # make_sdcard 可以先稍稍
-run_qemu +EXPOSE="": make_dtb make_sdcard build_kernel
+run_qemu +EXPOSE="": make_dtb make_initfs build_kernel
     @echo -e "\033[0;36mQEMU: Simulating\033[0m"
     @{{QEMU_LAUNCH}} {{EXPOSE}}
-
-run_renode: build_generic
-    @echo -e "\033[0;36mRenode console pops up\033[0m"
-    @renode --console "os/platforms/{{PLATFORM}}/{{MODEL}}/renode.resc" 
 
 run_qemu_dump_dtb:
     @{{QEMU_LAUNCH}} -machine dumpdtb="{{TARGET_DIR}}/dump.dtb"
     @dtc -O dts -o "{{TARGET_DIR}}/dump.dts" -I dtb "{{TARGET_DIR}}/dump.dtb"
-
-build_generic: && (build_opensbi "PLATFORM=generic FW_PAYLOAD=y FW_PAYLOAD_OFFSET=0x200000 FW_PAYLOAD_PATH="+KERNEL_BIN+" FW_PAYLOAD_FDT_PATH="+DTB+"")
-    @just PLATFORM={{PLATFORM}} MODEL={{MODEL}} MODE={{MODE}} make_dtb
-    @just PLATFORM={{PLATFORM}} MODEL={{MODEL}} MODE={{MODE}} build_kernel
 
 run_k210: build_k210
     @just PLATFORM=kendryte MODEL=k210 MODE=release run_renode
