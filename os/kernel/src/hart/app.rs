@@ -40,7 +40,7 @@ use crate::{
     trap::TrapCause,
 };
 
-use super::{enter_user, send_ipi, HartStatus};
+use super::{enter_user, send_ipi, HartStatus, HartId};
 
 static IDLE_HARTS: AtomicUsize = AtomicUsize::new(0);
 static TUNNELS: Mutex<SimpleLock, Vec<Tunnel>> = Mutex::new(Vec::new());
@@ -52,7 +52,7 @@ pub struct ApplicationHart<S, R> {
 }
 
 impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
-    pub const fn new(hartid: usize, scheduler: S, random: R) -> Self {
+    pub const fn new(hartid: HartId, scheduler: S, random: R) -> Self {
         Self {
             id: hartid,
             scheduler,

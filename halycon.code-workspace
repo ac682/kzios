@@ -135,8 +135,11 @@
 				"type": "shell",
 				"command": "just",
 				"args": [
+					"PLATFORM=qemu",
 					"MODEL=virt",
+					"MODE=debug",
 					"run_qemu",
+					"-smp cores=4",
 					"-s",
 					"-S"
 				],

@@ -1,6 +1,8 @@
 use core::arch::asm;
 use strum_macros::EnumIter;
 
+use crate::hart::HartId;
+
 #[repr(isize)]
 #[derive(Debug)]
 pub enum SbiError {
@@ -163,7 +165,7 @@ pub fn send_ipi(hart_mask: usize, hart_mask_base: isize) -> SbiResult {
 
 // Hart State Management extension #0x48534D
 
-pub fn hart_start(hartid: usize, start_addr: usize, opaque: usize) -> SbiResult {
+pub fn hart_start(hartid: HartId, start_addr: usize, opaque: usize) -> SbiResult {
     sbi_call(
         SbiExtension::HartStateManagement,
         0,
@@ -177,7 +179,7 @@ pub fn hart_stop() -> SbiResult {
     sbi_call(SbiExtension::HartStateManagement, 1, 0, 0, 0)
 }
 
-pub fn hart_get_status(hartid: usize) -> SbiResult {
+pub fn hart_get_status(hartid: HartId) -> SbiResult {
     sbi_call(SbiExtension::HartStateManagement, 2, hartid, 0, 0)
 }
 

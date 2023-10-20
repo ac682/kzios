@@ -7,7 +7,12 @@
 	model = "SiFive HiFive Unleashed A00";
 
 	chosen {
-		stdout-path = "/soc/serial@10010000";
+		#address-cells = <0x2>;
+		#size-cells = <0x01>;
+		initfs {
+			reg = <0x0 0x86000000 0x2000000>;
+			compatible = "tar";
+		};
 	};
 
 	aliases {

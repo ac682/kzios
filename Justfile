@@ -28,8 +28,7 @@ SDCARD := TARGET_DIR/"sdcard.img"
 OPENSBI_BUILD_DIR := invocation_directory()/"submodules/opensbi/build"
 
 # qemu
-QEMU_OPTIONS := if MODEL == "sifive_u" { "-smp cores=5 -dtb '"+DTB+"' -drive file='"+SDCARD+"',if=sd,format=raw" } else { "-smp cores=4" }
-QEMU_LAUNCH := "qemu-system-riscv64 -M "+MODEL+" -m 128M -nographic -kernel '"+KERNEL_ELF+"' -dtb '"+DTB+"'"
+QEMU_LAUNCH := "qemu-system-riscv64 -M "+MODEL+" -m 1024M -nographic -kernel '"+KERNEL_ELF+"' -dtb '"+DTB+"' -device loader,file=artifacts/initfs.tar,addr=0xB0000000"
 
 # gdb
 GDB_BINARY := "gdb-multiarch"
@@ -38,8 +37,6 @@ GDB_TARGET := KERNEL_ELF
 
 alias b := build_kernel
 alias c := clean
-alias d := debug
-alias r := run
 alias f := flash
 
 clean:
@@ -75,12 +72,12 @@ make_sdcard: artifact_dir
 
 build_user: artifact_dir
     @cd user && RUSTFLAGS="{{RUSTFLAGS_USER}}" cargo build --bins {{RELEASE}} -Z unstable-options --out-dir "{{TARGET_DIR}}/build"
-    @mkdir -p "{{TARGET_DIR}}/initfs/bin"
-    @cp {{TARGET_DIR}}/build/srv_* "{{TARGET_DIR}}/initfs/bin"
-    @cp {{TARGET_DIR}}/build/drv_* "{{TARGET_DIR}}/initfs/bin"
     @echo -e "\033[0;32mUser space programs build successfully!\033[0m"
 
 make_initfs: build_user
+    @mkdir -p "{{TARGET_DIR}}/initfs/bin"
+    @cp {{TARGET_DIR}}/build/srv_* "{{TARGET_DIR}}/initfs/bin"
+    @cp {{TARGET_DIR}}/build/drv_* "{{TARGET_DIR}}/initfs/bin"
     @cd "{{TARGET_DIR}}/initfs" && find . -type f | tar --transform 's/^..//' -cvf ../initfs.tar --files-from=/dev/stdin
 
 build_opensbi options:
@@ -114,8 +111,11 @@ run_qemu_dump_dtb:
 run_k210: build_k210
     @just PLATFORM=kendryte MODEL=k210 MODE=release run_renode
 
-run:
-    @just PLATFORM={{PLATFORM}} MODEL={{MODEL}} MODE={{MODE}} run_{{PLATFORM}} -smp cores=4 -device loader,file=artifacts/initfs.tar,addr=0x86000000
+virt:
+    @just PLATFORM=qemu MODEL=virt MODE=debug run_qemu -smp cores=4
+
+sifive_u:
+    @just PLATFORM=qemu MODEL=sifive_u MODE=debug run_qemu -smp cores=5
 
 flash_k210: build_k210
     @python3 -m kflash -p /dev/ttyUSB1 -b 1500000 "{{KERNEL_ELF}}_merged.bin"
@@ -123,6 +123,3 @@ flash_k210: build_k210
 
 flash:
     @just PLATFORM={{PLATFORM}} MODEL={{MODEL}} MODE={{MODE}} flash_{{PLATFORM}}
-
-debug: make_dtb build_kernel
-    @tmux new-session -d "{{QEMU_LAUNCH}} -s -S" && tmux split-window -h "{{GDB_BINARY}} -ex 'set arch riscv:rv64' -ex 'target extended-remote localhost:1234' {{DEBUGGER_OPTIONS}} -ex 'set confirm no' -ex 'file {{GDB_TARGET}}' -ex 'set confirm yes'" && tmux -2 attach-session -d

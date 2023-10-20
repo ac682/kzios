@@ -1,5 +1,5 @@
 #![no_std]
-#![feature(lang_items, alloc_error_handler, panic_info_message)]
+#![feature(lang_items, alloc_error_handler, panic_info_message, let_chains)]
 #![allow(internal_features)]
 
 use core::{arch::global_asm, slice::from_raw_parts};
@@ -11,10 +11,15 @@ use erhino_shared::{
 };
 use tar_no_std::TarArchiveRef;
 
-use crate::{hart::SchedulerImpl, task::{proc::Process, sched::Scheduler}};
+use crate::{
+    board::this_board,
+    hart::SchedulerImpl,
+    task::{proc::Process, sched::Scheduler},
+};
 
 extern crate alloc;
 
+mod board;
 mod console;
 mod external;
 mod fal;
@@ -35,37 +40,44 @@ global_asm!(include_str!("assembly.asm"));
 
 pub fn main() {
     println!("{}", BANNER);
-    let ramfs = unsafe { from_raw_parts(rt::INITFS.0 as *const u8, rt::INITFS.1) };
-    let archive = TarArchiveRef::new(ramfs);
-    let files = archive.entries();
-    fs::create(
-        Path::from("/boot").unwrap(),
-        DentryType::Directory,
-        DentryAttribute::Readable
-            | DentryAttribute::Executable
-            | DentryAttribute::PrivilegedWriteable,
-    )
-    .unwrap();
-    for file in files {
-        let path = Path::from(&format!("/boot/{}", file.filename())).unwrap();
-        let parent = path.parent().unwrap();
-        fs::make_directory(
-            parent,
+    let board = this_board();
+    //TODO: print board
+    if let Some((addr, size)) = board.initfs() {
+        println!("[InitFS] @{:#x}({:#x})", addr, size);
+        let ramfs = unsafe { from_raw_parts(addr as *const u8, size) };
+        let archive = TarArchiveRef::new(ramfs);
+        let files = archive.entries();
+        fs::create(
+            Path::from("/boot").unwrap(),
+            DentryType::Directory,
             DentryAttribute::Readable
                 | DentryAttribute::Executable
                 | DentryAttribute::PrivilegedWriteable,
         )
         .unwrap();
-        fs::create_memory_stream(
-            path,
-            file.data(),
-            DentryAttribute::Executable | DentryAttribute::Readable,
-        )
-        .unwrap();
-        if file.filename().starts_with("bin/") {
-            let process = Process::from_elf(file.data()).unwrap();
-            SchedulerImpl::add(process, None);
+        for file in files {
+            let path = Path::from(&format!("/boot/{}", file.filename())).unwrap();
+            let parent = path.parent().unwrap();
+            fs::make_directory(
+                parent,
+                DentryAttribute::Readable
+                    | DentryAttribute::Executable
+                    | DentryAttribute::PrivilegedWriteable,
+            )
+            .unwrap();
+            fs::create_memory_stream(
+                path,
+                file.data(),
+                DentryAttribute::Executable | DentryAttribute::Readable,
+            )
+            .unwrap();
+            if file.filename().starts_with("bin/") {
+                let process = Process::from_elf(file.data()).unwrap();
+                SchedulerImpl::add(process, None);
+            }
         }
+        println!("\x1b[0;32m=LINK^START=\x1b[0m");
+    } else {
+        println!("\x1b[0;32m=STAND^BY=\x1b[0m");
     }
-    println!("\x1b[0;32m=LINK^START=\x1b[0m");
 }

@@ -14,7 +14,7 @@ use lock_api::RawMutex;
 
 use crate::{
     external::_user_trap,
-    hart::{self, HartKind},
+    hart::{self, HartKind, HartId},
     mm::{
         page::{PageEntryImpl, PageTableEntry, PAGE_BITS, PAGE_SIZE},
         unit::{AddressSpace, MemoryUnit},
@@ -41,7 +41,7 @@ static mut PROC_TABLE: ProcessTable = ProcessTable::new();
 const THREAD_STACK_SIZE: usize = 8 * 1024 * 1024;
 
 pub struct UnfairContext {
-    hartid: usize,
+    hartid: HartId,
     process: Arc<Shared<ProcessCell>>,
     thread: Arc<Shared<ThreadCell>>,
     scheduled: bool,
@@ -558,13 +558,13 @@ impl ProcessTable {
 }
 
 pub struct UnfairScheduler<T> {
-    hartid: usize,
+    hartid: HartId,
     timer: T,
     current: Option<(Arc<Shared<ProcessCell>>, Arc<Shared<ThreadCell>>)>,
 }
 
 impl<T: Timer> UnfairScheduler<T> {
-    pub const fn new(hartid: usize, timer: T) -> Self {
+    pub const fn new(hartid: HartId, timer: T) -> Self {
         Self {
             hartid,
             timer,

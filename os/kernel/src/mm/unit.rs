@@ -3,6 +3,8 @@ use core::fmt::Display;
 use erhino_shared::mem::{Address, MemoryRegionAttribute, PageNumber};
 use flagset::FlagSet;
 
+use crate::debug;
+
 use super::{
     frame::{self, FrameTracker},
     page::{

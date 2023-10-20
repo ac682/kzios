@@ -38,7 +38,7 @@ pub fn init() {
     // mmio device space
     unit.map(0x0, 0x0, memory_start, PageEntryFlag::PrefabKernelDevice)
         .expect("map mmio device failed");
-    // sbi + kernel space
+    // sbi + whole memory space
     unit.map(
         memory_start,
         memory_start,
@@ -57,7 +57,7 @@ pub fn init() {
     // kernel has no trap frame so it has no trap frame mapped
     let satp = unit.satp();
     unsafe {
-        if let Err(_) = KERNEL_UNIT.set(unit){
+        if let Err(_) = KERNEL_UNIT.set(unit) {
             panic!("set KERNEL_UNIT shared data failed")
         }
         KERNEL_SATP = satp;

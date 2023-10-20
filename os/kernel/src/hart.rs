@@ -2,8 +2,8 @@ use core::arch::asm;
 
 use alloc::vec::Vec;
 
-
 use crate::{
+    board::{self, device::cpu::MmuType},
     rng::lcg::LcGenerator,
     sbi,
     task::sched::unfair::UnfairScheduler,
@@ -13,6 +13,8 @@ use crate::{
 use self::app::ApplicationHart;
 
 pub mod app;
+
+pub type HartId = usize;
 
 pub type TimerImpl = CpuClock;
 pub type SchedulerImpl = UnfairScheduler<TimerImpl>;
@@ -32,22 +34,30 @@ pub enum HartKind {
     Application(ApplicationHart<SchedulerImpl, RandomImpl>),
 }
 
-pub fn register(hartid: usize, freq: usize) {
+pub fn init() {
+    let board = board::this_board();
     let harts = unsafe { &mut HARTS };
-    if hartid > harts.len() {
-        let diff = hartid - harts.len();
-        for _ in 0..diff {
-            harts.push(HartKind::Disabled);
+    for cpu in board
+        .map()
+        .cpus()
+        .iter()
+        .filter(|maybe| maybe.mmu() != MmuType::Bare)
+    {
+        if cpu.id() > harts.len() {
+            let diff = cpu.id() - harts.len();
+            for _ in 0..diff {
+                harts.push(HartKind::Disabled);
+            }
         }
+        let timer = TimerImpl::new(cpu.freq());
+        let seed = timer.uptime();
+        let hart = ApplicationHart::new(
+            cpu.id(),
+            UnfairScheduler::new(cpu.id(), timer),
+            RandomImpl::new(seed),
+        );
+        harts.push(HartKind::Application(hart));
     }
-    let timer = TimerImpl::new(freq);
-    let seed = timer.uptime();
-    let hart = ApplicationHart::new(
-        hartid,
-        UnfairScheduler::new(hartid, timer),
-        RandomImpl::new(seed),
-    );
-    harts.push(HartKind::Application(hart));
 }
 
 pub fn send_ipi(hart_mask: usize) -> bool {

@@ -10,7 +10,7 @@
 		#address-cells = <0x2>;
 		#size-cells = <0x01>;
 		initfs {
-			reg = <0x0 0x86000000 0x2000000>;
+			reg = <0x0 0xB0000000 0x10000000>;
 			compatible = "tar";
 		};
 	};

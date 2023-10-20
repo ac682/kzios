@@ -1,14 +1,11 @@
 use core::{alloc::Layout, panic::PanicInfo};
 
 use buddy_system_allocator::{Heap, LockedHeapWithRescue};
-use dtb_parser::{
-    prop::PropertyValue,
-    traits::{FindPropertyValue, HasNamedProperty},
-    DeviceTree,
-};
-use erhino_shared::{mem::Address, proc::Termination};
+use dtb_parser::DeviceTree;
+use erhino_shared::proc::Termination;
 
 use crate::{
+    board::{self},
     external::{_heap_start, _stack_start},
     fs, hart,
     mm::{
@@ -46,65 +43,17 @@ fn rust_start<T: Termination + 'static>(
     hart::enter_user();
 }
 
-pub static mut INITFS: (Address, usize) = (0, 0);
-
 fn early_init(dtb_addr: usize) {
     sbi::init();
     let tree = DeviceTree::from_address(dtb_addr).expect("device tree not available");
-    if let Some(chosen) = tree.find_node("/chosen/initfs") {
-        if let Some(PropertyValue::Address(addr, len)) = chosen.value("reg") {
-            unsafe {
-                INITFS = (*addr as usize, *len as usize);
-            };
-        }
-    }
-    if let (0, 0) = unsafe { INITFS } {
+    board::init(tree);
+    let board = board::this_board();
+    if let Some((addr, _)) = board.initfs() {
+        frame::init(addr);
+    }else{
         panic!("no initfs info");
-    } else {
-        frame::init(unsafe { INITFS.0 })
     }
-    let mut timebase_frequency: usize = 0;
-    for node in tree.into_iter() {
-        if node.name() == "cpus" {
-            if let Some(prop) = node.find_prop("timebase-frequency") {
-                if let PropertyValue::Integer(frequency) = prop.value() {
-                    timebase_frequency = *frequency as usize;
-                }
-            }
-            for cpu in node.nodes() {
-                if let Some(device) = cpu.find_prop("device_type") {
-                    if let PropertyValue::String(string) = device.value() {
-                        if *string == "cpu" {
-                            if let Some(cpuid) = cpu.find_prop("reg") {
-                                if let Some(isa_prop) = cpu.find_prop("riscv,isa") {
-                                    if let PropertyValue::String(isa) = isa_prop.value() {
-                                        if !(*isa).contains("imafdc") {
-                                            continue;
-                                        }
-                                    }
-                                }
-                                if let PropertyValue::Address(id, _) = cpuid.value() {
-                                    if let Some(clock) = cpu.find_prop("clock-frequency") {
-                                        if let &PropertyValue::Integer(frequency) = clock.value() {
-                                            hart::register(*id as usize, frequency as usize);
-                                        }
-                                    } else {
-                                        if timebase_frequency != 0 {
-                                            hart::register(
-                                                *id as usize,
-                                                timebase_frequency as usize,
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            break;
-        }
-    }
+    hart::init();
 }
 
 fn kernel_init() {
