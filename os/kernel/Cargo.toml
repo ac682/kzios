@@ -29,3 +29,4 @@ tar-no-std = "0.2"
 lock_api = "0.4"
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 postcard = "1.0"
+goblin = { version = "0.7", default-features = false, features = ["elf64"] }

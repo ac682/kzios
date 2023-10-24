@@ -146,7 +146,6 @@ pub struct DentryObject {
     pub created_at: Timestamp,
     pub modified_at: Timestamp,
     pub size: u64,
-    pub in_use: bool,
     pub name_length: u64,
 }
 
@@ -157,7 +156,6 @@ impl DentryObject {
         created: Timestamp,
         modified: Timestamp,
         size: usize,
-        in_use: bool,
         name_length: usize,
     ) -> Self {
         Self {
@@ -166,7 +164,6 @@ impl DentryObject {
             created_at: created,
             modified_at: modified,
             size: size as u64,
-            in_use,
             name_length: name_length as u64,
         }
     }

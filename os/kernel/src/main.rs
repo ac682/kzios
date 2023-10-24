@@ -41,9 +41,16 @@ global_asm!(include_str!("assembly.asm"));
 pub fn main() {
     println!("{}", BANNER);
     let board = this_board();
-    //TODO: print board
+    for cpu in board.map().cpus() {
+        println!("[Hart #{}] {:?}@{:#x}", cpu.id(), cpu.mmu(), cpu.freq());
+    }
+    println!(
+        "[IntrCtr] @{:#x}({:#x})",
+        board.map().intrc().address(),
+        board.map().intrc().size()
+    );
     if let Some((addr, size)) = board.initfs() {
-        println!("[InitFS] @{:#x}({:#x})", addr, size);
+        println!("[InitFS ] @{:#x}({:#x})", addr, size);
         let ramfs = unsafe { from_raw_parts(addr as *const u8, size) };
         let archive = TarArchiveRef::new(ramfs);
         let files = archive.entries();

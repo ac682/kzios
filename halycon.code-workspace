@@ -39,6 +39,7 @@
 			"hashbrown",
 			"impls",
 			"initfs",
+			"intrc",
 			"Justfile",
 			"kendryte",
 			"kinlib",

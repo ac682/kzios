@@ -58,10 +58,29 @@ impl BoardInfo {
                 }
             }
         }
-        Ok(BoardInfo {
+        for node in &tree {
+            if let Some(PropertyValue::None) = node.of_value("interrupt-controller") {
+            } else {
+                continue;
+            }
+            if !match node.of_value("compatible") {
+                Some(PropertyValue::String(compatible)) => compatible == "riscv,plic0",
+                Some(PropertyValue::Strings(compatible)) => {
+                    compatible.iter().any(|c| c == "riscv,plic0")
+                }
+                _ => false,
+            } {
+                continue;
+            }
+            if let Some(PropertyValue::Address(addr, size)) = node.of_value("reg") {
+                map.intrc(*addr as Address, *size as usize);
+                break;
+            }
+        }
+        map.build().map(|built| BoardInfo {
             initfs,
             tree,
-            map: map.build(),
+            map: built,
         })
     }
 
