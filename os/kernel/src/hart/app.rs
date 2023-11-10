@@ -141,6 +141,9 @@ impl<S: Scheduler, R: RandomGenerator> ApplicationHart<S, R> {
     ) -> Result<Option<usize>, SystemCallError> {
         let process = context.process();
         match call {
+            SystemCall::Die => {
+                panic!("Die die die!");
+            }
             SystemCall::Debug => {
                 let address = arg0;
                 let length = arg1;

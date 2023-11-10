@@ -46,8 +46,10 @@ pub enum SystemCallError {
 #[derive(Debug, FromPrimitive, ToPrimitive, Clone, Copy)]
 pub enum SystemCall {
     // System reserved
+    /// Makes kernel panic
+    Die = 0x0,
     /// Undefined behavior in release environment
-    Debug = 0x00,
+    Debug = 0x01,
 
     // -----Process control-----
     /// Finalized process notifies kernel to cleanup
