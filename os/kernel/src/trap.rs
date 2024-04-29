@@ -12,7 +12,7 @@ use riscv::register::{
 };
 
 use crate::{
-    external::{_kernel_trap},
+    external::_kernel_trap,
     hart::{self, HartKind},
     mm::KERNEL_SATP,
 };
@@ -154,9 +154,7 @@ unsafe fn handle_kernel_trap(cause: Scause, _val: usize) {
 unsafe fn handle_user_trap(cause: Scause, val: usize) -> (usize, Address) {
     if let HartKind::Application(hart) = hart::this_hart() {
         match cause.cause() {
-            Trap::Interrupt(Interrupt::UserTimer) => todo!("user timer"),
             Trap::Interrupt(Interrupt::SupervisorTimer) => hart.trap(TrapCause::TimerInterrupt),
-            Trap::Interrupt(Interrupt::UserSoft) => todo!("impossible user soft interrupt"),
             Trap::Exception(exception) => match exception {
                 Exception::Breakpoint => hart.trap(TrapCause::Breakpoint),
                 Exception::UserEnvCall => hart.trap(TrapCause::EnvironmentCall),
