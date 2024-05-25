@@ -1,4 +1,4 @@
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::{ptr::addr_of_mut, sync::atomic::{AtomicUsize, Ordering}};
 
 use alloc::{
     sync::{Arc, Weak},
@@ -69,7 +69,7 @@ impl ScheduleContext for UnfairContext {
     }
 
     fn add_proc(&self, proc: Process) -> Pid {
-        let table = unsafe { &mut PROC_TABLE };
+        let table = unsafe { &mut *addr_of_mut!(PROC_TABLE)  };
         table.add(proc, Some(self.process.id))
     }
 
@@ -86,7 +86,7 @@ impl ScheduleContext for UnfairContext {
             action(self.process());
             true
         } else {
-            if let Some(p) = unsafe { &PROC_TABLE }.find_process(pid) {
+            if let Some(p) = unsafe { &*addr_of_mut!(PROC_TABLE)  }.find_process(pid) {
                 p.state_lock.lock();
                 let mutable = p.get_mut();
                 action(&mut mutable.inner);
@@ -271,7 +271,7 @@ impl ProcessCell {
         } else {
             0 as Tid
         };
-        let generation = unsafe { &PROC_TABLE }.gen();
+        let generation = unsafe { &*addr_of_mut!(PROC_TABLE)  }.generation();
         let trapframe = Self::address_of_trapframe::<PageEntryImpl>(self.layout.trampoline, tid);
         let stack = ProcessCell::address_of_stack(self.layout.stack_point, tid);
         let entry = thread.entry_point;
@@ -357,7 +357,7 @@ impl ThreadCell {
             true
         } else {
             self.timeslice = 0;
-            let table = unsafe { &PROC_TABLE };
+            let table = unsafe { &*addr_of_mut!(PROC_TABLE)  };
             if table
                 .generation
                 .fetch_max(self.generation, Ordering::Relaxed)
@@ -398,7 +398,7 @@ impl ProcessTable {
         }
     }
 
-    pub fn gen(&self) -> usize {
+    pub fn generation(&self) -> usize {
         self.generation.load(Ordering::Relaxed)
     }
 
@@ -573,7 +573,7 @@ impl<T: Timer> UnfairScheduler<T> {
     }
 
     fn find_next(&self) -> Option<(Arc<Shared<ProcessCell>>, Arc<Shared<ThreadCell>>)> {
-        let table = unsafe { &PROC_TABLE };
+        let table = unsafe { &*addr_of_mut!(PROC_TABLE)  };
         let pred: fn(&Arc<Shared<ProcessCell>>, &Arc<Shared<ThreadCell>>) -> bool = |p, t| {
             let mut pass = false;
             p.state_lock.lock();
@@ -629,14 +629,14 @@ impl<T: Timer> UnfairScheduler<T> {
 impl<T: Timer> Scheduler for UnfairScheduler<T> {
     type Context = UnfairContext;
     fn add(proc: Process, parent: Option<Pid>) -> Pid {
-        let table = unsafe { &mut PROC_TABLE };
+        let table = unsafe { &mut *addr_of_mut!(PROC_TABLE)  };
         let pid = table.add(proc, parent);
         hart::app::awake_idle();
         pid
     }
 
     fn find<F: FnMut(&mut Process)>(pid: Pid, mut action: F) -> bool {
-        if let Some(p) = unsafe { &PROC_TABLE }.find_process(pid) {
+        if let Some(p) = unsafe { &*addr_of_mut!(PROC_TABLE)  }.find_process(pid) {
             let owned = {
                 if let HartKind::Application(hart) = hart::this_hart() {
                     hart.arranged_context().0 == pid
@@ -659,7 +659,7 @@ impl<T: Timer> Scheduler for UnfairScheduler<T> {
     }
 
     fn snapshot() -> Vec<Pid> {
-        let table = unsafe { &PROC_TABLE };
+        let table = unsafe { &*addr_of_mut!(PROC_TABLE) };
         let mut ids = Vec::<Pid>::new();
         table.head_lock.lock();
         if let Some(head) = &table.head {

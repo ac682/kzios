@@ -1,4 +1,4 @@
-use core::{cell::OnceCell, mem::size_of};
+use core::{cell::OnceCell, mem::size_of, ptr::addr_of_mut};
 
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use erhino_shared::{
@@ -10,8 +10,6 @@ use erhino_shared::{
     proc::Pid,
 };
 use flagset::FlagSet;
-
-
 
 use self::{procfs::Procfs, rootfs::Rootfs};
 
@@ -187,7 +185,7 @@ pub fn make_objects<'a>(dentry: &Dentry, buffer: &'a mut Vec<(DentryObject, Stri
 
 pub fn get_local_fs(mid: Mid) -> Option<&'static LocalMountpoint> {
     if let Some(index) = get_local_index(mid) {
-        let table = unsafe { &MOUNTPOINTS };
+        let table = unsafe { &mut *addr_of_mut!(MOUNTPOINTS) };
         if index < table.len() {
             Some(&table[index])
         } else {
@@ -243,5 +241,9 @@ pub fn write(path: Path, value: Vec<u8>) -> Result<(), FilesystemAbstractLayerEr
 }
 
 pub fn read(path: Path, length: usize) -> Result<Vec<u8>, FilesystemAbstractLayerError> {
-    redirect_with(|fs, p| fs.read(p, length), unsafe { ROOT.get_mut().unwrap() }, path)
+    redirect_with(
+        |fs, p| fs.read(p, length),
+        unsafe { ROOT.get_mut().unwrap() },
+        path,
+    )
 }

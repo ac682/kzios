@@ -61,7 +61,7 @@ fn lang_start<T: Termination + 'static>(
     unsafe {
         env::PID.set(pid).unwrap();
         env::PARENT_PID.set(parent).unwrap();
-        let mut talc = HEAP_ALLOCATOR.talc();
+        let mut talc = HEAP_ALLOCATOR.lock();
         if let Ok(offset) = sys_extend(INITIAL_HEAP_SIZE) {
             let start = offset - INITIAL_HEAP_SIZE;
             if let Ok(heap) = talc.claim(Span::from_base_size(start as *mut u8, INITIAL_HEAP_SIZE))

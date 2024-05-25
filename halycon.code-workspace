@@ -107,6 +107,7 @@
 			"uart",
 			"UARTHS",
 			"unimp",
+			"Uninit",
 			"upie",
 			"userspace",
 			"usize",

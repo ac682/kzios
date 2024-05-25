@@ -52,7 +52,7 @@ pub fn main() {
     if let Some((addr, size)) = board.initfs() {
         println!("[InitFS ] @{:#x}({:#x})", addr, size);
         let ramfs = unsafe { from_raw_parts(addr as *const u8, size) };
-        let archive = TarArchiveRef::new(ramfs);
+        let archive = TarArchiveRef::new(ramfs).unwrap();
         let files = archive.entries();
         fs::create(
             Path::from("/boot").unwrap(),
@@ -63,7 +63,7 @@ pub fn main() {
         )
         .unwrap();
         for file in files {
-            let path = Path::from(&format!("/boot/{}", file.filename())).unwrap();
+            let path = Path::from(&format!("/boot/{}", file.filename().as_str().unwrap())).unwrap();
             let parent = path.parent().unwrap();
             fs::make_directory(
                 parent,
@@ -78,7 +78,7 @@ pub fn main() {
                 DentryAttribute::Executable | DentryAttribute::Readable,
             )
             .unwrap();
-            if file.filename().starts_with("bin/") {
+            if file.filename().as_str().unwrap().starts_with("bin/") {
                 let process = Process::from_elf(file.data()).unwrap();
                 SchedulerImpl::add(process, None);
             }

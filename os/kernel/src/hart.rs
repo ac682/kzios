@@ -1,4 +1,4 @@
-use core::arch::asm;
+use core::{arch::asm, ptr::addr_of_mut};
 
 use alloc::vec::Vec;
 
@@ -36,7 +36,7 @@ pub enum HartKind {
 
 pub fn init() {
     let board = board::this_board();
-    let harts = unsafe { &mut HARTS };
+    let harts = unsafe { &mut *addr_of_mut!(HARTS) };
     for cpu in board
         .map()
         .cpus()
@@ -69,7 +69,7 @@ pub fn send_ipi(hart_mask: usize) -> bool {
 }
 
 pub fn start_all() {
-    for i in unsafe { &HARTS } {
+    for i in unsafe { &*addr_of_mut!(HARTS) } {
         if let HartKind::Application(hart) = i {
             if let Some(HartStatus::Stopped) = hart.get_status() {
                 hart.start();
