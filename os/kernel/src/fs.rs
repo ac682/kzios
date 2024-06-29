@@ -29,8 +29,8 @@ pub enum LocalMountpoint {
 pub fn init() {
     let rootfs = Rootfs::new();
     rootfs
-        .mount(&Path::from("/proc").unwrap(), (0 + 1) << 32)
-        .expect("mount /proc");
+        .mount(&Path::from("/Processes").unwrap(), (0 + 1) << 32)
+        .expect("mount /Processes");
     unsafe {
         // slot id = 0, mid = 1 << 32
         MOUNTPOINTS.push(LocalMountpoint::Proc(Procfs::new()));

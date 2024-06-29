@@ -90,6 +90,7 @@
 			"sigreturn",
 			"singlethread",
 			"skernel",
+			"srvfs",
 			"sscratch",
 			"sstatus",
 			"STIE",

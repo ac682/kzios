@@ -33,6 +33,7 @@ mod sync;
 mod task;
 mod timer;
 mod trap;
+mod service;
 
 const BANNER: &str = include_str!("../banner.txt");
 
@@ -55,7 +56,7 @@ pub fn main() {
         let archive = TarArchiveRef::new(ramfs).unwrap();
         let files = archive.entries();
         fs::create(
-            Path::from("/boot").unwrap(),
+            Path::from("/Boot").unwrap(),
             DentryType::Directory,
             DentryAttribute::Readable
                 | DentryAttribute::Executable
@@ -63,7 +64,7 @@ pub fn main() {
         )
         .unwrap();
         for file in files {
-            let path = Path::from(&format!("/boot/{}", file.filename().as_str().unwrap())).unwrap();
+            let path = Path::from(&format!("/Boot/{}", file.filename().as_str().unwrap())).unwrap();
             let parent = path.parent().unwrap();
             fs::make_directory(
                 parent,

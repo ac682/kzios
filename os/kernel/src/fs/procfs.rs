@@ -48,14 +48,14 @@ impl Procfs {
                     if let Ok(id) = pid.parse::<Pid>() {
                         if let Some(Component::Normal(prop)) = iter.next() {
                             match prop {
-                                "memory" => {
+                                "Memory" => {
                                     if let Some(Component::Normal(field)) = iter.next() {
                                         if let None = iter.next() {
                                             match field {
-                                                "page" => Ok(FsLayer::MemoryPage(id)),
-                                                "program" => Ok(FsLayer::MemoryProgram(id)),
-                                                "heap" => Ok(FsLayer::MemoryHeap(id)),
-                                                "stack" => Ok(FsLayer::MemoryStack(id)),
+                                                "Page" => Ok(FsLayer::MemoryPage(id)),
+                                                "Program" => Ok(FsLayer::MemoryProgram(id)),
+                                                "Heap" => Ok(FsLayer::MemoryHeap(id)),
+                                                "Stack" => Ok(FsLayer::MemoryStack(id)),
                                                 _ => Err(FilesystemAbstractLayerError::NotFound),
                                             }
                                         } else {
@@ -65,7 +65,7 @@ impl Procfs {
                                         Ok(FsLayer::Memory)
                                     }
                                 }
-                                "pid" => {
+                                "Pid" => {
                                     if let None = iter.next() {
                                         Ok(FsLayer::PropPid(id))
                                     } else {
@@ -146,7 +146,7 @@ impl FileSystem for Procfs {
                 FsLayer::Proc(pid) => {
                     let props = vec![
                         Dentry::new(
-                            "memory".to_owned(),
+                            "Memory".to_owned(),
                             0,
                             0,
                             0,
@@ -154,7 +154,7 @@ impl FileSystem for Procfs {
                             DentryMeta::Directory(Vec::new()),
                         ),
                         Dentry::new(
-                            "pid".to_owned(),
+                            "Pid".to_owned(),
                             0,
                             0,
                             size_of::<Pid>(),
@@ -172,7 +172,7 @@ impl FileSystem for Procfs {
                     ))
                 }
                 FsLayer::PropPid(_) => Ok(Dentry::new(
-                    "pid".to_owned(),
+                    "Pid".to_owned(),
                     0,
                     0,
                     size_of::<i64>(),
@@ -182,7 +182,7 @@ impl FileSystem for Procfs {
                 FsLayer::Memory => {
                     let props = vec![
                         Dentry::new(
-                            "page".to_owned(),
+                            "Page".to_owned(),
                             0,
                             0,
                             size_of::<i64>(),
@@ -190,7 +190,7 @@ impl FileSystem for Procfs {
                             DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
                         ),
                         Dentry::new(
-                            "program".to_owned(),
+                            "Program".to_owned(),
                             0,
                             0,
                             size_of::<i64>(),
@@ -198,7 +198,7 @@ impl FileSystem for Procfs {
                             DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
                         ),
                         Dentry::new(
-                            "heap".to_owned(),
+                            "Heap".to_owned(),
                             0,
                             0,
                             size_of::<i64>(),
@@ -206,7 +206,7 @@ impl FileSystem for Procfs {
                             DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
                         ),
                         Dentry::new(
-                            "stack".to_owned(),
+                            "Stack".to_owned(),
                             0,
                             0,
                             size_of::<i64>(),
@@ -215,7 +215,7 @@ impl FileSystem for Procfs {
                         ),
                     ];
                     Ok(Dentry::new(
-                        "memory".to_owned(),
+                        "Memory".to_owned(),
                         0,
                         0,
                         0,
@@ -224,7 +224,7 @@ impl FileSystem for Procfs {
                     ))
                 }
                 FsLayer::MemoryPage(_) => Ok(Dentry::new(
-                    "page".to_owned(),
+                    "Page".to_owned(),
                     0,
                     0,
                     size_of::<i64>(),
@@ -232,7 +232,7 @@ impl FileSystem for Procfs {
                     DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
                 )),
                 FsLayer::MemoryProgram(_) => Ok(Dentry::new(
-                    "program".to_owned(),
+                    "Program".to_owned(),
                     0,
                     0,
                     size_of::<i64>(),
@@ -240,7 +240,7 @@ impl FileSystem for Procfs {
                     DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
                 )),
                 FsLayer::MemoryHeap(_) => Ok(Dentry::new(
-                    "heap".to_owned(),
+                    "Heap".to_owned(),
                     0,
                     0,
                     size_of::<i64>(),
@@ -248,7 +248,7 @@ impl FileSystem for Procfs {
                     DentryMeta::File(FileKind::Property(PropertyKind::Integer)),
                 )),
                 FsLayer::MemoryStack(_) => Ok(Dentry::new(
-                    "stack".to_owned(),
+                    "Stack".to_owned(),
                     0,
                     0,
                     size_of::<i64>(),

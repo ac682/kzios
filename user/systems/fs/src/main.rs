@@ -29,8 +29,10 @@ fn main() {
     world
         .write(PropertyValue::Integers(vec![114514i64, -1919810i64]))
         .unwrap();
+    print_dir(Path::from("/").unwrap(), &mut buffer).unwrap();
+    debug!("{}", buffer);
     debug!("{} {:?}", world.fullname(), world.read().unwrap());
-    if let Ok(Dentry::Stream(stream)) = fs::check("/boot/bin/srv_init") {
+    if let Ok(Dentry::Stream(stream)) = fs::check("/Boot/bin/srv_init") {
         if let Ok(value) = stream.read(8) {
             debug!("srv_init first 8 bytes: {:x?}", value.bytes());
         }
